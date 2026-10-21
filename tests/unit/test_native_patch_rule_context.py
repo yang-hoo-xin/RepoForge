@@ -8,7 +8,6 @@ definitions and synthetic observations are used here.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import subprocess
 import sys
@@ -58,8 +57,8 @@ def test_owned_native_context_keeps_source_failed_code_and_full_view(tmp_path, c
         max_tool_rounds=6, max_total_model_turns=5)
     inspector = PlanBoundSourceInspector(workspace_root=workspace, implementation_plan=plan, policy=policy)
     tool = _source_tool_definition(inspector)
-    # The observed 13,710-byte request has 10,664 bytes outside these two strings.
-    assert len(initial[0].content.encode()) + len(tool.description.encode()) <= 1624
+    assert initial[0].content.startswith(prepared.messages[0].content)
+    assert initial[0].content.count("You may add internal declarations, state and logic") == 1
     assert tool.parameters == {"type": "object", "additionalProperties": False,
         "required": ["binding_id"], "properties": {"binding_id": {
             "type": "string", "enum": list(inspector.available_read_binding_ids)}}}
@@ -104,13 +103,26 @@ def test_multiple_bindings_keep_native_schema_and_reject_added_authority():
     assert raised.value.diagnostics["failure_classification"] == "native_response_fields_invalid"
 
 
-@pytest.mark.parametrize("plan_bound,digest", [
-    (False, "039881a18a6a9f2fbfc466c6b66b292a753105d8a75f89874e82a4d26297ed4c"),
-    (True, "32a04e4b81a40bd66bcff30906ab32e5a120239ef96a1cb8e22cb41a09636511"),
-])
-def test_legacy_system_prompts_remain_byte_identical(plan_bound, digest):
-    text = _patch_system_prompt(require_native_schema=False, plan_bound_response=plan_bound)
-    assert hashlib.sha256(text.encode()).hexdigest() == digest
+@pytest.mark.parametrize("native,plan_bound", [(False, False), (False, True), (True, False), (True, True)])
+def test_shared_prompt_allows_required_internal_implementation_without_new_authority(native, plan_bound):
+    text = _patch_system_prompt(require_native_schema=native, plan_bound_response=plan_bound)
+    assert "Implement the complete request with exact-text edits." in text
+    assert "Minimal means avoiding unrelated changes, not omitting required behavior or necessary state." in text
+    assert "Do not fabricate existing files, binding ids, existing symbols, or external dependency APIs." in text
+    assert "You may add internal declarations, state and logic inside authorized edit bindings" in text
+    assert "preserve public interfaces required by the user" in text
+    assert "This grants no additional paths or edit authority." in text
+    assert "Never invent paths/symbols/APIs/bindings" not in text
+    assert "Never invent a file path, symbol, API" not in text
+    assert "supporting_evidence is read-only" in text
+    assert "required_change_units" in text and "edit_binding_id" in text
+    assert "verified_member_accesses" in text
+    if native:
+        assert "Native v3: optional before_text" in text
+        assert "Omit Plan/binding-derived" in text
+    else:
+        assert "preserve its exact change_id and edit_binding_id" in text
+        assert "before_text is copied verbatim" in text
 
 
 @pytest.mark.parametrize("reuse,deduplicate", [(False, False), (False, True), (True, False)])
@@ -120,13 +132,29 @@ def test_source_description_retains_policy_specific_read_costs(reuse, deduplicat
     policy = PatchAgentLoopPolicy(reuse_covered_source_observations=reuse,
         deduplicate_source_excerpts=deduplicate)
     tool = _source_tool_definition(SimpleNamespace(policy=policy, available_read_binding_ids=("bound_a",)))
-    assert "Read existing registered content and return it here; no Evidence/Coverage or Plan reassessment." in tool.description
-    assert "original B0 (no generated edits)" in tool.description
-    assert "API bindings return full saved Evidence, not live inspection" in tool.description
-    assert ("cost 0 reads" in tool.description) is reuse
-    assert ("Each dispatched binding read costs one read" in tool.description) is (not reuse)
-    assert ("excerpt_ref" in tool.description) is (reuse or deduplicate)
-    assert ("source_excerpt_span" in tool.description) is reuse
+    description = tool.description
+    # The declared read scope agrees with its executable argument surface.
+    assert tool.strict and tool.parameters["additionalProperties"] is False
+    assert tool.parameters["required"] == ["binding_id"]
+    assert set(tool.parameters["properties"]) == {"binding_id"}
+    assert tool.parameters["properties"]["binding_id"]["enum"] == ["bound_a"]
+    assert "no Evidence/Coverage or Plan reassessment" in description
+    assert "B0 (no generated edits)" in description and "no paths" in description
+    assert "assistant Patch" in description and "latest failure feedback" in description
+    assert "Supporting reads grant no edits" in description
+    assert "API bindings" in description and "full saved Evidence" in description
+    assert "not live inspection" in description and "Sequential calls" in description
+    if reuse:
+        assert "New windows cost 1 read" in description
+        assert "visible refs cost 0" in description and "consume bytes" in description
+    else:
+        assert "dispatched binding read costs one read" in description
+        assert "including in a batch" in description
+        assert "visible refs cost 0" not in description
+    assert ("excerpt_ref" in description) is (reuse or deduplicate)
+    assert ("source_excerpt_span" in description) is reuse
+    assert ("excerpt_parts" in description) is reuse
+    assert "target_span" in description and "keep full text" in description
 
 
 @pytest.mark.parametrize("modules", [

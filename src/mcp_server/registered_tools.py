@@ -9,6 +9,7 @@ from mcp import types
 from src.core.query_engine.query_service import QUERY_RESPONSE_SCHEMA, QueryRequest
 from src.core.query_engine.service_factory import create_query_service
 from src.core.settings import load_settings
+from src.mcp_server.argument_feedback import ARGUMENT_FEEDBACK_SCHEMA
 from src.mcp_server.safety import RedactingTraceCollector
 from src.mcp_server.tools.get_document_summary import GetDocumentSummaryTool
 from src.mcp_server.tools.list_collections import ListCollectionsTool
@@ -17,7 +18,8 @@ ERROR_SCHEMA = {"type": "object", "required": ["schema_version", "status", "requ
     "additionalProperties": False, "properties": {"schema_version": {"const": "mcp_error_v1"},
         "status": {"const": "error"}, "request_id": {"type": "string"},
         "error": {"type": "object", "required": ["code", "message"], "additionalProperties": False,
-                  "properties": {"code": {"type": "string"}, "message": {"type": "string"}}}}}
+                  "properties": {"code": {"type": "string"}, "message": {"type": "string"},
+                      "details": ARGUMENT_FEEDBACK_SCHEMA}}}}
 READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}
 COLLECTION = {"type": "string", "pattern": r"^\w[\w.-]{0,127}$", "examples": ["technical_docs"]}
 QUERY_INPUT_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["query"], "properties": {

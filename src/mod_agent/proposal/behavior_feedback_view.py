@@ -3,7 +3,39 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from copy import deepcopy
+from pathlib import PurePosixPath, PureWindowsPath
+
+
+def project_execution_reference_paths(value):
+    """Retain failure facts and hashes; keep known local execution addresses host-only.
+
+    为什么要有它：嵌套执行工件地址不是业务观察，不能进入模型或阻断合法上游调查；未识别或无有效哈希的路径仍交原门禁拒绝。
+    """
+    reference_fields = {"result_ref", "execution_ref", "verification_ref", "failure_report_ref"}
+
+    def project(item):
+        if isinstance(item, dict):
+            result = {}
+            for key, nested in item.items():
+                if (key in reference_fields and isinstance(nested, dict)
+                        and isinstance(nested.get("path"), str)
+                        and isinstance(nested.get("sha256"), str)
+                        and re.fullmatch(r"[0-9a-f]{64}", nested["sha256"])
+                        and (PureWindowsPath(nested["path"]).is_absolute()
+                             or PurePosixPath(nested["path"]).is_absolute())):
+                    result[key] = {name: project(child) for name, child in nested.items() if name != "path"}
+                else:
+                    result[key] = project(nested)
+            return result
+        if isinstance(item, list):
+            return [project(child) for child in item]
+        if isinstance(item, tuple):
+            return tuple(project(child) for child in item)
+        return deepcopy(item)
+
+    return project(value)
 
 
 def _json(value):

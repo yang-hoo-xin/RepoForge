@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from src.mod_agent.artifacts import ArtifactRef, ArtifactStore
 from src.mod_agent import fresh_planning_continuation as continuation
+from src.mod_agent.artifacts import ArtifactRef, ArtifactStore
 from src.mod_agent.workflow.graph import _run_create_implementation_plan
 from src.observability.patch_execution_index import project_patch_executions
 from tests.unit.test_fresh_planning_continuation import (
@@ -87,9 +87,70 @@ def test_product_graph_outputs_create_original_queryable_journal_without_fresh_o
     assert journal.path.read_bytes() == before
 
 
-@pytest.mark.parametrize("change", ["hash", "foreign_feature", "source"])
-def test_product_journal_rejects_changed_inputs_before_receipt_write(graph_inputs, change):
+def test_meter_only_product_journal_records_null_quota_and_real_counts(graph_inputs):
+    _, arguments = graph_inputs
+    journal = continuation.PatchContinuationAttemptJournal.for_product_execution(
+        **dict(arguments, max_model_calls=None, model_call_budget_policy="meter_only"))
+    journal.record({"phase": "patch_generation_started", "model_call_count": 31})
+    document = json.loads(journal.path.read_bytes())
+    assert document["max_model_calls"] is None
+    assert document["model_call_budget_policy"] == "meter_only"
+    assert document["model_call_count"] == 31 and document["source_validation"]["status"] == "passed"
+
+
+def test_meter_only_request_worker_assembles_serializable_null_quota(graph_inputs):
+    from src.mod_agent.proposal.patch_agent_loop import PatchAgentLoopPolicy
+    from src.mod_agent.request_patch_execution import RequestPatchExecution
+    from tests.unit.test_fresh_planning_continuation import _local_patch_adapter
+
     inputs, arguments = graph_inputs
+    adapter, _ = _local_patch_adapter(inputs)
+    refs = [arguments[kind + "_ref"] for kind in ("feature_spec", "evidence_pack", "implementation_plan")]
+    state = {"run_id": "metered-run", "request_id": "metered-request", "feature_id": refs[0].feature_id,
+        "retry_count": 0, "current_stage": "implementation_plan",
+        "artifacts": {ref.artifact_type: ref.path for ref in refs},
+        "artifact_hashes": {ref.artifact_type: ref.artifact_hash for ref in refs}}
+    observed = []
+
+    class Worker:
+        _recovery_observation_bytes = 0
+
+        def __init__(self, **kwargs):
+            observed.append(kwargs["patch_agent_loop_policy"])
+
+        def bind_attempt_recorder(self, _recorder):
+            pass
+
+        def bind_upstream_effects(self, _effects):
+            pass
+
+        def patch_attempt_receipt(self):
+            return {}
+
+        def __call__(self, *_args):
+            return []
+
+    budget = {"policy": "meter_only", "maximum": None, "remaining": None, "consumed": 31,
+        "by_stage": {"initial_patch": {"maximum": None, "remaining": None, "consumed": 31}},
+        "count_basis": "reserved_provider_invocations_not_transport_proof"}
+    execution = RequestPatchExecution(artifact_store=inputs.store, workspace_root=inputs.workspace,
+        profile=adapter.profile, identity_reader=adapter.identity_reader,
+        policy=PatchAgentLoopPolicy(model_call_budget_policy="meter_only"),
+        reserve_model_call=lambda _role: pytest.fail("No model should run"), budget_snapshot=lambda: deepcopy(budget),
+        adapter_factory=Worker)
+    assert execution(state, inputs.store.read(refs[2])["data"], inputs.store.read(refs[1])["data"]) == []
+    assert observed[0].max_total_model_turns is observed[0].max_tool_rounds is observed[0].max_observation_bytes is None
+    document = json.loads(execution.journals[0].path.read_bytes())
+    assert document["max_model_calls"] is None and document["model_call_budget_policy"] == "meter_only"
+    json.dumps(document, allow_nan=False)
+
+
+@pytest.mark.parametrize("change", ["hash", "foreign_feature", "source"])
+@pytest.mark.parametrize("metered", [False, True])
+def test_product_journal_rejects_changed_inputs_before_receipt_write(graph_inputs, change, metered):
+    inputs, arguments = graph_inputs
+    if metered:
+        arguments.update(max_model_calls=None, model_call_budget_policy="meter_only")
     if change == "hash":
         arguments["implementation_plan_ref"] = replace(
             arguments["implementation_plan_ref"], artifact_hash="0" * 64,

@@ -453,6 +453,166 @@ class WorkflowCheckpointStore:
             exact_revision_types=exact_types,
         )
 
+    def read_accepted_runtime_checkpoint(
+        self,
+        checkpoint_ref: ArtifactRef,
+        *,
+        resume_report_ref: ArtifactRef,
+        resume_id: str,
+        approved_by: str,
+        runtime_action_scope: dict[str, Any],
+        allow_prior_runtime_state: bool = False,
+    ) -> dict[str, Any]:
+        """Read one accepted operation's immutable Build checkpoint, without writes."""
+
+        checkpoint_envelope = self.artifact_store.read(checkpoint_ref)
+        checkpoint = checkpoint_envelope["data"]
+        report_envelope = self.artifact_store.read(resume_report_ref)
+        report = report_envelope["data"]
+        updates = report.get("applied_updates") or {}
+        admission = updates.get("runtime_admission")
+        upstreams = report_envelope.get("inputs", {}).get("upstream_artifacts", [])
+        if (
+            checkpoint_ref.artifact_type != "workflow_checkpoint"
+            or resume_report_ref.artifact_type != "resume_report"
+            or resume_report_ref.feature_id != checkpoint_ref.feature_id
+            or checkpoint.get("checkpoint_stage") != "build"
+            or report.get("checkpoint_id") != checkpoint.get("checkpoint_id")
+            or report.get("run_id") != checkpoint.get("run_id")
+            or report.get("resume_stage") != "build"
+            or report.get("resume_id") != resume_id
+            or not resume_id
+            or report.get("approved_by") != approved_by
+            or not approved_by
+            or report.get("status") != "accepted"
+            or report.get("decision") != "approve"
+            or report.get("allowed") is not True
+            or updates.get("restored_state") != checkpoint.get("state_snapshot")
+            or not isinstance(admission, dict)
+            or not isinstance(upstreams, list)
+            or len(upstreams) != 1
+            or upstreams[0].get("artifact_type") != "workflow_checkpoint"
+            or upstreams[0].get("path") != checkpoint_ref.path
+            or upstreams[0].get("artifact_hash") != checkpoint_ref.artifact_hash
+        ):
+            raise ValueError("ACCEPTED_RUNTIME_CHECKPOINT_BINDING_MISMATCH")
+        # Scope: accept the persisted snapshot or its exact initial-admission input.
+        # 为什么要有它：初次执行与恢复使用不同投影，但不能扩大已批准动作。
+        if runtime_action_scope != admission and runtime_action_scope != admission.get(
+            "runtime_admission"
+        ):
+            raise ValueError("ACCEPTED_RUNTIME_ACTION_SCOPE_MISMATCH")
+        approval = self.resume_validator.validate(
+            ResumePayload(
+                resume_id=resume_id,
+                run_id=str(checkpoint["run_id"]),
+                request_id=str(checkpoint["request_id"]),
+                feature_id=checkpoint_ref.feature_id,
+                stage="build",
+                decision="approve",
+                approved_by=approved_by,
+                approved_at=str(report.get("approved_at") or ""),
+                artifact_refs=tuple(checkpoint["artifact_refs"]),
+                runtime_admission=admission,
+            ),
+            checkpoint=checkpoint,
+        )
+        if not approval.allowed:
+            raise ValueError("ACCEPTED_RUNTIME_ADMISSION_INVALID")
+        current_reports = [
+            ref for ref in self.artifact_store.list_feature_artifacts(checkpoint_ref.feature_id)
+            if ref.artifact_type == "resume_report"
+        ]
+        if (
+            len(current_reports) != 1
+            or self.artifact_store.read(current_reports[0])["artifact_hash"]
+            != resume_report_ref.artifact_hash
+        ):
+            raise ValueError("ACCEPTED_RUNTIME_REPORT_STALE: current report changed")
+        report_freshness = self.artifact_store.check_freshness(resume_report_ref)
+        if not report_freshness.is_fresh:
+            raise ValueError(
+                "ACCEPTED_RUNTIME_REPORT_STALE: "
+                + "; ".join(report_freshness.stale_reasons)
+            )
+        blockers = self._checkpoint_lineage_blockers(
+            checkpoint_ref,
+            checkpoint_envelope,
+            allow_prior_runtime_state=allow_prior_runtime_state,
+        )
+        if blockers:
+            raise ValueError(
+                "ACCEPTED_RUNTIME_CHECKPOINT_INVALID: "
+                + ", ".join(str(item.get("code")) for item in blockers)
+            )
+        self._validate_historical_resume_reports(checkpoint_ref, checkpoint)
+        # Scope: only history consumed by the exact current accepted operation.
+        # 为什么要有它：当前批准会推进报告指针，历史批准仍是不可变输入；
+        # FeatureSpec、Build、源码与其他材料的最新性和内容校验不能被放宽。
+        freshness = self._checkpoint_freshness(
+            checkpoint_ref,
+            checkpoint_envelope,
+            additional_exact_revision_types=frozenset({"resume_report"}),
+        )
+        if not freshness.is_fresh:
+            raise ValueError(
+                "STALE_RESUME_RECOVERY_REJECTED: "
+                + "; ".join(freshness.stale_reasons)
+            )
+        return checkpoint_envelope
+
+    def _validate_historical_resume_reports(
+        self, checkpoint_ref: ArtifactRef, checkpoint: dict[str, Any]
+    ) -> None:
+        """Constrain exact control history to accepted approvals in this same run."""
+
+        pending = [checkpoint_ref]
+        seen: set[ArtifactRef] = set()
+        while pending:
+            current = pending.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            envelope = self.artifact_store.read(current)
+            upstreams = envelope.get("inputs", {}).get("upstream_artifacts", [])
+            if current.artifact_type == "resume_report":
+                report = envelope["data"]
+                if len(upstreams) != 1 or upstreams[0].get("artifact_type") != "workflow_checkpoint":
+                    raise ValueError("HISTORICAL_RESUME_REPORT_BINDING_MISMATCH")
+                bound_checkpoint = self.artifact_store.read(ArtifactRef(
+                    feature_id=checkpoint_ref.feature_id,
+                    artifact_type="workflow_checkpoint",
+                    path=upstreams[0]["path"],
+                    artifact_hash=upstreams[0]["artifact_hash"],
+                ))["data"]
+                # Scope: only same-run, exact accepted historical control edges.
+                # 为什么要有它：按类型保留历史不能借同 feature 的其他运行或拒绝记录绕过批准。
+                if (
+                    report.get("run_id") != checkpoint.get("run_id")
+                    or bound_checkpoint.get("run_id") != checkpoint.get("run_id")
+                    or bound_checkpoint.get("request_id") != checkpoint.get("request_id")
+                    or bound_checkpoint.get("feature_id") != checkpoint_ref.feature_id
+                    or report.get("checkpoint_id") != bound_checkpoint.get("checkpoint_id")
+                    or report.get("resume_stage") != bound_checkpoint.get("checkpoint_stage")
+                    or report.get("decision") != "approve"
+                    or report.get("status") != "accepted"
+                    or report.get("allowed") is not True
+                    or not report.get("approved_by")
+                    or not report.get("resume_id")
+                    or (report.get("applied_updates") or {}).get("restored_state")
+                    != bound_checkpoint.get("state_snapshot")
+                ):
+                    raise ValueError("HISTORICAL_RESUME_REPORT_BINDING_MISMATCH")
+            pending.extend(
+                ArtifactRef(
+                    feature_id=checkpoint_ref.feature_id,
+                    artifact_type=item["artifact_type"],
+                    path=item["path"],
+                    artifact_hash=item["artifact_hash"],
+                )
+                for item in upstreams
+            )
+
     def preflight_verification_operation(
         self,
         envelope: VerificationOperationEnvelope,
@@ -707,18 +867,6 @@ class WorkflowCheckpointStore:
             checkpoint_ref,
             checkpoint_envelope,
         )
-        freshness = self._checkpoint_freshness(
-            checkpoint_ref,
-            checkpoint_envelope,
-        )
-        if not freshness.is_fresh:
-            blockers.append(
-                {
-                    "code": "STALE_RESUME_RECOVERY_REJECTED",
-                    "message": "Checkpoint inputs changed after the accepted resume.",
-                }
-            )
-
         accepted_reports: list[tuple[ArtifactRef, dict[str, Any], dict[str, Any]]] = []
         for report_ref in self.artifact_store.list_feature_artifact_revisions(
             checkpoint_ref.feature_id,
@@ -795,6 +943,13 @@ class WorkflowCheckpointStore:
                 "Accepted resume recovery was blocked: "
                 + ", ".join(str(item.get("code")) for item in blockers)
             )
+        self.read_accepted_runtime_checkpoint(
+            checkpoint_ref,
+            resume_report_ref=report_ref,
+            resume_id=resume_id,
+            approved_by=str(report.get("approved_by") or ""),
+            runtime_action_scope=dict(report["applied_updates"].get("runtime_admission") or {}),
+        )
         return (
             ResumeDecision(
                 status="accepted",

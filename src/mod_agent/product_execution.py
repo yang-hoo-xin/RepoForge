@@ -39,6 +39,7 @@ _BINDING_VERSIONS = {
     "runtime_admission": "runtime_admission_v1",
 }
 _BINDING_ORDER = tuple(_BINDING_VERSIONS)
+_BINDING_VERSIONS["repository_build_and_test"] = "repository_build_and_test_v1"
 _PHASES = {
     "planning",
     "evidence",
@@ -304,11 +305,14 @@ class ProductExecutionRequestV1:
             self.isolated_source_snapshot_sha256,
             "isolated_source_snapshot_sha256",
         )
+        allowed_orders = {_BINDING_ORDER}
+        if self.target_domain == "csharp_repository" and self.requested_completion_scope == "compile_only":
+            allowed_orders.add((*_BINDING_ORDER, "repository_build_and_test"))
         if type(self.input_bindings) is not tuple or tuple(
             item.binding_kind for item in self.input_bindings
-        ) != _BINDING_ORDER:
+        ) not in allowed_orders:
             raise ProductExecutionContractError(
-                "Product input bindings must contain the exact ordered binding kinds.",
+                "Product input bindings must contain the exact ordered binding kinds for this domain.",
                 side_effects_may_have_started=False,
             )
         if any(not isinstance(item, ProductExecutionInputBindingV1) for item in self.input_bindings):
@@ -1236,6 +1240,7 @@ def _validate_store_trace(
     attempts: tuple[ProductExecutionStoreAttemptV1, ...],
     outputs: tuple[ProductExecutionOutputV1, ...],
     *, upstream_sequences: frozenset[int] = frozenset(), reused_input_count: int = 0,
+    task_agent_sequences: frozenset[int] = frozenset(),
 ) -> None:
     declaration = PRODUCT_EXECUTION_DECLARATION
     roles = declaration.role_by_node
@@ -1279,7 +1284,8 @@ def _validate_store_trace(
                 side_effects_may_have_started=True,
             )
     for attempt in attempts:
-        if attempt.node_name not in roles or attempt.artifact_role not in roles[attempt.node_name]:
+        if (attempt.sequence not in task_agent_sequences
+                and (attempt.node_name not in roles or attempt.artifact_role not in roles[attempt.node_name])):
             raise ProductExecutionContractError(
                 "Product Store node/role is not declared.",
                 side_effects_may_have_started=True,
@@ -1293,7 +1299,8 @@ def _validate_store_trace(
     # BuildResult before WorkflowCheckpoint.
     for index, item in enumerate(attempts):
         if (index and attempts[index - 1].node_name == item.node_name
-                and item.sequence not in upstream_sequences):
+                and item.sequence not in upstream_sequences | task_agent_sequences
+                and attempts[index - 1].sequence not in task_agent_sequences):
             declared = roles[item.node_name]
             previous = attempts[index - 1].artifact_role
             if declared.index(item.artifact_role) <= declared.index(previous):
@@ -1614,7 +1621,8 @@ def _validate_repair_plan_lifecycle_predicates(
             )
 
 
-def _validated_product_upstream_sequences(facts: ProductExecutionFactsV1) -> frozenset[int]:
+def _validated_product_upstream_sequences(facts: ProductExecutionFactsV1, *,
+        task_agent_sequences: frozenset[int] = frozenset()) -> frozenset[int]:
     """Recognize exact assessment insertions before applying the original grammar.
 
     Assessment can precede the first Proposal, so it has no invented failure
@@ -1634,6 +1642,8 @@ def _validated_product_upstream_sequences(facts: ProductExecutionFactsV1) -> fro
                 side_effects_may_have_started=True)
 
     for index, item in enumerate(attempts):
+        if item.sequence in task_agent_sequences:
+            continue
         envelope = envelopes.get(item.sequence, {})
         data = envelope.get("data", {})
         if (item.artifact_role != "repair_plan" or not isinstance(data, Mapping)
@@ -1826,6 +1836,48 @@ class _ProductExecutionResultIdentityV1:
 
 
 @dataclass(frozen=True)
+class ProductTaskAgentExecutionV1:
+    """One trusted technical execution, retaining its real internal Store attempts.
+
+    Scope: optional task-agent owner only; no extra outer workflow stage or permission.
+    为什么要有它：内部调查可以产生真实Evidence/Plan修订，但不能伪装旧Graph节点或丢掉失败时已经发生的写入。
+    """
+    contract_version: Literal["1"]
+    run_id: str
+    request_id: str
+    repair_attempt: int
+    store_start_sequence: int
+    initial_context: Mapping[str, Any]
+    outcome: Mapping[str, Any]
+    store_sequences: tuple[int, ...]
+
+    def __post_init__(self):
+        if self.contract_version != "1":
+            raise ProductExecutionContractError("Task execution record version changed.", side_effects_may_have_started=True)
+        _require_non_empty(self.run_id, "task run_id")
+        _require_non_empty(self.request_id, "task request_id")
+        if _require_exact_int(self.repair_attempt, "task outer repair attempt") > 2:
+            raise ProductExecutionContractError("Task outer repair attempt changed.", side_effects_may_have_started=True)
+        _require_exact_int(self.store_start_sequence, "task Store starting sequence")
+        if (not isinstance(self.initial_context, Mapping) or not isinstance(self.outcome, Mapping)
+                or any(type(value) is not int or value < 0 for value in self.store_sequences)
+                or tuple(sorted(set(self.store_sequences))) != self.store_sequences):
+            raise ProductExecutionContractError("Task execution record is invalid.", side_effects_may_have_started=True)
+
+    def to_dict(self):
+        return {"contract_version": self.contract_version, "run_id": self.run_id, "request_id": self.request_id,
+            "repair_attempt": self.repair_attempt, "store_start_sequence": self.store_start_sequence,
+            "initial_context": dict(self.initial_context),
+            "outcome": dict(self.outcome), "store_sequences": list(self.store_sequences)}
+
+    @classmethod
+    def from_dict(cls, value):
+        _require_exact_fields(value, ("contract_version", "run_id", "request_id", "repair_attempt", "store_start_sequence",
+            "initial_context", "outcome", "store_sequences"), "ProductTaskAgentExecutionV1")
+        return cls(**{**value, "store_sequences": tuple(value["store_sequences"])})
+
+
+@dataclass(frozen=True)
 class ProductExecutionFactsV1:
     request: ProductExecutionRequestV1 | _ProductExecutionResultIdentityV1
     feature_id: str | None
@@ -1837,6 +1889,81 @@ class ProductExecutionFactsV1:
     blockers: tuple[ProductExecutionBlockerV1, ...]
     variant_result: ProductBuildCompletionV1 | ProductRuntimeCompletionV1
     failure_stage: str | None
+    task_agent_executions: tuple[ProductTaskAgentExecutionV1, ...] = ()
+
+
+def _validated_task_agent_sequences(facts: ProductExecutionFactsV1) -> frozenset[int]:
+    """Exclude only exact, receipt-bound internal writes from the outer grammar.
+
+    为什么要有它：局部接入新技术循环不能放宽旧Store顺序、审批、Apply或正式Build边界。
+    """
+    from src.mod_agent.model_qualification import read_bound_json
+
+    selected: set[int] = set()
+    attempts = {row.sequence: row for row in facts.store_attempts}
+    def require(condition):
+        if not condition:
+            raise ProductExecutionContractError("Task-agent internal Store binding changed.", side_effects_may_have_started=True)
+    for execution in facts.task_agent_executions:
+        require(isinstance(execution, ProductTaskAgentExecutionV1)
+            and execution.run_id == facts.request.run_id and execution.request_id == facts.request.request_id)
+        outcome = execution.outcome
+        require(execution.store_sequences == tuple(range(execution.store_start_sequence,
+            execution.store_start_sequence + len(execution.store_sequences))))
+        require(outcome.get("initial_context") == execution.initial_context
+            and outcome.get("whole_task_delivered") is False
+            and outcome.get("status") in {"candidate_ready", "blocked", "failed", "unknown"})
+        rows = []
+        for sequence in execution.store_sequences:
+            require(sequence not in selected and sequence in attempts)
+            row = attempts[sequence]
+            require(row.node_name == "generate_patch_proposal"
+                and row.phase == PRODUCT_EXECUTION_DECLARATION.phase_by_node["generate_patch_proposal"]
+                and row.repair_attempt == execution.repair_attempt
+                and row.artifact_role in {"repair_plan", "evidence_pack", "implementation_plan"})
+            rows.append(row.to_dict())
+            selected.add(sequence)
+        try:
+            if outcome.get("execution_ref") is not None:
+                retained = read_bound_json(outcome["execution_ref"])
+                require(retained.get("run_id") == execution.run_id and retained.get("request_id") == execution.request_id
+                    and retained.get("product_store_attempts") == rows
+                    and all(retained.get(key) == value for key, value in outcome.items() if key != "execution_ref"))
+            else:
+                # Scope: failed final-file persistence only; never a delivery-capable result.
+                # 为什么要有它：落盘失败不能清除已发生的Store操作，但未绑定最终结果也绝不具备交付资格。
+                require(outcome.get("status") in {"failed", "unknown"} and facts.failure_stage is not None)
+                if outcome.get("claim_ref") is None:
+                    require(not rows)
+                else:
+                    claim = read_bound_json(outcome["claim_ref"])
+                    require(claim.get("run_id") == execution.run_id and claim.get("request_id") == execution.request_id
+                        and claim.get("initial_context") == execution.initial_context)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            if isinstance(error, ProductExecutionContractError):
+                raise
+            raise ProductExecutionContractError("Task-agent retained execution evidence is unavailable.",
+                side_effects_may_have_started=True) from error
+        initial, final = execution.initial_context, outcome.get("final_context")
+        require(isinstance(final, Mapping) and set(initial) == set(final)
+            == {"feature_spec_ref", "evidence_pack_ref", "implementation_plan_ref"}
+            and initial["feature_spec_ref"] == final["feature_spec_ref"])
+        for context, sequence_limit in ((initial, execution.store_start_sequence),
+                (final, execution.store_start_sequence + len(execution.store_sequences))):
+            for name, reference in context.items():
+                prior = next((output for output in reversed(facts.outputs)
+                    if output.sequence < sequence_limit and output.artifact_role == name.removesuffix("_ref")), None)
+                current_required = context is initial or outcome.get("status") == "candidate_ready"
+                # Scope: a failed internal Plan publication may leave a newer Evidence head.
+                # 为什么要有它：失败回执必须保留半途真实写入；旧成对上下文可作为失败位置，绝不能作为可交付最新状态。
+                bound = (prior is not None and _ref_to_dict(prior.artifact_ref) == reference) if current_required else any(
+                    output.sequence < sequence_limit and _ref_to_dict(output.artifact_ref) == reference for output in facts.outputs)
+                require(isinstance(reference, Mapping) and reference.get("artifact_type") == name.removesuffix("_ref")
+                    and reference.get("feature_id") == facts.feature_id
+                    and bound)
+        require(any(event.effect_role == "patch_generation" and event.event_status == "started"
+            and event.repair_attempt == execution.repair_attempt for event in facts.effect_events))
+    return frozenset(selected)
 
 
 def _validated_reused_product_inputs(facts: ProductExecutionFactsV1) -> tuple[ProductExecutionOutputV1, ...]:
@@ -1901,15 +2028,16 @@ def _validate_product_execution_result_facts(
     facts: ProductExecutionFactsV1,
 ) -> None:
     reused = _validated_reused_product_inputs(facts)
-    upstream_sequences = _validated_product_upstream_sequences(facts)
+    task_agent_sequences = _validated_task_agent_sequences(facts)
+    upstream_sequences = _validated_product_upstream_sequences(facts, task_agent_sequences=task_agent_sequences)
     initial_reassessment_sequences = _validated_initial_findings_reassessment_sequences(facts)
     _validate_store_trace(facts.store_attempts, tuple(row for row in facts.outputs if row.origin == "generated"),
                          upstream_sequences=upstream_sequences | initial_reassessment_sequences,
-                         reused_input_count=len(reused))
+                         reused_input_count=len(reused), task_agent_sequences=task_agent_sequences)
     _validate_effect_trace(facts.effect_events)
-    _validate_lifecycle(tuple(item for item in facts.store_attempts if item.sequence not in upstream_sequences),
+    _validate_lifecycle(tuple(item for item in facts.store_attempts if item.sequence not in upstream_sequences | task_agent_sequences),
                         interrupted_patch=bool(reused))
-    _validate_repair_plan_lifecycle_predicates(facts, upstream_sequences=upstream_sequences)
+    _validate_repair_plan_lifecycle_predicates(facts, upstream_sequences=upstream_sequences | task_agent_sequences)
     _validate_terminal_effect_boundary(facts)
     if facts.feature_id is not None:
         _require_non_empty(facts.feature_id, "feature_id")
@@ -1974,6 +2102,7 @@ class ProductExecutionResultV1:
     validation_facts: ProductExecutionValidationFactsV1
     blockers: tuple[ProductExecutionBlockerV1, ...]
     variant_result: ProductBuildCompletionV1 | ProductRuntimeCompletionV1
+    task_agent_executions: tuple[ProductTaskAgentExecutionV1, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1993,6 +2122,8 @@ class ProductExecutionResultV1:
             "validation_facts": self.validation_facts.to_dict(),
             "blockers": [item.to_dict() for item in self.blockers],
             "variant_result": self.variant_result.to_dict(),
+            **({"task_agent_executions": [item.to_dict() for item in self.task_agent_executions]}
+               if self.task_agent_executions else {}),
         }
 
     @classmethod
@@ -2015,6 +2146,8 @@ class ProductExecutionResultV1:
             "blockers",
             "variant_result",
         )
+        if "task_agent_executions" in value:
+            fields = (*fields, "task_agent_executions")
         _require_exact_fields(value, fields, "ProductExecutionResultV1")
         if value["contract_version"] != "1":
             raise ProductExecutionContractError(
@@ -2067,6 +2200,8 @@ class ProductExecutionResultV1:
             validation_facts=ProductExecutionValidationFactsV1.from_dict(value["validation_facts"]),
             blockers=tuple(ProductExecutionBlockerV1.from_dict(item) for item in value["blockers"]),
             variant_result=variant,
+            task_agent_executions=tuple(ProductTaskAgentExecutionV1.from_dict(item)
+                for item in value.get("task_agent_executions", ())),
         )
         request = _ProductExecutionResultIdentityV1(
             run_id=parsed.run_id,
@@ -2084,6 +2219,7 @@ class ProductExecutionResultV1:
             blockers=parsed.blockers,
             variant_result=parsed.variant_result,
             failure_stage=parsed.failure_stage,
+            task_agent_executions=parsed.task_agent_executions,
         )
         projected = project_product_execution_result(facts, validate_request=False)
         if projected.to_dict() != parsed.to_dict():
@@ -2220,6 +2356,7 @@ def project_product_execution_result(
         validation_facts=facts.validation_facts,
         blockers=facts.blockers,
         variant_result=facts.variant_result,
+        task_agent_executions=facts.task_agent_executions,
     )
 
 

@@ -933,7 +933,19 @@ def _text_refs_in_paths(root: Path, name: str, paths: Sequence[Path]) -> list[st
 
 def _actual_evidence(root: Path, entity_name: str | None = None) -> dict[str, Any]:
     artifact_root = root / "artifacts"
-    journals = sorted(artifact_root.rglob("actual_journal.json")) if artifact_root.is_dir() else []
+    journals: list[Path] = []
+    if artifact_root.is_dir():
+        # 为什么要有它：本地产物目录可由并行运行清理或替换；只读工程视图应
+        # 忽略一次消失的目录，而不能让历史临时文件阻断当前源码查询。
+        for directory, child_directories, filenames in os.walk(
+            artifact_root,
+            topdown=True,
+            onerror=lambda _error: None,
+        ):
+            child_directories.sort()
+            if "actual_journal.json" in filenames:
+                journals.append(Path(directory) / "actual_journal.json")
+        journals.sort()
     observed: list[tuple[str, Path, Mapping[str, Any]]] = []
     for path in journals:
         raw = _read_json(path)

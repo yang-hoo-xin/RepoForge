@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -181,6 +182,7 @@ class ImplementationPlan:
     evidence_source_paths: tuple[str, ...] = ()
     binding_registry: dict[str, Any] | None = None
     verification_questions: tuple[str, ...] = ()
+    constraint_context: dict[str, Any] | None = None
 
     def to_artifact_payload(self) -> dict[str, Any]:
         return {
@@ -201,6 +203,7 @@ class ImplementationPlan:
                if self.verification_questions else {}),
             "proposed_changes": list(self.proposed_changes),
             "side_effect_boundaries": list(self.side_effect_boundaries),
+            **({"constraint_context": deepcopy(self.constraint_context)} if self.constraint_context is not None else {}),
             "test_plan": list(self.test_plan),
             "rollback_plan": list(self.rollback_plan),
             "open_questions": list(self.open_questions),

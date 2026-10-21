@@ -73,9 +73,10 @@ def prepare_retained_generation(feature, evidence, plan, response):
     from src.mod_agent.local_entry import _external_evidence_items, _patch_generation_obligation_projection
     from src.mod_agent.proposal.code_generator import LLMExactPatchGenerator
     obligations = _patch_generation_obligation_projection(feature_spec=feature,
-        implementation=plan, planned_changes=list(plan["proposed_changes"]))
+        implementation=plan, planned_changes=list(plan["proposed_changes"]), evidence_pack=evidence)
     generator = LLMExactPatchGenerator(None)
     prepared = generator.prepare_native_contract(user_request=feature["user_request"],
+        **({"constraint_context": obligations["constraint_context"]} if "constraint_context" in obligations else {}),
         evidence_items=_external_evidence_items(evidence["items"]), binding_registry=plan["binding_registry"],
         constraints=obligations["side_effect_boundaries"], target_behavior=obligations["target_behavior"],
         acceptance_criteria=obligations["acceptance_criteria"], runtime_verification_plan=obligations["runtime_verification_plan"],

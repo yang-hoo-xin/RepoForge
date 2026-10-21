@@ -316,9 +316,10 @@ def admit_saved_patch(request, admitted) -> dict:
              and response.get("model") == factory["profile"]["model"], "SAVED_PATCH_RESPONSE_IDENTITY_MISMATCH")
     plan = admitted.implementation_plan
     obligations = _patch_generation_obligation_projection(feature_spec=admitted.feature_spec,
-        implementation=plan, planned_changes=list(plan["proposed_changes"]))
+        implementation=plan, planned_changes=list(plan["proposed_changes"]), evidence_pack=admitted.evidence_pack)
     generator = LLMExactPatchGenerator(None)  # Existing no-provider parser API.
     prepared = generator.prepare_native_contract(user_request=admitted.feature_spec["user_request"],
+        **({"constraint_context": obligations["constraint_context"]} if "constraint_context" in obligations else {}),
         evidence_items=_external_evidence_items(admitted.evidence_pack["items"]), binding_registry=plan["binding_registry"],
         constraints=obligations["side_effect_boundaries"], target_behavior=obligations["target_behavior"],
         acceptance_criteria=obligations["acceptance_criteria"], runtime_verification_plan=obligations["runtime_verification_plan"],

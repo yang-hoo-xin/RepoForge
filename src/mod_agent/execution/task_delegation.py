@@ -110,7 +110,92 @@ def _code_identity(materialized):
             "files": sorted(materialized.files)}
 
 
-def _verification(reference, required_checks, *, request, plan_ref, code_identity, proposal):
+def _native_verification_binding(*, request, plan_ref, code_identity, proposal, reference, report,
+                                 recorded_binding=None, before_apply=True):
+    """Bind exact native origin before Apply, then recheck its immutable witnesses.
+
+    为什么要有它：原生工具响应不使用旧worker的generation字段；Apply后的来源复核也不能把已修改源码误当成B0再次物化。
+    """
+    from src.mod_agent.artifacts import ArtifactStore
+    from src.mod_agent.proposal.builder import PatchProposalBuilder
+    from src.mod_agent.task_agent_execution import (
+        load_task_agent_outcome,
+        validate_task_agent_handoff,
+    )
+
+    root, store = Path(request.isolated_workspace_root), ArtifactStore(request.artifact_store_root)
+    lineage = proposal.get("context_pack", {}).get("task_agent_lineage")
+    _require(isinstance(lineage, dict) and set(lineage) == {
+        "execution_ref", "candidate_ref", "check_ref", "approval_inherited", "whole_task_delivered"}
+        and lineage["approval_inherited"] is False and lineage["whole_task_delivered"] is False,
+        "NATIVE_LINEAGE_REQUIRED")
+    outcome = load_task_agent_outcome(lineage["execution_ref"], artifact_store_root=store.root)
+    execution = _read(lineage["execution_ref"])
+    _require(execution.get("run_id") == request.run_id and execution.get("request_id") == request.request_id
+        and outcome.status == "candidate_ready" and not outcome.unknown_effects and not outcome.whole_task_delivered
+        and outcome.candidate_ref == lineage["candidate_ref"] and outcome.check_ref == lineage["check_ref"]
+        and asdict(outcome.final_context.implementation_plan_ref) == plan_ref, "NATIVE_EXECUTION_CHANGED")
+    candidate, check = _read(outcome.candidate_ref), _read(outcome.check_ref)
+    _require(check.get("report", {}).get("report_ref") == reference
+        and candidate.get("materialized_code_identity") == code_identity
+        and candidate.get("context") == outcome.final_context.to_dict()
+        and report.get("model_response_sha256") == candidate.get("model_origin", {}).get("derived_content_ref", {}).get("sha256")
+        and proposal["diff_intent"] == [PatchProposalBuilder._change_intent(row)
+            for row in candidate.get("generated_changes", [])]
+        and proposal["context_pack"].get("implementation_plan_hash") == plan_ref["artifact_hash"],
+        "NATIVE_CANDIDATE_CHANGED")
+    identity = {"schema_version": "native-delegation-binding.v1", "execution_ref": lineage["execution_ref"],
+        "candidate_ref": outcome.candidate_ref, "check_ref": outcome.check_ref,
+        "verification_report_ref": dict(reference), "model_response_sha256": report["model_response_sha256"],
+        "materialized_code_identity": code_identity, "implementation_plan_ref": plan_ref}
+    if not before_apply:
+        _require(isinstance(recorded_binding, dict)
+            and set(recorded_binding) == {*identity, "immutable_file_refs"}
+            and all(recorded_binding.get(key) == value for key, value in identity.items())
+            and isinstance(recorded_binding["immutable_file_refs"], list)
+            and bool(recorded_binding["immutable_file_refs"]), "NATIVE_ADMISSION_WITNESS_REQUIRED")
+        for selected in recorded_binding["immutable_file_refs"]:
+            _require(isinstance(selected, dict) and set(selected) == {"path", "sha256"}
+                and hashlib.sha256(_path(selected["path"]).read_bytes()).hexdigest() == selected["sha256"],
+                "NATIVE_IMMUTABLE_ORIGIN_CHANGED")
+        return recorded_binding
+    handoff = validate_task_agent_handoff(outcome, store=store, workspace_root=root,
+        expected_initial_context=outcome.initial_context, allowed_edit_paths=tuple(execution["allowed_edit_paths"]),
+        worker_configuration_ref=execution["worker_binding"]["configuration_ref"],
+        expected_verification_identity=execution["expected_verification_identity"],
+        expected_candidate_mode=execution.get("candidate_mode", "baseline"))
+    _require(handoff.candidate == candidate and handoff.check == check, "NATIVE_HANDOFF_CHANGED")
+    references = [outcome.execution_ref, outcome.claim_ref, outcome.loop_result_ref, outcome.check_ref,
+        outcome.finish_response_ref, reference, execution["worker_binding"]["configuration_ref"],
+        execution["worker_binding"]["factory_ref"]]
+    for context in (outcome.initial_context, outcome.final_context):
+        for selected in context.to_dict().values():
+            path = _path(selected["path"])
+            references.append({"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
+    for call in execution.get("completed_tool_records", []):
+        if call.get("role") in {"candidate_submit", "candidate_check"}:
+            references.extend([call["response_ref"], call["arguments_ref"]])
+    selected_ref, visited = outcome.candidate_ref, set()
+    while selected_ref is not None:
+        _require(selected_ref["path"] not in visited and _path(selected_ref["path"]).is_relative_to(root),
+            "NATIVE_PARENT_CYCLE_OR_SCOPE")
+        visited.add(selected_ref["path"])
+        selected = _read(selected_ref)
+        origin = selected["model_origin"]
+        references.extend([selected_ref, origin["arguments_ref"], origin["response_ref"], origin["derived_content_ref"]])
+        selected_ref = origin.get("parent_candidate_ref")
+    unique = {}
+    for selected in references:
+        path = _path(selected["path"])
+        _require(hashlib.sha256(path.read_bytes()).hexdigest() == selected["sha256"], "NATIVE_ORIGIN_CHANGED")
+        unique[str(path)] = dict(selected)
+    identity["immutable_file_refs"] = [unique[key] for key in sorted(unique)]
+    _require(recorded_binding is None or recorded_binding == identity, "NATIVE_ADMISSION_CHANGED")
+    return identity
+
+
+def _verification(reference, required_checks, *, request, plan_ref, code_identity, proposal,
+                  native_binding=None, before_apply=True):
     root = Path(request.isolated_workspace_root)
     _require(_path(reference["path"]).is_relative_to(root), "VERIFICATION_OUTSIDE_RUN")
     report = _read(reference)
@@ -125,12 +210,19 @@ def _verification(reference, required_checks, *, request, plan_ref, code_identit
              and summary.get("checks") == len(required_checks) and summary.get("failed_checks") == 0
              and type(summary.get("executions")) is int and summary["executions"] > 0,
              "VERIFICATION_NOT_PASSED_OR_BOUND")
-    response_hashes = {row.get("generation", {}).get("model_response_sha256")
-                       for row in proposal["diff_intent"]}
-    _require(len(response_hashes) == 1 and None not in response_hashes
-             and isinstance(report.get("model_response_sha256"), str)
-             and _SHA.fullmatch(report["model_response_sha256"])
-             and report.get("model_response_sha256") in response_hashes, "MODEL_RESPONSE_MISMATCH")
+    native = proposal.get("context_pack", {}).get("task_agent_lineage") is not None
+    if native:
+        native_binding = _native_verification_binding(request=request, plan_ref=plan_ref,
+            code_identity=code_identity, proposal=proposal, reference=reference, report=report,
+            recorded_binding=native_binding, before_apply=before_apply)
+    else:
+        _require(native_binding is None, "NATIVE_BINDING_WITHOUT_LINEAGE")
+        response_hashes = {row.get("generation", {}).get("model_response_sha256")
+                           for row in proposal["diff_intent"]}
+        _require(len(response_hashes) == 1 and None not in response_hashes
+                 and isinstance(report.get("model_response_sha256"), str)
+                 and _SHA.fullmatch(report["model_response_sha256"])
+                 and report.get("model_response_sha256") in response_hashes, "MODEL_RESPONSE_MISMATCH")
     detail_ref = report.get("verification_ref")
     _require(isinstance(detail_ref, Mapping) and _path(detail_ref["path"]).is_relative_to(root),
              "CHECK_DETAILS_REQUIRED")
@@ -155,6 +247,7 @@ def _verification(reference, required_checks, *, request, plan_ref, code_identit
     _require(detail.get("built_artifact_ref") == compiled["built_artifact_ref"]
              and detail.get("compilation_report_ref") == compile_ref,
              "CHECKS_DO_NOT_BIND_COMPILED_OUTPUT")
+    return native_binding
 
 
 def prepare_task_delegation(*, artifact_store_root, checkpoint_ref, verification_report_ref,
@@ -188,14 +281,16 @@ def prepare_task_delegation(*, artifact_store_root, checkpoint_ref, verification
     _require(bool(code["files"]) and all((Path(request.isolated_workspace_root) / path).resolve().is_relative_to(target)
              for path in code["files"]), "CHANGE_OUTSIDE_ALLOWED_DIRECTORY")
     checks = list(required_check_ids)
-    _verification(verification_report_ref, checks, request=request, plan_ref=asdict(refs["implementation_plan"]),
-                  code_identity=code, proposal=proposal)
+    native = _verification(verification_report_ref, checks, request=request, plan_ref=asdict(refs["implementation_plan"]),
+                           code_identity=code, proposal=proposal)
     record = {"schema_version": SCHEMA, "origin": ORIGIN, "decision": "approve", "policy_id": policy_id,
         "created_at": datetime.now(timezone.utc).isoformat(), "scope": scope,
         "checkpoint_ref": asdict(checkpoint_ref), "request": request.to_dict(),
         "artifact_refs": {kind: asdict(value) for kind, value in refs.items()},
         "dry_run_binding": {key: dry[key] for key in keys}, "materialized_code_identity": code,
         "verification_report_ref": dict(verification_report_ref), "required_check_ids": checks}
+    if native is not None:
+        record["native_candidate_binding"] = native
     raw = _bytes(record)
     digest = hashlib.sha256(raw).hexdigest()
     path = Path(artifact_store_root) / "task_delegations" / (digest + ".json")
@@ -211,7 +306,8 @@ def validate_task_delegation(reference, *, workspace_root=None, diff_hash=None, 
     from src.mod_agent.artifacts import ArtifactRef
 
     record = _read(reference)
-    _require(isinstance(record, dict) and set(record) == _FIELDS and record["schema_version"] == SCHEMA
+    _require(isinstance(record, dict) and set(record) in (_FIELDS, _FIELDS | {"native_candidate_binding"})
+             and record["schema_version"] == SCHEMA
              and record["origin"] == ORIGIN and record["decision"] == "approve"
              and isinstance(record["policy_id"], str) and bool(record["policy_id"].strip())
              and isinstance(record["created_at"], str) and bool(record["created_at"]), "ORIGIN_OR_SCHEMA_INVALID")
@@ -219,6 +315,8 @@ def validate_task_delegation(reference, *, workspace_root=None, diff_hash=None, 
     _require(record["request"] == request.to_dict()
              and record["scope"] == _scope(request, live=before_apply or fresh_verification)
              and record["artifact_refs"] == {k: asdict(v) for k, v in refs.items()}, "BINDING_CHANGED")
+    _require((documents["patch_proposal"].get("context_pack", {}).get("task_agent_lineage") is not None)
+        == ("native_candidate_binding" in record), "NATIVE_ADMISSION_WITNESS_REQUIRED")
     expected_path = Path(request.artifact_store_root) / "task_delegations" / (reference["sha256"] + ".json")
     _require(_path(reference["path"]) == expected_path, "DECISION_LOCATION_INVALID")
     dry = documents["dry_run_result"]
@@ -240,7 +338,8 @@ def validate_task_delegation(reference, *, workspace_root=None, diff_hash=None, 
         # 为什么要有它：旧编译输出或原工程的后续清理不能重写历史授权事实；真正执行前仍须重验实际输入与验收。
         _verification(record["verification_report_ref"], record["required_check_ids"], request=request,
             plan_ref=record["artifact_refs"]["implementation_plan"], code_identity=record["materialized_code_identity"],
-            proposal=documents["patch_proposal"])
+            proposal=documents["patch_proposal"], native_binding=record.get("native_candidate_binding"),
+            before_apply=before_apply)
         _check_sources(request, before_apply=before_apply)
     if before_apply:
         _validate_apply_resume_receipt(reference, record, resume_report_ref)

@@ -255,6 +255,7 @@ def test_run_local_request_requires_explicit_identities_as_one_pair() -> None:
             allow_build=True,
             allow_source_disclosure=False,
             local_ollama=True,
+            model_call_budget_policy="meter_only",
             diff_approval_reader=lambda _diff: "literal user input",
             run_id="outer_001",
         )

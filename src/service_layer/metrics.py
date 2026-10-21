@@ -21,4 +21,18 @@ def queue_metrics(snapshot):
             continue
         metric = "service_jobs_" + name + ("_total" if metric_type == "counter" else "")
         output.extend((f"# TYPE {metric} {metric_type}", f"{metric} {value}"))
+    # Scope: finite encoded-data accounting fields, not Redis/RSS measurements.
+    # 为什么要有它：准入拒绝需要可观测的总额度与预留占用，不能导出任意字段或把它标成实际内存。
+    capacity = snapshot.get("capacity", {})
+    if isinstance(capacity, dict):
+        for field in ("capacity_bytes", "cache_capacity_bytes", "charged_bytes", "cache_charged_bytes"):
+            value = capacity.get(field)
+            if type(value) is int and value >= 0:
+                metric = "service_encoded_" + field
+                output.extend((f"# TYPE {metric} gauge", f"{metric} {value}"))
+        for field in ("dirty", "initialized"):
+            value = capacity.get(field)
+            if type(value) is bool:
+                metric = "service_capacity_" + field
+                output.extend((f"# TYPE {metric} gauge", f"{metric} {int(value)}"))
     return ("\n".join(output) + "\n").encode()

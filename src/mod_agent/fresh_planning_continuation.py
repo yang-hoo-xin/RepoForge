@@ -1756,9 +1756,11 @@ def _admit_patch_repair_context(
         obligations = _patch_generation_obligation_projection(
             feature_spec=feature_spec, implementation=implementation_plan,
             planned_changes=list(implementation_plan["proposed_changes"]),
+            evidence_pack=evidence_pack,
         )
         generator = LLMExactPatchGenerator(None)  # preparation/materialization never calls this provider
         prepared = generator.prepare_native_contract(
+            **({"constraint_context": obligations["constraint_context"]} if "constraint_context" in obligations else {}),
             user_request=feature_spec["user_request"],
             evidence_items=_external_evidence_items(evidence_pack["items"]),
             binding_registry=implementation_plan["binding_registry"],
@@ -1893,9 +1895,10 @@ def admit_active_worker_failure(request, receipt, artifact_store):
         raw = _read_hashed_repair_file(response_ref).decode("utf-8")
         obligations = _patch_generation_obligation_projection(feature_spec=admitted.feature_spec,
             implementation=admitted.implementation_plan,
-            planned_changes=list(admitted.implementation_plan["proposed_changes"]))
+            planned_changes=list(admitted.implementation_plan["proposed_changes"]), evidence_pack=admitted.evidence_pack)
         generator = LLMExactPatchGenerator(None)
         prepared = generator.prepare_native_contract(user_request=admitted.feature_spec["user_request"],
+            **({"constraint_context": obligations["constraint_context"]} if "constraint_context" in obligations else {}),
             evidence_items=_external_evidence_items(admitted.evidence_pack["items"]),
             binding_registry=admitted.implementation_plan["binding_registry"],
             constraints=obligations["side_effect_boundaries"], target_behavior=obligations["target_behavior"],
@@ -1945,7 +1948,7 @@ class PatchContinuationAttemptJournal:
         evidence_pack_ref: ArtifactRef,
         implementation_plan_ref: ArtifactRef,
         workspace_root: str | Path,
-        max_model_calls: int,
+        max_model_calls: int | None,
         model_call_budget_policy: str = "stage_and_total",
         worker_configuration_ref: Mapping[str, str] | None = None,
         worker_profile_sha256: str | None = None,
@@ -1961,12 +1964,13 @@ class PatchContinuationAttemptJournal:
                 "PATCH_PRODUCT_JOURNAL_IDENTITY_INVALID", "patch_attempt_receipt",
                 "A worker segment requires explicit request and distinct parent/run identities.",
             )
-        if (model_call_budget_policy not in {"stage_and_total", "task_total_only"}
-                or type(max_model_calls) is not int or max_model_calls < 1
-                or model_call_budget_policy == "stage_and_total" and max_model_calls > 5):
+        if (model_call_budget_policy not in {"stage_and_total", "task_total_only", "meter_only"}
+                or (max_model_calls is not None if model_call_budget_policy == "meter_only" else
+                    type(max_model_calls) is not int or max_model_calls < 1
+                    or model_call_budget_policy == "stage_and_total" and max_model_calls > 5)):
             raise PatchContinuationError(
                 "PATCH_CONTINUATION_MODEL_CALL_BUDGET_INVALID", "request",
-                "The worker segment requires a positive task allowance; legacy segments retain their five-call bound.",
+                "Metered segments have no call quota; bounded segments require their original positive allowance.",
             )
         selected_refs = (feature_spec_ref, evidence_pack_ref, implementation_plan_ref)
         try:
@@ -2051,7 +2055,7 @@ class PatchContinuationAttemptJournal:
             "artifact_store_root": str(root), "workspace_root": str(workspace),
             "selected_artifacts": selection, "source_snapshot_sha256": snapshot_hash,
             "max_model_calls": max_model_calls,
-            **({"model_call_budget_policy": model_call_budget_policy} if model_call_budget_policy == "task_total_only" else {}),
+            **({"model_call_budget_policy": model_call_budget_policy} if model_call_budget_policy != "stage_and_total" else {}),
             "worker_configuration_ref": (dict(worker_configuration_ref)
                                          if worker_configuration_ref is not None else None),
             "worker_profile_sha256": worker_profile_sha256,
@@ -2074,6 +2078,7 @@ class PatchContinuationAttemptJournal:
             "model_call_count": 0, "proposal_admitted": False, "artifacts": {}, "events": [],
             "attempt_identity_sha256": _canonical_sha256(identity),
             "max_model_calls": max_model_calls,
+            **({"model_call_budget_policy": model_call_budget_policy} if model_call_budget_policy == "meter_only" else {}),
         }
         if worker_configuration_ref is not None:
             journal._document["worker_configuration_ref"] = dict(worker_configuration_ref)
@@ -3080,8 +3085,20 @@ class _PatchUpstreamExecution:
         self.segments: list[dict[str, Any]] = []
         self.replan_count = 0
         self.initial_selection = self.selection(request)
-        self.source_snippet_char_limit = _proposal_source_snippet_char_limit(preflight_patch_continuation(request))
-        self.providers = configuration.assemble(request, recorder=self.record, reserve_model_call=self.reserve_model_call)
+        admitted = preflight_patch_continuation(request)
+        self.source_snippet_char_limit = _proposal_source_snippet_char_limit(admitted)
+        constraint_options = {}
+        if admitted.implementation_plan.get("constraint_context") is not None:
+            from src.mod_agent.planning.constraint_context import validate_constraint_context
+
+            # Scope: the already admitted Plan selects the explicit experimental representation.
+            # 为什么要有它：独立上游重建不能默默退回A；只继承重新核准的来源策略，不读取环境变量或继承编辑批准。
+            context = validate_constraint_context(admitted.implementation_plan["constraint_context"],
+                feature_spec=admitted.feature_spec, evidence_pack=admitted.evidence_pack,
+                constraints=admitted.implementation_plan["side_effect_boundaries"])
+            constraint_options["constraint_policy"] = context["policy"]
+        self.providers = configuration.assemble(request, recorder=self.record,
+            reserve_model_call=self.reserve_model_call, **constraint_options)
         self._attach(factory)
 
     @staticmethod
@@ -3145,7 +3162,10 @@ class _PatchUpstreamExecution:
         retained_request = self.factory.retained_worker_request(complete_upstream=True) if retain_plan else None
         retained_calibration = self.factory.retained_context_calibration() if retain_plan else None
         retained_input_projection = self.factory._repair_input_projection if retain_plan else None
-        previous_patch_calls = self.factory.patch_attempt_receipt()["model_call_count"]
+        previous_factory_receipt = self.factory.patch_attempt_receipt()
+        previous_patch_calls = previous_factory_receipt["model_call_count"]
+        from src.mod_agent.proposal.tool_argument_feedback import receipt_correction_used
+        inherited_argument_correction = receipt_correction_used(previous_factory_receipt)
         self.request = prepare_replanned_patch_input(prior_request=previous_request, state=state,
             attempt_id=("retained_" if retain_plan else "replanned_") + _canonical_sha256(self.initial_selection)[:24])
         self.request = replace(self.request, worker_configuration_ref=previous_request.worker_configuration_ref,
@@ -3169,6 +3189,10 @@ class _PatchUpstreamExecution:
             raise PatchContinuationError("PATCH_UPSTREAM_CONTINUATION_BUDGET_EXHAUSTED", "model_admission",
                 "The original observation policy leaves no legal allowance for the next worker.")
         self.factory = self.configuration.make_replanned_adapter(self.request, self.allocation)
+        # Scope: both retained and replaced Plan continuations under this original invocation.
+        # 为什么要有它：新factory不含旧native history时仍须继承已用机会，但不继承旧源码身份或编辑权限。
+        if inherited_argument_correction:
+            self.factory.bind_tool_argument_correction_used(True)
         if retain_plan:
             self.factory.patch_agent_loop_policy = replace(self.factory.patch_agent_loop_policy,
                 max_total_model_turns=previous_patch_calls + self.allocation,

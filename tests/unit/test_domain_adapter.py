@@ -264,6 +264,7 @@ def _evidence_pack(
                 "source_type": "target_source",
                 "symbol": None,
                 "span": {"start_line": 1, "end_line": 1},
+                "source_hash": "a" * 64,
             }
         ]
     }
@@ -283,10 +284,16 @@ def _implementation_plan(
                     "evidence_id": "ev_001",
                     "canonical_target_path": target_file,
                     "source_type": "target_source",
+                    "source_hash": "a" * 64,
                     "target_symbol": None,
                     "target_span": {"start_line": 1, "end_line": 1},
                 }
             ],
             "supporting_bindings": [],
-        }
+        },
+        "proposed_changes": [{
+            "change_id": "chg_001",
+            "edit_binding_id": "edit_binding_001",
+            "operation": "minimal_evidence_bound_change",
+        }],
     }

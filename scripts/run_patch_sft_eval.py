@@ -71,9 +71,10 @@ def _contract(request):
     admitted = preflight_patch_continuation(request)
     feature, plan = admitted.feature_spec, admitted.implementation_plan
     obligations = _patch_generation_obligation_projection(feature_spec=feature, implementation=plan,
-                                                          planned_changes=plan["proposed_changes"])
+                                                          planned_changes=plan["proposed_changes"], evidence_pack=admitted.evidence_pack)
     generator = LLMExactPatchGenerator(None)
     prepared = generator.prepare_native_contract(user_request=feature["user_request"],
+        **({"constraint_context": obligations["constraint_context"]} if "constraint_context" in obligations else {}),
         evidence_items=_external_evidence_items(admitted.evidence_pack["items"]), binding_registry=plan["binding_registry"],
         constraints=obligations["side_effect_boundaries"], target_behavior=obligations["target_behavior"],
         acceptance_criteria=obligations["acceptance_criteria"], runtime_verification_plan=obligations["runtime_verification_plan"],

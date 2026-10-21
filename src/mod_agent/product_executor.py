@@ -14,7 +14,7 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from src.mod_agent.artifacts import ArtifactRef, ArtifactStore, ArtifactWriteResult
-from src.mod_agent.domain import GTFOAdapter, UnsupportedDomainAdapter
+from src.mod_agent.domain import DomainProfile, GTFOAdapter, UnsupportedDomainAdapter
 from src.mod_agent.errors import LocalEntryError as LocalEntryError
 from src.mod_agent.execution import ExactDiffApprovalRejectedError
 from src.mod_agent.git.admission import GitAdmissionError, StrictGitAdmission
@@ -36,6 +36,7 @@ from src.mod_agent.product_execution import (
     ProductExecutionRequestV1,
     ProductExecutionResultV1,
     ProductExecutionStoreAttemptV1,
+    ProductTaskAgentExecutionV1,
     ProductExecutionValidationDetailV1,
     ProductExecutionValidationFactsV1,
     ProductRuntimeCompletionV1,
@@ -138,6 +139,7 @@ def _verify_source_revision_binding(
     snapshot_sha256: str,
     binding: Mapping[str, Any] | None,
     strict_git_admission: StrictGitAdmission | None = None,
+    repository_profile_ref: Mapping[str, str] | None = None,
 ) -> None:
     if binding is None:
         projects = [
@@ -145,7 +147,14 @@ def _verify_source_revision_binding(
             for path in source.rglob("*.csproj")
             if not any(part in {"bin", "obj", ".git"} for part in path.parts)
         ]
-        if len(projects) > 1:
+        if len(projects) > 1 and repository_profile_ref is not None:
+            from src.mod_agent.domain.csharp_repository_backend import CSharpRepositoryProfile
+            selected = CSharpRepositoryProfile(repository_profile_ref)
+            selected.bind(source)
+            declared = selected.data["project_path"]
+            if declared not in {row["path"] for row in snapshot}:
+                raise LocalEntryError("Declared repository project is absent from the source snapshot.")
+        elif len(projects) > 1:
             raise LocalEntryError(
                 "Multiple source projects require an explicit source revision binding."
             )
@@ -646,8 +655,64 @@ class ProductExecutionAdaptersV1:
     patch_upstream_evidence_pack_factory: Callable[..., Any] | None = None
     patch_upstream_planning_target_selection_factory: Callable[..., Any] | None = None
     initial_findings_reassessment_factory: Callable[..., Any] | None = None
+    domain_adapter: Any = None
+    task_agent_execution: Any = None
 
     def validate_for(self, request: ProductExecutionRequestV1) -> None:
+        if self.task_agent_execution is not None:
+            from src.mod_agent.task_agent_execution import TaskAgentExecution
+            from src.mod_agent.model_admission import ModelAdmissionError, validate_ollama_model_identity, validate_ollama_context_window
+
+            if (not isinstance(self.task_agent_execution, TaskAgentExecution)
+                    or self.task_agent_execution is not self.patch_change_factory
+                    or self.product_patch_upstream_execution is not None):
+                raise ProductExecutionContractError("Task execution must be the explicit trusted Patch owner, not a legacy worker.",
+                    side_effects_may_have_started=False)
+            owner = self.task_agent_execution
+            try:
+                workspace = Path(request.isolated_workspace_root).resolve(strict=True)
+                target = Path(request.isolated_target_root).resolve(strict=True)
+                if (owner.workspace_root.resolve(strict=True) != workspace
+                        or owner.store.root.resolve() != Path(request.artifact_store_root).resolve()
+                        or not target.is_relative_to(workspace) or not owner.allowed_read_roots or not owner.allowed_edit_paths):
+                    raise ValueError("Task owner does not match the isolated Product workspace and Store.")
+                for root in owner.allowed_read_roots:
+                    selected = Path(root).resolve(strict=True)
+                    if not selected.is_dir() or not selected.is_relative_to(target):
+                        raise ValueError("Task read scope escapes the isolated target.")
+                for relative in owner.allowed_edit_paths:
+                    selected = PurePosixPath(relative)
+                    if selected.is_absolute() or ".." in selected.parts or "\\" in relative:
+                        raise ValueError("Task edit scope is not an exact relative path.")
+                    resolved = (workspace / relative).resolve(strict=True)
+                    if not resolved.is_file() or not resolved.is_relative_to(target):
+                        raise ValueError("Task edit scope escapes the isolated target.")
+                binding = next(ProductExecutionInputBindingV1.from_dict(item.to_dict()).canonical_payload
+                    for item in request.input_bindings if item.binding_kind == "model_admission")
+                validate_ollama_model_identity(owner.expected_model_identity,
+                    expected_base_url=owner.profile.base_url, expected_model=owner.profile.model)
+                validate_ollama_context_window(owner.expected_model_identity, requested_context_window=owner.profile.context_window)
+                if binding != local_model_admission_record(model_identity=owner.expected_model_identity,
+                        provider_adapter=binding.get("provider_adapter", "")):
+                    raise ValueError("Task model differs from the admitted Product model.")
+            except (ValueError, TypeError, KeyError, OSError, AttributeError, ModelAdmissionError) as error:
+                raise ProductExecutionContractError("Task execution input admission failed: " + str(error),
+                    side_effects_may_have_started=False) from error
+        if self.domain_adapter is not None:
+            # Scope: trusted in-process injection, never a domain name or model-authored callback payload.
+            # 为什么要有它：共享C#接入必须显式绑定领域、源码范围和验证语义，默认GTFO/unsupported路径不能被悄悄替换。
+            if (getattr(self.domain_adapter, "domain_name", None) != request.target_domain
+                    or any(not callable(getattr(self.domain_adapter, name, None)) for name in
+                           ("identify_project", "build_feature_spec", "validate_product_request"))):
+                raise ProductExecutionContractError("Explicit product domain adapter is invalid.", side_effects_may_have_started=False)
+            try:
+                self.domain_adapter.validate_product_request(request)
+                profile = self.domain_adapter.identify_project(request.isolated_workspace_root)
+                if not isinstance(profile, DomainProfile) or profile.project_root != request.isolated_workspace_root:
+                    raise ValueError("Domain profile does not identify the admitted workspace.")
+            except (ValueError, TypeError) as error:
+                raise ProductExecutionContractError("Explicit product domain admission failed: " + str(error),
+                    side_effects_may_have_started=False) from error
         required = (
             "evidence_pack_factory",
             "patch_change_factory",
@@ -709,7 +774,7 @@ class ProductExecutionAdaptersV1:
             )
 
     def topology(self) -> tuple[tuple[str, bool], ...]:
-        return tuple(
+        original = tuple(
             (field, callable(getattr(self, field)))
             for field in (
                 "evidence_pack_factory",
@@ -727,6 +792,8 @@ class ProductExecutionAdaptersV1:
                 "source_change_verifier",
             )
         )
+        return original + ((("domain_adapter", True),) if self.domain_adapter is not None else ()) + (
+            (("task_agent_execution", True),) if self.task_agent_execution is not None else ())
 
 
 @dataclass(frozen=True)
@@ -806,6 +873,7 @@ class ProductExecutionInputBindingResolverV1:
                 snapshot_sha256=source_snapshot_sha256(source_snapshot_value),
                 binding=bindings["source_revision_binding"],
                 strict_git_admission=strict_git_admission,
+                repository_profile_ref=(bindings.get("repository_build_and_test") or {}).get("configuration_ref"),
             )
 
             disclosure = bindings["source_disclosure"]
@@ -880,6 +948,11 @@ class ProductExecutionInputBindingResolverV1:
                     raise LocalEntryError(
                         "No-Runtime admission disagrees with compile-only scope."
                     )
+            if "repository_build_and_test" in bindings:
+                from src.mod_agent.domain.csharp_repository_delivery import (
+                    validate_repository_binding,
+                )
+                validate_repository_binding(bindings["repository_build_and_test"], request.isolated_workspace_root)
         except (KeyError, TypeError, ValueError, LocalEntryError) as exc:
             raise _ProductExecutionAdmissionError(
                 str(exc) or type(exc).__name__,
@@ -954,6 +1027,52 @@ class _ProductStoreRecorder:
         self._repair_source_scope: ArtifactRef | None = None
         self._repair_source_roles: list[str] = []
         self.uncommitted_blocked_causes: tuple[ProductExecutionBlockerV1, ...] = ()
+        self.task_agent_executions: list[ProductTaskAgentExecutionV1] = []
+        self._task_agent_owner = None
+        self._task_agent_start = None
+
+    def task_agent_store_attempts(self, owner):
+        if owner is not self._task_agent_owner or self._task_agent_start is None:
+            raise ProductExecutionContractError("Task Store observations require the active trusted owner.",
+                side_effects_may_have_started=True)
+        return [row.to_dict() for row in self.attempts[self._task_agent_start:]]
+
+    @contextmanager
+    def task_agent_scope(self, owner, state):
+        from src.mod_agent.task_agent_execution import TaskAgentExecution
+
+        if (not isinstance(owner, TaskAgentExecution) or self._task_agent_owner is not None
+                or self._repair_source_scope is not None):
+            raise ProductExecutionContractError("Task Store scope requires one trusted, nonnested execution.",
+                side_effects_may_have_started=False)
+        initial = {role + "_ref": {"feature_id": state["feature_id"], "artifact_type": role,
+            "path": state["artifacts"][role], "artifact_hash": state["artifact_hashes"][role]}
+            for role in ("feature_spec", "evidence_pack", "implementation_plan")}
+        self._task_agent_owner, self._task_agent_start = owner, len(self.attempts)
+        start_sequence = len(self.attempts) + sum(row.origin == "reused_input" for row in self.outputs)
+        outer_attempt = self._repair_attempt
+        try:
+            yield
+        finally:
+            try:
+                outcome = owner.execution_receipt()
+                sequences = tuple(row.sequence for row in self.attempts[self._task_agent_start:])
+                if outcome is not None:
+                    self.task_agent_executions.append(ProductTaskAgentExecutionV1(
+                        contract_version="1", run_id=state["run_id"], request_id=state["request_id"],
+                        repair_attempt=outer_attempt, store_start_sequence=start_sequence, initial_context=initial,
+                        outcome=copy.deepcopy(outcome.to_dict()), store_sequences=sequences))
+                elif sequences:
+                    raise ProductExecutionContractError("Task Store effects have no retained execution owner.",
+                        side_effects_may_have_started=True)
+            finally:
+                self._task_agent_owner, self._task_agent_start = None, None
+
+    def _validate_task_agent_write(self, kwargs):
+        if self._task_agent_owner is not None and kwargs.get("artifact_type") not in {
+                "repair_plan", "evidence_pack", "implementation_plan"}:
+            raise ProductExecutionContractError("Task technical scope cannot write delivery artifacts.",
+                side_effects_may_have_started=True)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._store, name)
@@ -1029,14 +1148,15 @@ class _ProductStoreRecorder:
 
     def _record(self, result: ArtifactWriteResult, *, payload: Mapping[str, Any]) -> None:
         role = result.artifact_type
-        node = "create_repair_plan" if self._repair_source_scope is not None else self._role_owner.get(role)
+        node = ("generate_patch_proposal" if self._task_agent_owner is not None else
+                "create_repair_plan" if self._repair_source_scope is not None else self._role_owner.get(role))
         if node is None:
             raise ProductExecutionContractError(
                 f"Product Graph attempted undeclared Store role {role}.",
                 side_effects_may_have_started=True,
             )
         attempt_number = self._repair_attempt
-        if role == "repair_plan":
+        if role == "repair_plan" and self._task_agent_owner is None:
             payload_attempt = payload.get("retry_count")
             attempt_number = (
                 payload_attempt
@@ -1072,7 +1192,7 @@ class _ProductStoreRecorder:
                     artifact_ref=result.artifact_ref,
                 )
             )
-            if role == "repair_plan":
+            if role == "repair_plan" and self._task_agent_owner is None:
                 self._repair_attempt = attempt_number
         else:
             if role == "blocked_report" and isinstance(payload.get("blockers"), list) and payload["blockers"]:
@@ -1085,6 +1205,7 @@ class _ProductStoreRecorder:
             )
 
     def write(self, **kwargs: Any) -> ArtifactRef:
+        self._validate_task_agent_write(kwargs)
         self._validate_repair_source_write(kwargs)
         result = self._store.write_with_result(**kwargs)
         self._record(result, payload=kwargs["payload"])
@@ -1096,6 +1217,7 @@ class _ProductStoreRecorder:
         return result.artifact_ref
 
     def write_with_result(self, **kwargs: Any) -> ArtifactWriteResult:
+        self._validate_task_agent_write(kwargs)
         self._validate_repair_source_write(kwargs)
         result = self._store.write_with_result(**kwargs)
         self._record(result, payload=kwargs["payload"])
@@ -1662,9 +1784,20 @@ def execute_product_execution(
 
             upstream_evidence_factory = RecordedReassessment()
 
+    selected_patch_factory = adapters.patch_change_factory
+    if adapters.task_agent_execution is not None:
+        task_owner = adapters.task_agent_execution
+        task_owner.bind_product_store(recorder)
+
+        def selected_patch_factory(state, implementation, evidence_pack):
+            # Scope: technical owner only; existing Review/Apply/Build nodes remain outside.
+            # 为什么要有它：新循环产生真实内部工件，但不应让内部候选构建冒充正式交付或绕过审批。
+            with recorder.task_agent_scope(task_owner, state):
+                return task_owner(state, implementation, evidence_pack)
+
     wrapped = ProductExecutionAdaptersV1(
         evidence_pack_factory=recorder.wrap_effect(effect_role="evidence_retrieval", node_name="retrieve_evidence", factory=adapters.evidence_pack_factory),
-        patch_change_factory=recorder.wrap_effect(effect_role="patch_generation", node_name="generate_patch_proposal", factory=adapters.patch_change_factory),
+        patch_change_factory=recorder.wrap_effect(effect_role="patch_generation", node_name="generate_patch_proposal", factory=selected_patch_factory),
         dry_run_factory=recorder.wrap_effect(effect_role="dry_run", node_name="dry_run_apply", factory=adapters.dry_run_factory),
         isolated_apply_factory=(await_exact_approval if defer_approval else recorder.wrap_effect(
             effect_role="isolated_apply", node_name="isolated_apply", factory=adapters.isolated_apply_factory)),
@@ -1681,6 +1814,8 @@ def execute_product_execution(
         patch_upstream_planning_target_selection_factory=adapters.patch_upstream_planning_target_selection_factory,
         initial_findings_reassessment_factory=recorder.wrap_effect(effect_role="evidence_retrieval",
             node_name="retrieve_evidence", factory=adapters.initial_findings_reassessment_factory),
+        domain_adapter=adapters.domain_adapter,
+        task_agent_execution=adapters.task_agent_execution,
     )
     if defer_approval:
         from src.mod_agent.workflow.checkpointing import WorkflowCheckpointStore
@@ -1698,10 +1833,14 @@ def execute_product_execution(
         build_result_factory=wrapped.build_result_factory,
         runtime_evidence_factory=wrapped.runtime_evidence_factory,
         domain_review_policy=(
-            GTFOAdapter()
-            if request.target_domain == "gtfo"
-            else UnsupportedDomainAdapter()
+            wrapped.domain_adapter if wrapped.domain_adapter is not None else (
+                GTFOAdapter()
+                if request.target_domain == "gtfo"
+                else UnsupportedDomainAdapter()
+            )
         ).identify_project(request.isolated_workspace_root).review_policy(),
+        **({"domain_feature_spec_factory": wrapped.domain_adapter.build_feature_spec}
+           if wrapped.domain_adapter is not None else {}),
         use_default_proposal_git_binding=False,
         product_execution_mode=ProductExecutionGraphModeV1(
             contract_version="1", request=request,
@@ -1710,6 +1849,7 @@ def execute_product_execution(
         ),
         enable_patch_upstream_replanning=adapters.product_patch_upstream_execution is not None,
         product_patch_upstream_execution=wrapped.product_patch_upstream_execution,
+        task_agent_execution=wrapped.task_agent_execution,
         patch_upstream_evidence_pack_factory=wrapped.patch_upstream_evidence_pack_factory,
         patch_upstream_planning_target_selection_factory=wrapped.patch_upstream_planning_target_selection_factory,
         initial_findings_reassessment_factory=wrapped.initial_findings_reassessment_factory,
@@ -1842,5 +1982,6 @@ def execute_product_execution(
             blockers=blockers,
             variant_result=variant,
             failure_stage=failure_stage,
+            task_agent_executions=tuple(recorder.task_agent_executions),
         )
     )

@@ -153,3 +153,65 @@ def test_existing_http_transport_declares_mcp_response_types(monkeypatch):
     transport = LangfuseHttpTransport("https://example.com", "test-public", "test-secret")
     assert transport._request("POST", "/api/public/mcp", payload={"method": "tools/list"}) == {"result": {"tools": []}}
     assert len(requests) == 1
+
+
+def test_explicit_observation_time_window_survives_every_page():
+    class CurrentTransport(Transport):
+        def _request(self, method, path, *, payload):
+            result = super()._request(method, path, payload=payload)
+            if payload["method"] == "tools/list":
+                for tool in result["result"]["tools"]:
+                    if tool["name"] == "listObservations":
+                        tool["inputSchema"]["required"] = ["fromStartTime", "toStartTime"]
+            return result
+
+    transport = CurrentTransport()
+    window = {"fromStartTime": "2026-09-09T00:59:59Z", "toStartTime": "2026-09-09T01:00:03Z"}
+    result = CloudExecutionReader(transport).read(TRACE,
+        from_start_time=window["fromStartTime"], to_start_time=window["toStartTime"])
+    queries = [payload["params"]["arguments"] for _, _, payload in transport.requests
+               if payload.get("params", {}).get("name") == "listObservations"]
+    assert len(queries) == 2
+    assert all(all(query[key] == value for key, value in window.items()) for query in queries)
+    assert result["query_window"] == window
+
+
+@pytest.mark.parametrize("start,end", [
+    ("2026-09-09T00:00:00Z", None),
+    ("2026-09-09T00:00:00", "2026-09-10T00:00:00Z"),
+    ("2026-09-10T00:00:00Z", "2026-09-09T00:00:00Z"),
+    ("2026-09-09T00:00:00Z", "2026-09-24T00:00:00Z"),
+])
+def test_invalid_time_window_stops_before_network(start, end):
+    transport = Transport()
+    with pytest.raises(PatchLangfuseError, match="TIME_RANGE_INVALID"):
+        CloudExecutionReader(transport).read(TRACE, from_start_time=start, to_start_time=end)
+    assert transport.requests == []
+
+
+@pytest.mark.parametrize("window", [[], ["--from-start-time", "2026-09-09T00:59:59Z"]])
+def test_public_cli_requires_time_bounds_before_loading_credentials(monkeypatch, capsys, window):
+    from src.observability import patch_langfuse_query as query
+
+    monkeypatch.setattr(query.LangfuseHttpTransport, "from_environment",
+                        lambda: pytest.fail("Missing arguments must not initialize a cloud connection"))
+    with pytest.raises(SystemExit) as error:
+        query.main(["--trace-id", TRACE, *window])
+    assert error.value.code == 2
+    assert "--to-start-time" in capsys.readouterr().err
+
+
+def test_public_cli_forwards_time_window_to_shared_reader(monkeypatch, capsys):
+    from src.observability import patch_langfuse_query as query
+
+    transport = Transport()
+    monkeypatch.setattr(query.LangfuseHttpTransport, "from_environment", lambda: transport)
+    assert query.main(["--trace-id", TRACE, "--from-start-time", "2026-09-09T00:59:59Z",
+                       "--to-start-time", "2026-09-09T01:00:03Z"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["trace_id"] == TRACE and result["generation_count"] == 1
+    assert result["query_window"]["fromStartTime"] == "2026-09-09T00:59:59Z"
+    queries = [payload["params"]["arguments"] for _, _, payload in transport.requests
+               if payload.get("params", {}).get("name") == "listObservations"]
+    assert len(queries) == 2
+    assert all(query_args["toStartTime"] == "2026-09-09T01:00:03Z" for query_args in queries)

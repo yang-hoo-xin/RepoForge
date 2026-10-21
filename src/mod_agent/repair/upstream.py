@@ -5,6 +5,7 @@ import hashlib
 import json
 from collections.abc import Mapping
 from copy import deepcopy
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,7 @@ from src.mod_agent.fresh_planning_continuation import (
     preflight_patch_continuation,
 )
 from src.mod_agent.planning.model_selection import ModelPlanningTargetSelector
+from src.mod_agent.proposal.behavior_feedback_view import project_execution_reference_paths
 from src.mod_agent.proposal.patch_agent_loop import (
     PATCH_UPSTREAM_REQUEST_TOOL_NAME,
     PatchAgentLoopPolicy,
@@ -45,8 +47,9 @@ def validate_product_worker_upstream(*, execution, state, artifact_store):
         if not condition:
             raise PatchContinuationError("PATCH_UPSTREAM_ATTEMPT_MISMATCH", "upstream_admission", message)
 
-    from src.mod_agent.model_call_budget import total_only
-    if execution.replan_count and not total_only(execution.budget_snapshot()):
+    from src.mod_agent.model_call_budget import is_meter_only, total_only
+    budget = execution.budget_snapshot()
+    if execution.replan_count and not (total_only(budget) or is_meter_only(budget)):
         raise PatchContinuationError("PATCH_UPSTREAM_CONTINUATION_BUDGET_EXHAUSTED", "upstream_admission",
             "This logical Product task has already consumed its one upstream cycle.")
     require(execution.last_worker is not None and execution.last_state is not None
@@ -101,6 +104,26 @@ def validate_product_worker_upstream(*, execution, state, artifact_store):
         context.update(_product_current_worker_failure(context=context, receipt=receipt,
             workspace_root=execution.workspace_root))
         _validate_current_failure_feedback(context, receipt)
+    elif getattr(execution.last_worker, "_comparison_checkpoint", None) is not None:
+        from src.mod_agent.comparison_checkpoint import admit_checkpoint_verifier
+
+        checked = execution.last_worker._comparison_checkpoint
+        require(checked.provenance["current_artifacts"] == selected
+                and receipt.get("comparison_checkpoint") == checked.provenance,
+                "Inherited diagnostic facts must belong to this exact checked trial selection.")
+        verifier = admit_checkpoint_verifier(checked, execution.last_worker.behavior_evaluator)
+        # Scope: an admitted experiment prefix is diagnostic history, not a newly executed candidate.
+        # 为什么要有它：首次新动作可以请求重新调查；不能因本段尚未再次Build而把真实C1/F1丢成“没有失败”，也不能伪造本段执行次数。
+        context.update(_product_current_worker_failure(context=context, receipt=checked.history,
+            workspace_root=execution.workspace_root))
+        context.update(failure_origin="verified_historical_comparison_prefix",
+            current_segment_failure_executed=False,
+            inherited_failure_provenance=deepcopy(verifier["provenance"]))
+        actual_request = _repair_json(turns[-1]["request_ref"])
+        retained_messages = [asdict(message) for message in checked.request.messages[2:]]
+        require(_canonical_sha256(actual_request) == turns[-1]["request_sha256"]
+                and actual_request["messages"][2:2 + len(retained_messages)] == retained_messages,
+                "The new upstream response must consume the actual inherited C1/F1 messages.")
     else:
         require(not receipt.get("model_response") and not receipt.get("model_responses")
                 and execution.last_worker._repair_context is None,
@@ -146,9 +169,11 @@ def _product_current_worker_failure(*, context, receipt, workspace_root):
         raw = _read_hashed_repair_file(response_ref).decode("utf-8")
         implementation = context["implementation_plan"]
         obligations = _patch_generation_obligation_projection(feature_spec=context["feature_spec"],
-            implementation=implementation, planned_changes=list(implementation["proposed_changes"]))
+            implementation=implementation, planned_changes=list(implementation["proposed_changes"]),
+            evidence_pack=context["evidence_pack"])
         generator = LLMExactPatchGenerator(None)
         prepared = generator.prepare_native_contract(user_request=context["feature_spec"]["user_request"],
+            **({"constraint_context": obligations["constraint_context"]} if "constraint_context" in obligations else {}),
             evidence_items=_external_evidence_items(context["evidence_pack"]["items"]),
             binding_registry=implementation["binding_registry"], constraints=obligations["side_effect_boundaries"],
             target_behavior=obligations["target_behavior"], acceptance_criteria=obligations["acceptance_criteria"],
@@ -195,13 +220,7 @@ def prepare_product_upstream_assessment(*, execution, state, artifact_store):
     unchanged = all(state["artifacts"].get(kind) == ref["path"]
                     and state["artifact_hashes"].get(kind) == ref["artifact_hash"]
                     for kind, ref in context["selected_artifacts"].items())
-    model_report = deepcopy(context["failure_report"])
-    if model_report is not None:
-        for observation in model_report["observations"]:
-            if isinstance(observation.get("result_ref"), dict):
-                observation["result_ref"] = {"sha256": observation["result_ref"]["sha256"]}
-        if isinstance(model_report.get("verification_ref"), dict):
-            model_report["verification_ref"] = {"sha256": model_report["verification_ref"]["sha256"]}
+    model_report = project_execution_reference_paths(context["failure_report"])
     return {"current_plan": deepcopy(context["implementation_plan"]),
         "selected_artifact_hashes": {kind: ref["artifact_hash"] for kind, ref in context["selected_artifacts"].items()},
         "repair_plan_hash": repair_ref.artifact_hash, "previous_response": context["previous_response"],
@@ -243,12 +262,7 @@ def prepare_patch_upstream_assessment(*, request, state, artifact_store):
         raise PatchContinuationError("PATCH_UPSTREAM_FAILURE_BINDING_REQUIRED", "upstream_admission",
             "The assessment must use the current checked failure over unchanged source bytes.")
     raw = _read_hashed_repair_file(context["failed_response_ref"]).decode("utf-8")
-    model_report = deepcopy(report)
-    for observation in model_report["observations"]:
-        if isinstance(observation.get("result_ref"), dict):
-            observation["result_ref"] = {"sha256": observation["result_ref"]["sha256"]}
-    if isinstance(model_report.get("verification_ref"), dict):
-        model_report["verification_ref"] = {"sha256": model_report["verification_ref"]["sha256"]}
+    model_report = project_execution_reference_paths(report)
     return {
         "current_plan": deepcopy(admitted.implementation_plan),
         "selected_artifact_hashes": {kind: ref.artifact_hash for kind, ref in original_refs.items()},

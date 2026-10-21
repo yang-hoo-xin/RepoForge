@@ -1,7 +1,7 @@
 name: rag-agent-service
 
 x-service: &service
-  image: rag-agent-service:local
+  image: ${SERVICE_IMAGE:-rag-agent-service:local}
   build:
     context: ../..
     dockerfile: deployment/service/Dockerfile
@@ -17,15 +17,18 @@ x-service: &service
     SERVICE_WORK_ROOT: /work/jobs
     SERVICE_REQUESTS_PER_MINUTE: ${SERVICE_REQUESTS_PER_MINUTE:-120}
     SERVICE_MAX_PENDING: ${SERVICE_MAX_PENDING:-1000}
+    SERVICE_CAPACITY_BYTES: ${SERVICE_CAPACITY_BYTES:-67108864}
+    SERVICE_CACHE_CAPACITY_BYTES: ${SERVICE_CACHE_CAPACITY_BYTES:-16777216}
     SERVICE_MAX_JOB_SECONDS: ${SERVICE_MAX_JOB_SECONDS:-600}
   networks: [backend]
 
 services:
   redis:
     image: redis:7.4-alpine
-    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\" --maxmemory \"$$REDIS_MAXMEMORY\" --maxmemory-policy noeviction"]
     environment:
       REDIS_PASSWORD: ${SERVICE_REDIS_PASSWORD:?Set SERVICE_REDIS_PASSWORD}
+      REDIS_MAXMEMORY: ${SERVICE_REDIS_MAXMEMORY:-134217728}
     ports: ["127.0.0.1:${SERVICE_REDIS_PORT:-16379}:6379"]
     volumes: [redis-data:/data]
     healthcheck:
@@ -59,11 +62,16 @@ services:
   worker:
     <<: *service
     command: ["python", "-B", "-m", "src.service_layer.worker"]
+    environment:
+      <<: *environment
+      # Scope: worker execution only. 为什么要有它：回退开关不改变API、语料初始化、配额或队列合同。
+      SERVICE_QUERY_EXECUTION_MODE: ${SERVICE_QUERY_EXECUTION_MODE:-resident_sparse}
     depends_on:
       redis: {condition: service_healthy}
       prepare: {condition: service_completed_successfully}
     mem_limit: 1536m
-    stop_grace_period: 15s
+    # Scope: worker container hard-stop budget, not a promise of graceful completion. 为什么要有它：子进程清理、租约等待和Redis断连的叠加路径不能声称15秒内可靠结束。
+    stop_grace_period: 45s
 
   prometheus:
     image: prom/prometheus:v3.2.1

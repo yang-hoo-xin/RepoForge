@@ -33,7 +33,11 @@ from src.mod_agent.local_entry import (
     _restore_patch_agent_context,
     make_exact_no_write_dry_run_factory,
 )
-from src.mod_agent.proposal.patch_agent_loop import PatchAgentLoopPolicy, PlanBoundSourceInspector
+from src.mod_agent.proposal.patch_agent_loop import (
+    PatchAgentLoopPolicy,
+    PlanBoundSourceInspector,
+    expand_patch_source_observations,
+)
 from tests.unit.test_fresh_planning_continuation import (
     _evidence_by_requirement,
     _feature_payload,
@@ -220,7 +224,7 @@ def _five_binding_repair_case(tmp_path, *, source_files=None):
     assert parent.status == "terminal", parent.to_dict()
     proposal = store.read(ArtifactRef(**parent.patch_proposal_artifact))["data"]
     receipt_path = Path(parent.attempt_receipt["path"])
-    parent_receipt = json.loads(receipt_path.read_text())
+    parent_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     response = parent_receipt["factory_receipt"]["model_response"]
     native = [{
         "change_id": change["change_id"], "change_type": change["change_type"],
@@ -292,6 +296,27 @@ class _OfflineOllamaTransport:
         decoded = _message_jsons(payload)
         feedback = [value for _, value in decoded if value.get("message_type") == "patch_behavior_correction"]
         tool_results = [value for role, value in decoded if role == "tool"]
+        if self.scenario == "direct_pass" and number == 1:
+            prompt = next(value for _, value in decoded if "required_change_units" in value)
+            prompt = _restore_patch_agent_context(prompt)
+            missing = [
+                unit["edit_binding_id"]
+                for unit in prompt["required_change_units"]
+                if "source_excerpt" not in prompt["edit_binding_contexts"][unit["edit_binding_id"]]
+            ]
+            if missing:
+                source_tool = next(
+                    tool["function"]
+                    for tool in payload["tools"]
+                    if tool["function"]["name"] == "inspect_plan_binding_source"
+                )
+                self.read_bindings.extend(missing)
+                message = {"role": "assistant", "content": "", "tool_calls": [{
+                    "function": {"name": source_tool["name"], "arguments": {"binding_id": binding}},
+                } for binding in missing]}
+                return httpx.Response(200, json={"model": model, "message": message, "done": True,
+                                                "done_reason": "stop", "prompt_eval_count": 200, "eval_count": 40},
+                                      request=request)
         if self.scenario != "direct_pass" and number in (1, 3):
             if number == 1:
                 assert any(value.get("message_type") == "patch_repair_context" for _, value in decoded)
@@ -321,9 +346,22 @@ class _OfflineOllamaTransport:
                 if number == 4:
                     assert feedback and len(tool_results) == (6 if self.scenario == "batch_dedup" else 2)
             else:
-                assert number == 1
+                assert number in (1, 2)
             prompt = next(value for _, value in decoded if "required_change_units" in value)
             prompt = _restore_patch_agent_context(prompt)
+            contexts = prompt["edit_binding_contexts"]
+            missing = [
+                unit["edit_binding_id"]
+                for unit in prompt["required_change_units"]
+                if "source_excerpt" not in contexts[unit["edit_binding_id"]]
+            ]
+            if missing:
+                restored = {
+                    item["binding_id"]: item["excerpt"]
+                    for item in expand_patch_source_observations(tool_results)
+                }
+                for binding_id in missing:
+                    contexts[binding_id]["source_excerpt"] = restored[binding_id]
             repaired = self.scenario == "direct_pass" or (
                 self.scenario in ("recover", "batch_dedup") and number == 4)
             marker = "RecordRepairMarker" if repaired else (
@@ -371,7 +409,7 @@ def test_public_repair_cli_runs_read_generate_fail_read_revise_and_exact_review(
     assert public["execution_counts"]["apply"] == public["execution_counts"]["build"] == public["execution_counts"]["runtime"] == 0
     assert public["patch_proposal_artifact"]["artifact_hash"] != case.parent.patch_proposal_artifact["artifact_hash"]
     assert _source_hashes(case.inputs.workspace) == before
-    journal = json.loads(Path(public["attempt_receipt"]["path"]).read_text())
+    journal = json.loads(Path(public["attempt_receipt"]["path"]).read_text(encoding="utf-8"))
     factory = journal["factory_receipt"]
     assert factory["adapter"] == "LocalOllamaInitialPatchAdapter"
     assert factory["behavior_evaluator_configuration"]["configuration_ref"] == {
@@ -384,7 +422,7 @@ def test_public_repair_cli_runs_read_generate_fail_read_revise_and_exact_review(
     assert journal["worker_profile_sha256"] == _canonical_sha256(factory["profile"])
     assert len(handler.chat_requests) == 4 and len(handler.read_bindings) == 2
     assert len(list(case.reports.glob("report-*.json"))) == 2
-    assert case.marker.read_text().splitlines() == ["constructed"]
+    assert case.marker.read_text(encoding="utf-8").splitlines() == ["constructed"]
     loop = factory["patch_agent_loop"]
     assert loop["tool_rounds_used"] == loop["behavior_correction"]["execution"]["tool_rounds_used"] == 1
     assert loop["behavior_correction"]["model_call_count"] == 2
@@ -402,12 +440,12 @@ def test_public_repair_cli_runs_read_generate_fail_read_revise_and_exact_review(
         assert turn["response_origin"] == "live_provider_response"
 
 
-def test_public_repair_cli_first_draft_can_pass_without_forced_read_and_cached_attempt_sends_nothing(tmp_path, monkeypatch, capsys):
+def test_public_repair_cli_projected_input_reads_b0_once_and_cached_attempt_sends_nothing(tmp_path, monkeypatch, capsys):
     case = _public_case(tmp_path)
     handler = _install_transport(monkeypatch, tmp_path / "wire", scenario="direct_pass")
     code, first = _run(case, capsys)
     assert code == 0, first
-    assert len(handler.chat_requests) == 1 and handler.read_bindings == []
+    assert len(handler.chat_requests) == 2 and len(handler.read_bindings) == 1
     assert len(list(case.reports.glob("report-*.json"))) == 1
     count = len(handler.requests)
     marker = case.marker.read_bytes()
@@ -424,7 +462,7 @@ def test_public_repair_cli_persistent_failure_stops_without_apply(tmp_path, monk
     handler = _install_transport(monkeypatch, tmp_path / "wire", scenario="persistent_failure")
     code, public = _run(case, capsys)
     assert code != 0
-    assert public["reason"] == "PATCH_BEHAVIOR_CORRECTION_FAILED"
+    assert public["reason"] == "PATCH_AGENT_CORRECTION_BUDGET_EXHAUSTED"
     assert len(handler.chat_requests) == 4
     assert public["patch_proposal_artifact"] is None
     assert public["execution_counts"]["apply"] == 0
@@ -460,13 +498,15 @@ def test_public_repair_cli_deduplicates_five_reads_and_preserves_a_sixth_after_f
 
     preparation = _five_binding_repair_case(tmp_path / "case")
     policy = asdict(PatchAgentLoopPolicy(
-        max_tool_rounds=6, max_total_model_turns=5, max_observation_bytes=32768,
+        max_tool_rounds=6, max_total_model_turns=5, max_observation_bytes=262144,
         context_radius_lines=64, finalize_after_first_observation=False,
         require_source_inspection=False, enable_supporting_reads=True,
         allow_upstream_request=True, allow_batched_reads=True,
         deduplicate_source_excerpts=True,
     ))
     case = _public_case(tmp_path, preparation=preparation, selected_policy=policy)
+    context_index = case.argv.index("--ollama-context-window")
+    case.argv[context_index + 1] = "262144"
     before = _source_hashes(case.inputs.workspace)
     handler = _install_transport(monkeypatch, tmp_path / "wire", scenario="batch_dedup")
     code, public = _run(case, capsys)
@@ -500,7 +540,7 @@ def test_public_repair_cli_deduplicates_five_reads_and_preserves_a_sixth_after_f
         for value in tools[1:5]:
             assert value["excerpt_ref"]["observation_id"] == tools[0]["observation_id"]
             assert value["excerpt_ref"]["excerpt_sha256"] == _sha(shared_source.encode())
-    journal = json.loads(Path(public["attempt_receipt"]["path"]).read_text())
+    journal = json.loads(Path(public["attempt_receipt"]["path"]).read_text(encoding="utf-8"))
     factory = journal["factory_receipt"]
     loop = factory["patch_agent_loop"]
     correction = loop["behavior_correction"]["execution"]
@@ -518,7 +558,7 @@ def test_public_repair_cli_deduplicates_five_reads_and_preserves_a_sixth_after_f
     assert capacity["can_read_consume_and_revise"] is True
     assert [row["status"] for row in loop["behavior_evaluations"]] == ["behavior_failed", "passed"]
     assert all(row["execution_origin"] == "executed" for row in loop["behavior_evaluations"])
-    assert public["execution_counts"]["model"] == 4 <= policy["max_total_model_turns"]
+    assert public["execution_counts"]["model"] == 4
     assert public["execution_counts"]["review"] == public["execution_counts"]["dry_run"] == 1
     assert public["execution_counts"]["apply"] == 0 and public["product_source_writes_performed"] is False
     assert _source_hashes(case.inputs.workspace) == before
@@ -568,7 +608,11 @@ def test_public_cli_automatically_binds_a_different_unadmitted_revision_and_pres
     assert _sha(derived_raw) == derived_ref["sha256"]
     derived = json.loads(derived_raw)
     first_messages = handler.chat_requests[0][1]["messages"]
-    assert first_messages[2]["content"].encode() == current_raw
+    projected_history = json.loads(first_messages[2]["content"])
+    assert projected_history["input_only"] is True
+    assert all("after_text" not in item and "after_text_ref" in item
+               for item in projected_history["changes"])
+    assert journal["factory_receipt"]["repair_input_projection"]["raw_response_sha256"] == _sha(current_raw)
     feedback = json.loads(first_messages[3]["content"])["validator_feedback"]
     assert feedback["observations"]
     assert all("observed_state" in item for item in feedback["observations"])

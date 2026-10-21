@@ -32,6 +32,27 @@ class CacheClient:
         self.writes.append((key, value, options))
 
 
+@pytest.fixture(autouse=True)
+def cache_owner_boundary(monkeypatch):
+    """Fake only the cache storage owner; actual Lua capacity has separate checks."""
+    class CacheStore:
+        def __init__(self, client, namespace, **policy):
+            self.client, self.namespace, self.policy = client, namespace, policy
+
+        def cache_key(self, digest):
+            namespace = hashlib.sha256(self.namespace.encode()).hexdigest()
+            return "agent-service:{" + namespace + "}:cache:" + digest
+
+        def cache_get(self, digest):
+            raw = self.client.get(self.cache_key(digest))
+            return self.client.get(self.namespace + ":query-cache:" + digest) if raw is None else raw
+
+        def cache_put(self, digest, encoded):
+            self.client.set(self.cache_key(digest), encoded, ex=self.policy["cache_ttl_seconds"])
+
+    monkeypatch.setattr(backends, "RedisJobStore", CacheStore)
+
+
 def test_redis_cache_retains_binding_integrity_and_ttl():
     client = CacheClient()
     cache = backends.RedisQueryCache(client, "test", 30)
@@ -69,7 +90,8 @@ def test_query_owner_does_not_publish_partial_failure_to_redis():
 def config(tmp_path):
     return SimpleNamespace(work_root=tmp_path,settings_path=tmp_path/"settings.yaml",agent_profiles={},
         namespace="test",redis_url="redis://:PRIVATE_PASSWORD@127.0.0.1:6379/0",query_cache_ttl=30,
-        max_job_seconds=10,lease_seconds=3,retry_delay_seconds=1)
+        max_job_seconds=10,lease_seconds=3,retry_delay_seconds=1,retention_seconds=86400,max_pending=1000,
+        capacity_bytes=64*1024**2,cache_capacity_bytes=16*1024**2)
 
 
 def test_queued_settings_drift_rejected_before_query_owner(tmp_path):
@@ -424,7 +446,7 @@ def configure_worker_loop(monkeypatch, tmp_path, store):
     cfg = config(tmp_path)
     cfg.retention_seconds, cfg.max_pending, cfg.poll_seconds = 60, 10, 0.1
     monkeypatch.setattr("src.service_layer.config.ServiceConfig.from_env", lambda:cfg)
-    monkeypatch.setattr("redis.Redis.from_url", lambda *args, **kwargs:object())
+    monkeypatch.setattr(worker, "worker_redis_client", lambda *args, **kwargs:SimpleNamespace(close=lambda:None))
     monkeypatch.setattr("src.service_layer.store.RedisJobStore", lambda *args, **kwargs:store)
     return cfg
 
@@ -451,7 +473,7 @@ def test_worker_recovers_transient_poll_errors_without_replaying_agent(tmp_path,
     store = RestartingStore()
     cfg = configure_worker_loop(monkeypatch, tmp_path, store)
     sleeps = []
-    monkeypatch.setattr(worker.time, "sleep", sleeps.append)
+    monkeypatch.setattr(worker.WorkerShutdown, "wait", lambda self, delay:sleeps.append(delay))
     with pytest.raises(StopLoopError):
         worker.main(["--worker-id", "test"])
     assert store.claims == 3 and store.recovery_calls == 4

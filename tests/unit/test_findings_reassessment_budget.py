@@ -86,6 +86,21 @@ def test_native_planning_readiness_uses_same_findings_call_and_preserves_unknown
     assert all(row["requested_behavior_status"] == "not_yet_implemented" for row in native_result["findings"])
 
 
+def test_meter_only_reassessment_counts_calls_and_keeps_no_new_information_stop(tmp_path):
+    from src.mod_agent.model_call_budget import as_meter_only
+
+    case = _initial_findings_reassessment_case(tmp_path)
+    budget, calls = as_meter_only(_budget()), []
+    result = _factory(case, tmp_path, budget, calls,
+        first_findings_missing=True, first_query="ChangeMarker").reassess_initial(case.state, case.feature)
+    assert budget["policy"] == "meter_only" and budget["maximum"] is budget["remaining"] is None
+    assert budget["consumed"] == 3 + len(calls)
+    assert len(calls) >= 2
+    if not result.can_generate_patch:
+        assert result.budget_summary["reassessment_stop"]["code"] == "INITIAL_FINDINGS_NO_NEW_INFORMATION_STOP"
+    assert result.budget_summary["initial_findings_reassessment"]["model_call_budget_policy"] == "meter_only"
+
+
 @pytest.mark.parametrize("shortage", ["stage", "total"])
 def test_production_factory_preflights_before_query_or_retrieval(tmp_path, monkeypatch, shortage):
     case = _initial_findings_reassessment_case(tmp_path)

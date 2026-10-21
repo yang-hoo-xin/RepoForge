@@ -105,6 +105,63 @@ def test_modify_uses_configured_source_and_original_permission_flags(profile, mo
     assert "--defer-approval" in argv and "--allow-source-disclosure" not in argv
 
 
+def _meter_profile(profile):
+    document = json.loads(profile.read_text(encoding="utf-8"))
+    arguments = document["arguments"]
+    for flag in ("--task-model-call-limit", "--stage-model-call-limits", "--model-call-budget-policy"):
+        if flag in arguments:
+            index = arguments.index(flag)
+            del arguments[index:index + 2]
+    arguments.extend(["--model-call-budget-policy", "meter_only"])
+    profile.write_text(json.dumps(document), encoding="utf-8")
+
+
+@pytest.mark.parametrize("action", ["modify_project", "new_project"])
+@pytest.mark.parametrize("conversation", [None, "meter-conversation"])
+def test_meter_only_routing_needs_no_numeric_quota_or_new_approval(profile, monkeypatch, action, conversation):
+    _meter_profile(profile)
+    calls = capture_product(monkeypatch)
+    model = Model(decision(action, target="configured_project" if action == "modify_project" else "",
+                           name="计量测试" if action == "new_project" else ""))
+    result = invoke(profile, model, conversation_id=conversation)
+    assert result["status"] == "awaiting_approval"
+    assert len(calls) == len(model.calls) == result["routing_model_calls_reserved"] == 1
+    assert result["routing_usage"] == {"input_tokens": 100, "output_tokens": 20}
+    assert result["budget"]["policy"] == "meter_only"
+    assert result["budget"]["new_task_combined_maximum"] is None
+    assert result["budget"]["product_new_task_call_limit"] is None
+    assert "--task-model-call-limit" not in calls[0] and "--stage-model-call-limits" not in calls[0]
+    assert "--defer-approval" in calls[0] and "--allow-source-disclosure" not in calls[0]
+    if conversation is not None:
+        assert result["budget"]["conversation_reserved_routing_plus_new_product_maximum"] is None
+        assert result["cumulative_routing_calls"] == 1
+        assert result["cumulative_routing_usage"] == {"input_tokens": 100, "output_tokens": 20}
+    assert json.loads(Path(result["routing_record_path"]).read_text(encoding="utf-8")) == result
+
+
+def test_meter_conversation_preserves_provider_failure_and_unknown_usage(profile, monkeypatch):
+    _meter_profile(profile)
+    product = {"status": "blocked", "task_agent_outcome": {
+        "status": "blocked", "termination": {"code": "TASK_AGENT_PROVIDER_TURN_FAILED"},
+        "provider_turns": [{"turn": 7, "status": "failed", "error_type": "AgentTurnProviderError"}],
+        "usage": None,
+    }}
+    calls = []
+    def executor(argv):
+        calls.append(argv)
+        print(json.dumps(product))
+        return 0
+    model = Model(decision("modify_project", target="configured_project"))
+    result = invoke(profile, model, product_executor=executor, conversation_id="meter-failure", turn_id="first")
+    assert result["status"] == "blocked" and result["product_result"] == product
+    assert result["budget"]["conversation_reserved_routing_plus_new_product_maximum"] is None
+    assert result["cumulative_routing_calls"] == 1
+    assert result["product_result"]["task_agent_outcome"]["usage"] is None
+    assert json.loads(Path(result["routing_record_path"]).read_text(encoding="utf-8")) == result
+    replay = invoke(profile, Model(None), product_executor=executor, conversation_id="meter-failure", turn_id="first")
+    assert replay == result and len(calls) == 1
+
+
 @pytest.mark.parametrize("value,status", [
     (decision("clarify", question="要修改哪个工程？"), "needs_clarification"),
     (decision("modify_project", target="C:/outside"), "routing_failed"),

@@ -35,6 +35,11 @@ jobs:
           sudo apt-get install --yes --no-install-recommends ripgrep
           rg --version
 
+      - name: Install .NET 8 SDK for the v0.1 normal-entry demonstration
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: "8.0.100"
+
       - name: Ruff fatal errors
         run: uv run --frozen ruff check --select E9,F63,F7 src tests scripts main.py
 
@@ -151,6 +156,9 @@ jobs:
           tests/unit/test_interrupted_patch_admission.py
           tests/unit/test_interrupted_product_graph.py
           tests/unit/test_interrupted_patch_entry.py
+          tests/unit/test_fresh_planning_continuation.py
+          tests/unit/test_csharp_repository_backend.py
+          tests/unit/test_v0_1_demo.py
           tests/unit/test_tool_effects.py
           tests/unit/test_request_identifier_retrieval.py
           tests/unit/test_rg_live_multiword_identifiers.py
@@ -178,6 +186,37 @@ jobs:
           tests/unit/test_service_worker.py
           scripts/service_load/test_service_load.py
           scripts/service_load/test_resources.py
+
+      - name: v0.1 deterministic normal-entry demonstration
+        run: >-
+          uv run --frozen python -m scripts.run_v0_1_demo
+          --output "${{ runner.temp }}/v0-1-demo"
+          --require-clean
+
+      - name: Retain v0.1 normal-entry evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: v0-1-demo-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/v0-1-demo
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Build and verify v0.1 distributions
+        run: |
+          uv build --out-dir "${{ runner.temp }}/dist"
+          uv run --frozen python -m scripts.verify_v0_1_distribution --dist-dir "${{ runner.temp }}/dist" --expected-version 0.1.0 --output "${{ runner.temp }}/dist-verification.json"
+
+      - name: Retain v0.1 distributions
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: v0-1-dist-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/dist
+            ${{ runner.temp }}/dist-verification.json
+          if-no-files-found: warn
+          retention-days: 30
 
       # 为什么要有它：服务层边界与测量脚本进入同一质量检查；失败后的逐项结果也需保留，不能只依赖邮件通知。
       - name: Retain checkpoint test results

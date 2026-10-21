@@ -183,10 +183,9 @@ class ModPlanningBriefBuilder:
         hook_likelihood = "high" if plan.requires_hook_evidence else "unknown"
         # 为什么要有它：自动通用指导不能升格为用户逐项举证义务；具体能力义务仍由本所有者明确列出。
         required_evidence: list[str] = []
+        # 范围：模板自动推导的证据。为什么要有它：启动成功和新诊断标记是修改后的观察，不能仅凭诊断分类要求修改前已存在；显式前置要求仍由调用方保留。
         if request_type_value == "UI feedback":
             required_evidence.append("UI or feedback surface evidence")
-        elif request_type_value == "runtime diagnostics":
-            required_evidence.append("log marker or startup evidence")
         elif request_type_value == "hook-required":
             required_evidence.extend(["target symbol evidence", "side effect boundary"])
         elif request_type_value == "unknown / needs evidence":

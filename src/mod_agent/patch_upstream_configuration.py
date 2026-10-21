@@ -191,12 +191,13 @@ class PatchUpstreamConfiguration:
             raise _invalid("Upstream return requires the existing recovery worker with allow_upstream_request enabled.")
         return replace(self, _worker_profile=profile, _worker_configuration=worker_configuration)
 
-    def assemble(self, request, recorder=None, reserve_model_call=None):
+    def assemble(self, request, recorder=None, reserve_model_call=None, *, constraint_policy=None):
         self.validate_current()
         workspace = Path(request.workspace_root).resolve()
         output_root = Path(request.artifact_store_root).resolve() / "cr" / ("upstream-" + uuid4().hex)
         planning_client = _RecordedProvider(self, self.planning_profile, "planning", output_root, recorder, reserve_model_call)
         selector = ModelPlanningTargetSelector(client=planning_client, workspace_root=workspace,
+            constraint_policy=constraint_policy,
             behavior_evaluator_configured=(self._worker_configuration is not None
                 and self._worker_configuration.behavior_evaluator() is not None),
             receipt_path=output_root / "planning-receipt.json")

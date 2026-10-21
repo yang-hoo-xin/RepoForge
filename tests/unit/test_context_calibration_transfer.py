@@ -30,6 +30,7 @@ def _response(**changes):
 
 
 def _seed(adapter):
+    adapter.bind_context_identity(model_identity=_identity(), owner_profile_sha256="f" * 64)
     adapter.complete_turn(AgentTurnRequest(messages=(AgentMessage("user", "first observed input " * 100),)))
     return adapter.export_context_calibration(model_identity=_identity(), owner_profile_sha256="f" * 64)
 

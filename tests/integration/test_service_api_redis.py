@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 from contextlib import ExitStack
 from uuid import uuid4
@@ -112,3 +113,44 @@ def test_instances_share_rate_budget_and_idempotent_admission(api_pair, record_p
     assert "service_jobs_idempotency_hits_total 1\n" in metrics.text
     record_property("submission_statuses", "202,200,202,429,429")
     record_property("unique_jobs_queued", 2)
+
+
+def test_compact_and_legacy_completed_results_keep_normal_api_shape(api_pair, record_property):
+    clients, stores, auth = api_pair
+    body = {"kind": "query", "payload": {"query": "controlled result representation"}}
+    headers = {**auth, "Idempotency-Key": "completed-result"}
+    submitted = clients[0].post("/v1/jobs", headers=headers, json=body)
+    assert submitted.status_code == 202
+    job_id = submitted.json()["job"]["id"]
+    store = stores[0]
+    claimed = store.claim("controlled-storage-check", 30)
+    assert claimed["id"] == job_id
+    expected = {"status": "completed", "answer": "保留结果", "data": [None, False, 0, [], {}]}
+    assert store.finish(job_id, claimed["lease_token"], "completed", result=expected)
+    key = store.key_prefix + "job:" + job_id
+    compact = json.loads(store.client.get(key))
+    assert compact["attempts_history"][-1]["_result_from_job"] == {"version": 1, "attempt": 1}
+    first = clients[0].get("/v1/jobs/" + job_id, headers=auth)
+    second = clients[1].get("/v1/jobs/" + job_id, headers=auth)
+    assert first.status_code == second.status_code == 200
+    assert first.json() == second.json()
+    assert first.json()["state"] == "completed" and first.json()["result"] == expected
+    assert "attempts_history" not in first.json() and "_result_from_job" not in first.text
+    repeated = clients[1].post("/v1/jobs", headers=headers, json=body)
+    assert repeated.status_code == 200 and repeated.json()["created"] is False
+    assert repeated.json()["job"] == first.json()
+
+    # Scope: only this synthetic fixture's private namespace, preserving its TTL.
+    # 为什么要有它：旧编码必须经实际Redis和正常API读取，不能只用手写decoder的返回值假装兼容。
+    last = compact["attempts_history"][-1]
+    last.pop("_result_from_job")
+    last["result_json"] = compact["result_json"]
+    old_bytes = json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
+    store.client.set(key, old_bytes, keepttl=True)
+    assert 0 < store.client.pttl(key) <= 86400000
+    for client in clients:
+        response = client.get("/v1/jobs/" + job_id, headers=auth)
+        assert response.status_code == 200 and response.json() == first.json()
+    assert store.get(job_id)["attempts_history"][-1]["result"] == expected
+    assert store.metrics()["pending"] == 0
+    record_property("representation_scope", "new writer and legacy stored encoding; current API readers only")

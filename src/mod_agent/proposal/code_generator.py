@@ -375,6 +375,7 @@ class LLMExactPatchGenerator:
         require_native_schema: bool = False,
         provider_request_recorder: Callable[[dict[str, Any]], None] | None = None,
         post_response_admission: Callable[[ChatResponse], None] | None = None,
+        constraint_context: Mapping[str, Any] | None = None,
     ) -> GeneratedPatch:
         edit_bindings_by_id = _index_bindings(
             binding_registry.get("edit_bindings") or [],
@@ -444,6 +445,23 @@ class LLMExactPatchGenerator:
                 allow_empty=False,
             )
         )
+        constraint_instruction, constraint_payload = "", {}
+        if constraint_context is not None:
+            from src.mod_agent.planning.constraint_context import (
+                CONSTRAINT_INSTRUCTION,
+                constraint_model_view,
+                validate_constraint_context,
+            )
+
+            # Scope: experimental context must agree with the actual unmodified feature contract.
+            # 为什么要有它：不能丢掉用户原文/验收字段后仍声称完成来源分层，旧A调用不添加任何字段或提示。
+            if any(value is None for value in (target_behavior, acceptance_criteria, runtime_verification_plan)):
+                raise ValueError("CONSTRAINT_CONTEXT_USER_CONTRACT_REQUIRED")
+            checked_context = validate_constraint_context(constraint_context, user_request=user_request,
+                constraints=normalized_constraints, target_behavior=normalized_target_behavior,
+                acceptance_criteria=normalized_acceptance_criteria, runtime_verification_plan=normalized_runtime_verification_plan)
+            constraint_instruction = " " + CONSTRAINT_INSTRUCTION
+            constraint_payload = {"constraint_context": constraint_model_view(checked_context)}
         normalized_required_changes = _normalize_required_change_units(
             required_change_units,
             allowed_bindings=allowed_bindings,
@@ -548,7 +566,7 @@ class LLMExactPatchGenerator:
                     content=_patch_system_prompt(
                         require_native_schema=require_native_schema,
                         plan_bound_response=plan_bound_response,
-                    ),
+                    ) + constraint_instruction,
                 ),
                 Message(
                     role="user",
@@ -557,6 +575,7 @@ class LLMExactPatchGenerator:
                             "request": user_request,
                             "target_behavior": normalized_target_behavior,
                             "constraints": list(normalized_constraints),
+                            **constraint_payload,
                             "acceptance_criteria": list(
                                 normalized_acceptance_criteria
                             ),
@@ -1653,11 +1672,20 @@ def _patch_system_prompt(
     require_native_schema: bool,
     plan_bound_response: bool,
 ) -> str:
+    implementation_scope = (
+        "Implement the complete request with exact-text edits. Minimal means avoiding unrelated changes, "
+        "not omitting required behavior or necessary state. Do not fabricate existing files, binding ids, "
+        "existing symbols, or external dependency APIs. You may add internal declarations, state and logic "
+        "inside authorized edit bindings; preserve public interfaces required by the user. "
+        "This grants no additional paths or edit authority. "
+        "为什么要有它：防止虚构依赖和越权，不应禁止实现完整需求所需的内部代码。 "
+    )
     if require_native_schema:
         return (
-            "Minimal exact-text Patch from verified evidence; strict schema-only JSON, no fences. "
+            implementation_scope
+            + "Use verified evidence; strict schema-only JSON, no fences. "
             "Do not add trailing spaces or tabs. One change per required_change_units item, solely exact "
-            "edit_binding_id. Never invent paths/symbols/APIs/bindings. Omit Plan/binding-derived "
+            "edit_binding_id. Omit Plan/binding-derived "
             "change_id/paths/hashes/kind/occurrence count/change type/operation/validation. "
             "Native v3: optional before_text selects one exact nonempty unique fragment of matching source_excerpt; after_text replaces only it. Prefer a small unique exact fragment for a local change; include enough original context to disambiguate. Omit before_text to replace the full excerpt. Preserve all unrelated text and CRLF/BOM. 为什么要有它：全文阅读不应强迫重写全文；局部锚点仍须受原binding和源码前像约束。 "
             "target_behavior/constraints/acceptance_criteria/runtime_verification_plan form one feature contract. "
@@ -1676,9 +1704,9 @@ def _patch_system_prompt(
         )
     )
     shared = (
-        "Generate a minimal exact-text code patch from verified evidence. "
-        "Return strict JSON only. Never invent a file path, symbol, API, or "
-        "binding id. supporting_evidence is read-only context and never "
+        implementation_scope
+        + "Use verified evidence. Return strict JSON only. "
+        "supporting_evidence is read-only context and never "
         "authorizes an edit target. "
         + identity_contract
         + "target_behavior, constraints, acceptance_criteria, "
@@ -1689,7 +1717,7 @@ def _patch_system_prompt(
         "each matching binding source to implement the feature. Any "
         "non-Boolean bound receiver may be used as a "
         "Boolean operand only through an exact verified_member_accesses entry. "
-        "Do not invent API members. Any required_validation_by_binding entry "
+        "Do not fabricate external dependency API members. Any required_validation_by_binding entry "
         "formatted as an uppercase identifier is a literal marker and must "
         "appear in after_text. Do not add trailing spaces or tabs at line ends. "
         "Do not include markdown fences. "

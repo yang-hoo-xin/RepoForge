@@ -574,15 +574,20 @@ def _write_local_patch_response_sidecar(
     temporary = destination.with_name(
         f".{destination.name[:32]}.{uuid4().hex[:16]}.tmp"
     )
+    operation = "create_parent"
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
+        operation = "write_temporary"
         with temporary.open("xb") as stream:
             stream.write(content_bytes)
             stream.flush()
+            operation = "sync_temporary"
             os.fsync(stream.fileno())
+        operation = "install_hardlink"
         try:
             os.link(temporary, destination)
         except FileExistsError:
+            operation = "read_existing"
             if destination.read_bytes() != content_bytes:
                 raise LocalEntryError(
                     "LOCAL_PATCH_RESPONSE_SIDECAR_CONTENT_CONFLICT"
@@ -590,7 +595,17 @@ def _write_local_patch_response_sidecar(
     except LocalEntryError:
         raise
     except OSError as exc:
-        raise LocalEntryError("LOCAL_PATCH_RESPONSE_SIDECAR_WRITE_FAILED") from exc
+        error = LocalEntryError("LOCAL_PATCH_RESPONSE_SIDECAR_WRITE_FAILED")
+        error.diagnostics = {
+            "failure_boundary": "local_patch_response_sidecar_write",
+            "operation": operation,
+            "os_error_type": type(exc).__name__,
+            "errno": exc.errno,
+            "winerror": getattr(exc, "winerror", None),
+            "destination_path_length": len(str(destination)),
+            "temporary_path_length": len(str(temporary)),
+        }
+        raise error from exc
     finally:
         try:
             temporary.unlink(missing_ok=True)
@@ -1116,8 +1131,13 @@ class LocalOllamaInitialPatchAdapter:
         self._resumed_context_calibration = None
         self._context_calibration_client = None
         self._same_plan_assessment: AgentMessage | None = None
+        self._comparison_checkpoint = None
+        self._comparison_checkpoint_arguments = None
+        self._inherited_failure_counts: dict[str, int] = {}
+        self._inherited_source_facts: tuple[str, ...] = ()
         self._prior_worker_budget = {"consumed_model_turns": 0, "consumed_tool_rounds": 0,
                                      "consumed_observation_bytes": 0}
+        self._tool_argument_correction_used = False
         self._upstream_effects = normalize_upstream_effects(None)
         self._invocation_count = 0
         self._response_sidecar_path: Path | None = None
@@ -1190,6 +1210,18 @@ class LocalOllamaInitialPatchAdapter:
             )
         )
 
+    def bind_tool_argument_correction_used(self, used: bool) -> None:
+        """Carry a validated task-wide correction marker without old Plan permissions."""
+        from src.mod_agent.proposal.tool_argument_feedback import correction_used
+
+        # Scope: cumulative internal state, separate from the three numeric budget counters.
+        # 为什么要有它：跨Plan重建请求可丢弃native history，但不能重发一次参数纠错机会或继承旧binding权限。
+        checked = correction_used(used)
+        if self._invocation_count:
+            raise LocalEntryError("PATCH_ARGUMENT_CORRECTION_STATE_ALREADY_STARTED")
+        self._tool_argument_correction_used = checked or self._tool_argument_correction_used
+        self._receipt["tool_argument_correction_used"] = self._tool_argument_correction_used
+
     def retained_worker_request(self, *, complete_upstream: bool = False) -> AgentTurnRequest | None:
         """Return the effective request retained at the latest worker boundary."""
         request = deepcopy(self._last_worker_request)
@@ -1253,6 +1285,36 @@ class LocalOllamaInitialPatchAdapter:
             "approval_inherited": False,
         })
 
+    def bind_comparison_checkpoint(self, *, fixture_ref, trial_id, feature_spec_ref,
+                                   evidence_pack_ref, implementation_plan_ref,
+                                   worker_configuration_ref, derived_inputs_ref=None) -> None:
+        """Admit an independent trial prefix, not a historical execution or approval."""
+        from src.mod_agent.comparison_checkpoint import admit_comparison_checkpoint
+
+        if (self._invocation_count or self._resumed_worker_request is not None
+                or self._interrupted_attempt is not None or self._repair_context is not None
+                or self._replay_attempt_ref is not None or not self.enable_recovery_loop):
+            raise LocalEntryError("COMPARISON_CHECKPOINT_BINDING_CONFLICT")
+        arguments = dict(fixture_ref=fixture_ref, trial_id=trial_id,
+            workspace_root=self.workspace_root, artifact_store=self.artifact_store,
+            feature_spec_ref=feature_spec_ref, evidence_pack_ref=evidence_pack_ref,
+            implementation_plan_ref=implementation_plan_ref,
+            worker_configuration_ref=worker_configuration_ref,
+            model_profile=self.profile.to_dict(), derived_inputs_ref=derived_inputs_ref)
+        checked = admit_comparison_checkpoint(**arguments)
+        if checked.worker_policy != self.patch_agent_loop_policy:
+            raise LocalEntryError("COMPARISON_CHECKPOINT_POLICY_CHANGED")
+        self._comparison_checkpoint_arguments = arguments
+        self._comparison_checkpoint = checked
+        self._resumed_worker_request = deepcopy(checked.request)
+        self._prior_worker_budget = {name: getattr(checked, name) for name in (
+            "consumed_model_turns", "consumed_tool_rounds", "consumed_observation_bytes")}
+        self._known_failed_code = deepcopy(checked.known_code)
+        self._known_failed_report_ref = deepcopy(checked.known_failure["report_ref"])
+        self._inherited_failure_counts = dict(checked.no_progress_seed)
+        self._inherited_source_facts = checked.source_facts
+        self._receipt["comparison_checkpoint"] = deepcopy(checked.provenance)
+
     def bind_upstream_effects(self, effects: Mapping[str, str]) -> None:
         """The executing Graph declares consequences before this worker starts."""
         normalized = normalize_upstream_effects(effects)
@@ -1281,6 +1343,8 @@ class LocalOllamaInitialPatchAdapter:
             raise LocalEntryError("INTERRUPTED_PATCH_ADAPTER_BINDING_CHANGED")
         self._interrupted_attempt = checked
         self._receipt = deepcopy(checked["factory_receipt"])
+        from src.mod_agent.proposal.tool_argument_feedback import receipt_correction_used
+        self.bind_tool_argument_correction_used(receipt_correction_used(self._receipt))
         self._receipt.update(status="interrupted_response_bound", failure=None,
             inherited_model_call_count=checked["inherited_model_call_count"], new_provider_sends=0, new_reserved_model_calls=0,
             interrupted_attempt_selection=deepcopy(checked["selection"]),
@@ -1354,6 +1418,10 @@ class LocalOllamaInitialPatchAdapter:
                 if current_client is None:
                     current_client = self.agent_turn_client_factory(self.profile)
                     self._context_calibration_client = current_client
+                    bind_prefix = getattr(current_client, "bind_context_identity", None)
+                    if callable(bind_prefix):
+                        bind_prefix(model_identity=identity,
+                            owner_profile_sha256=_sha256_json(self.profile.to_dict()))
                     inherit = getattr(current_client, "inherit_context_calibration", None)
                     inherited = callable(inherit) and inherit(admitted["context_calibration"], model_identity=identity,
                         owner_profile_sha256=_sha256_json(self.profile.to_dict()))
@@ -1458,6 +1526,22 @@ class LocalOllamaInitialPatchAdapter:
             candidate_verification = (verification_capability.model_view()
                                       if verification_capability is not None else None)
             identity, model_context_limit = self._admit_model_identity(state, implementation, evidence_pack)
+            if self._comparison_checkpoint is not None:
+                from src.mod_agent.comparison_checkpoint import (
+                    admit_checkpoint_verifier,
+                    admit_comparison_checkpoint,
+                )
+
+                checked = admit_comparison_checkpoint(**self._comparison_checkpoint_arguments)
+                _assert_ollama_model_identity_stable(expected=checked.expected_model_identity, observed=identity)
+                verifier = admit_checkpoint_verifier(checked, self.behavior_evaluator)
+                self._inherited_failure_counts = dict(verifier["no_progress_seed"])
+                self._receipt["comparison_checkpoint_verifier"] = deepcopy(verifier["provenance"])
+                for kind in ("feature_spec", "evidence_pack", "implementation_plan"):
+                    expected_ref = self._comparison_checkpoint_arguments[kind + "_ref"]
+                    if (state["artifacts"].get(kind) != expected_ref.path
+                            or state["artifact_hashes"].get(kind) != expected_ref.artifact_hash):
+                        raise LocalEntryError("COMPARISON_CHECKPOINT_SELECTED_INPUT_CHANGED")
             feature_spec = self._read_feature_spec(state)
             if self._replay_attempt_ref is not None:
                 self._prepare_verified_tool_replay(state, identity)
@@ -1470,6 +1554,7 @@ class LocalOllamaInitialPatchAdapter:
                 feature_spec=feature_spec,
                 implementation=implementation,
                 planned_changes=planned_changes,
+                evidence_pack=evidence_pack,
             )
             dependency_documentation = None
             if self.dependency_documentation_enabled:
@@ -1492,6 +1577,8 @@ class LocalOllamaInitialPatchAdapter:
                 ),
                 "required_change_units": obligations["required_change_units"],
                 "side_effect_boundaries": obligations["side_effect_boundaries"],
+                **({"constraint_context": obligations["constraint_context"]}
+                   if "constraint_context" in obligations else {}),
                 "target_behavior": obligations["target_behavior"],
                 "acceptance_criteria": obligations["acceptance_criteria"],
                 "runtime_verification_plan": obligations[
@@ -1546,6 +1633,8 @@ class LocalOllamaInitialPatchAdapter:
                 "evidence_items": list(model_input["evidence"]),
                 "binding_registry": dict(model_input["binding_registry"]),
                 "constraints": list(model_input["side_effect_boundaries"]),
+                **({"constraint_context": model_input["constraint_context"]}
+                   if "constraint_context" in model_input else {}),
                 "target_behavior": str(model_input["target_behavior"]),
                 "acceptance_criteria": list(model_input["acceptance_criteria"]),
                 "runtime_verification_plan": list(
@@ -1577,6 +1666,12 @@ class LocalOllamaInitialPatchAdapter:
                 )
                 agent_client = self.agent_turn_client_factory(self.profile)
                 self._context_calibration_client = agent_client
+                bind_prefix = getattr(agent_client, "bind_context_identity", None)
+                if callable(bind_prefix) and self._replay_attempt_ref is None:
+                    # Scope: new live responses only; historical replay never supplies a prefix anchor.
+                    # 为什么要有它：可以复用历史数值校准，但不能把回放回答冒充本实例完成的新前缀观测。
+                    bind_prefix(model_identity=identity,
+                        owner_profile_sha256=_sha256_json(self.profile.to_dict()))
                 inherit = getattr(agent_client, "inherit_context_calibration", None)
                 if self._resumed_worker_request is not None and self._resumed_context_calibration is not None:
                     # 为什么要有它：新 worker 必须仍创建新 transport/记录器，只能在当前身份与完整 profile 匹配后导入纯校准数据。
@@ -1608,11 +1703,25 @@ class LocalOllamaInitialPatchAdapter:
                     ),
                 )
                 if self._resumed_worker_request is not None:
-                    if agent_messages[:2] != self._resumed_worker_request.messages[:2]:
-                        raise LocalEntryError("PATCH_RETAINED_WORKER_CONTEXT_CHANGED")
-                    agent_messages = (*self._resumed_worker_request.messages, self._same_plan_assessment)
-                    self._recovery_observation_bytes = len(_patch_agent_context_json(
-                        [asdict(self._same_plan_assessment)]).encode("utf-8"))
+                    if self._comparison_checkpoint is not None:
+                        # Scope: a new A/A*/B experiment re-encodes only the current contract.
+                        # 为什么要有它：当前实现及约束来源是待测变量，原C1/F1与工具历史必须保留，不能伪造一次Planning评估或重复扣反馈额度。
+                        historical = self._resumed_worker_request.messages
+                        self._receipt["comparison_contract_projection"] = {
+                            "historical_initial_messages_sha256": _sha256_json([asdict(row) for row in historical[:2]]),
+                            "current_initial_messages_sha256": _sha256_json([asdict(row) for row in agent_messages[:2]]),
+                            "retained_history_sha256": _sha256_json([asdict(row) for row in historical[2:]]),
+                            "strategy": (implementation.get("constraint_context") or {}).get("policy", "identity_v1"),
+                            "historical_execution_resumed": False, "approval_inherited": False,
+                        }
+                        agent_messages = (*agent_messages[:2], *historical[2:])
+                        self._recovery_observation_bytes = 0
+                    else:
+                        if agent_messages[:2] != self._resumed_worker_request.messages[:2]:
+                            raise LocalEntryError("PATCH_RETAINED_WORKER_CONTEXT_CHANGED")
+                        agent_messages = (*self._resumed_worker_request.messages, self._same_plan_assessment)
+                        self._recovery_observation_bytes = len(_patch_agent_context_json(
+                            [asdict(self._same_plan_assessment)]).encode("utf-8"))
                     # 为什么要有它：新增补查工具结果也消耗观察额度，不能只给上下文增加信息而漏计成本。
                     self._recovery_observation_bytes += len(_patch_agent_context_json([
                         asdict(result) for result in self._resumed_worker_request.tool_results
@@ -1730,6 +1839,7 @@ class LocalOllamaInitialPatchAdapter:
                     source_inspector=inspector,
                     policy=self.patch_agent_loop_policy,
                     upstream_effects=self._upstream_effects,
+                    tool_argument_correction_used=self._tool_argument_correction_used,
                     **({**reservations, **self._prior_worker_budget,
                         "consumed_observation_bytes": self._prior_worker_budget["consumed_observation_bytes"]
                             + self._recovery_observation_bytes}
@@ -1742,6 +1852,8 @@ class LocalOllamaInitialPatchAdapter:
                         if self._repair_input_projection is not None else None),
                 )
                 self._receipt["model_call_count"] = loop_result.model_turns_used
+                self._tool_argument_correction_used = loop_result.tool_argument_correction_used or self._tool_argument_correction_used
+                self._receipt["tool_argument_correction_used"] = self._tool_argument_correction_used
                 self._receipt["patch_agent_loop"] = {
                     "enabled": True,
                     "policy": asdict(self.patch_agent_loop_policy),
@@ -2003,7 +2115,8 @@ class LocalOllamaInitialPatchAdapter:
 
     def _consume_correction_call(self) -> None:
         policy = self.patch_agent_loop_policy
-        if policy is None or self._receipt["model_call_count"] + self._prior_worker_budget["consumed_model_turns"] >= policy.max_total_model_turns:
+        if policy is None or (policy.model_call_budget_policy != "meter_only"
+                and self._receipt["model_call_count"] + self._prior_worker_budget["consumed_model_turns"] >= policy.max_total_model_turns):
             raise LocalEntryError("PATCH_AGENT_CORRECTION_BUDGET_EXHAUSTED")
         if self._shared_model_call_reserver is not None:
             self._shared_model_call_reserver("patch")
@@ -2146,7 +2259,7 @@ class LocalOllamaInitialPatchAdapter:
 
     def _prepare_verified_tool_replay(self, state: Mapping[str, Any], identity: Mapping[str, Any]) -> None:
         """Resume only a retained tool-selection prefix with no executed source reads."""
-        from src.libs.llm.agent_turn import _parse_ollama_tool_call
+        from src.libs.llm.agent_turn import AgentTurnProviderError, _ollama_replay_call_identity
         from src.mod_agent.fresh_planning_continuation import (
             _csharp_source_snapshot,
             _source_tree_snapshot_sha256,
@@ -2178,7 +2291,8 @@ class LocalOllamaInitialPatchAdapter:
             raise LocalEntryError("PATCH_REPLAY_UPSTREAM_CHANGED")
         turns = factory.get("worker_turns") or []
         if (not turns or len(turns) != factory.get("model_call_count")
-                or len(turns) >= self.patch_agent_loop_policy.max_total_model_turns
+                or (self.patch_agent_loop_policy.model_call_budget_policy != "meter_only"
+                    and len(turns) >= self.patch_agent_loop_policy.max_total_model_turns)
                 or len(self._replay_request_refs) != len(turns)):
             raise LocalEntryError("PATCH_REPLAY_PREFIX_INCOMPLETE")
         prefix = []
@@ -2196,26 +2310,32 @@ class LocalOllamaInitialPatchAdapter:
             raw_message = raw_response.get("message")
             if not isinstance(raw_message, dict) or raw_response.get("model") != retained["model"] or raw_message.get("content"):
                 raise LocalEntryError("PATCH_REPLAY_RESPONSE_NOT_TOOL_SELECTION")
-            raw_calls = [asdict(_parse_ollama_tool_call(call)) for call in raw_message.get("tool_calls") or []]
-            if _sha256_json(raw_calls) != _sha256_json(calls):
-                raise LocalEntryError("PATCH_REPLAY_RESPONSE_NOT_TOOL_SELECTION")
+            try:
+                call_identity = _ollama_replay_call_identity(raw_message.get("tool_calls") or [], calls)
+            except AgentTurnProviderError as error:
+                raise LocalEntryError("PATCH_REPLAY_RESPONSE_NOT_TOOL_SELECTION") from error
             original_request = self._read_verified_response_json(request_ref)
             if request_ref["sha256"] != wire_hash:
                 raise LocalEntryError("PATCH_REPLAY_REQUEST_CHANGED")
             prefix.append({"request_sha256": wire_hash, "request_payload": original_request,
                            "request_ref": deepcopy(request_ref), "response_ref": deepcopy(turn["response_ref"]),
-                           "raw_response": retained["raw_response"]})
+                           "raw_response": retained["raw_response"], "tool_call_identity": call_identity})
         self._replay_prefix = prefix
         self._receipt["verified_replay"] = {
             "source_attempt_ref": deepcopy(self._replay_attempt_ref), "prefix_turn_count": len(prefix),
-            "maximum_new_model_calls": self.patch_agent_loop_policy.max_total_model_turns - len(prefix),
+            "maximum_new_model_calls": (None if self.patch_agent_loop_policy.model_call_budget_policy == "meter_only"
+                else self.patch_agent_loop_policy.max_total_model_turns - len(prefix)),
             "requires_exact_provider_json_values": True, "original_attempt_modified": False,
         }
 
     def _install_verified_tool_replay(self, client: AgentTurnClient) -> None:
         if not self._replay_prefix:
             return
-        from src.libs.llm.agent_turn import _httpx_json_body_identity
+        from src.libs.llm.agent_turn import (
+            AgentToolCall,
+            _httpx_json_body_identity,
+            _ollama_replay_call_identity,
+        )
         if not isinstance(client, OllamaChatAgentAdapter):
             raise LocalEntryError("PATCH_REPLAY_PROVIDER_UNSUPPORTED")
         send = client._send
@@ -2235,6 +2355,31 @@ class LocalOllamaInitialPatchAdapter:
             self._emit("local_patch_verified_response_replayed")
             return deepcopy(item["raw_response"])
         client._send = replay_or_send
+        complete = client.complete_turn
+
+        def complete_with_retained_identity(request):
+            prior_replayed = self._replayed_turn_count
+            response = complete(request)
+            if self._replayed_turn_count == prior_replayed:
+                return response
+            # Scope: only this verified, previously unexecuted response prefix.
+            # 为什么要有它：恢复后的调用对象必须与原response_ref一致，后续实时响应则保留新的原生ID，原始provider字节不改。
+            if self._replayed_turn_count != prior_replayed + 1:
+                raise LocalEntryError("PATCH_REPLAY_PREFIX_INCOMPLETE")
+            item = self._replay_prefix[prior_replayed]
+            retained = self._read_verified_response_json(item["response_ref"])
+            if (response.raw_response != retained["raw_response"]
+                    or _ollama_replay_call_identity(retained["raw_response"]["message"]["tool_calls"], retained["tool_calls"])
+                    != item["tool_call_identity"]):
+                raise LocalEntryError("PATCH_REPLAY_RESPONSE_NOT_TOOL_SELECTION")
+            calls = tuple(AgentToolCall(**call) for call in retained["tool_calls"])
+            diagnostic = deepcopy(response.provider_diagnostic)
+            if diagnostic is not None:
+                diagnostic.update(tool_call_identity="verified_retained_" + item["tool_call_identity"],
+                    tool_calls=[{"tool_call_id": call.call_id, "normalized_tool_name": call.name} for call in calls])
+            return replace(response, tool_calls=calls, provider_diagnostic=diagnostic)
+
+        client.complete_turn = complete_with_retained_identity
 
     def _recovery_observation_usage(self) -> tuple[int, int]:
         loop = self._receipt["patch_agent_loop"]
@@ -2256,6 +2401,8 @@ class LocalOllamaInitialPatchAdapter:
         if self._repair_context is not None:
             return {}
         policy = self.patch_agent_loop_policy
+        if policy.model_call_budget_policy == "meter_only":
+            return {}
         # Size the registered tool's actual representation; this deterministic
         # preflight does not claim that the model requested or consumed these reads.
         sizes = {
@@ -2280,19 +2427,16 @@ class LocalOllamaInitialPatchAdapter:
         return reservations
 
     def _materialize_changes(self, changes: Any):
-        with trace_operation("patch.materialize", attributes={"generated_changes_sha256": _sha256_json(changes)}) as operation:
-            result = materialize_exact_text_patch(
-                workspace_root=self.workspace_root, diff_intent=changes,
-                implementation_plan=self._implementation_plan,
-            )
-            operation.update(output_code_sha256=result.code_sha256, baseline_sha256=result.baseline_sha256,
-                             file_count=len(result.files))
-            return result
+        from src.mod_agent.candidate_execution import materialize_candidate
+
+        return materialize_candidate(workspace_root=self.workspace_root,
+            implementation_plan=self._implementation_plan, changes=changes)
 
     @staticmethod
     def _materialized_bytes_identity(materialized) -> dict[str, Any]:
-        return {"baseline_sha256": materialized.baseline_sha256, "code_sha256": materialized.code_sha256,
-                "files": sorted(materialized.files)}
+        from src.mod_agent.candidate_execution import materialized_code_identity
+
+        return materialized_code_identity(materialized)
 
     def _materialized_identity(self, changes: Any) -> dict[str, Any]:
         return self._materialized_bytes_identity(self._materialize_changes(changes))
@@ -2307,19 +2451,12 @@ class LocalOllamaInitialPatchAdapter:
         }
 
     def _verification_identity(self) -> dict[str, Any] | None:
-        identity_reader = getattr(self.behavior_evaluator, "verification_identity", None)
-        if not callable(identity_reader):
-            return None
-        value = identity_reader()
-        if not isinstance(value, Mapping):
-            raise LocalEntryError("PATCH_VERIFICATION_IDENTITY_INVALID")
-        identity = json.loads(json.dumps(dict(value), allow_nan=False))
-        if any(type(identity.get(key)) is not str or re.fullmatch(r"[0-9a-f]{64}", identity[key]) is None
-               for key in ("validator_sha256", "inputs_sha256", "environment_sha256")):
-            raise LocalEntryError("PATCH_VERIFICATION_IDENTITY_INVALID")
-        if type(identity.get("deterministic_reuse_allowed")) is not bool:
-            raise LocalEntryError("PATCH_VERIFICATION_IDENTITY_INVALID")
-        return identity
+        from src.mod_agent.candidate_execution import CandidateExecutionError, verification_identity
+
+        try:
+            return verification_identity(self.behavior_evaluator)
+        except CandidateExecutionError as exc:
+            raise LocalEntryError(exc.code) from exc
 
     def _failure_capacity(
         self, inspector: PlanBoundSourceInspector, feedback: Mapping[str, Any],
@@ -2330,10 +2467,6 @@ class LocalOllamaInitialPatchAdapter:
         used_reads += self._prior_worker_budget["consumed_tool_rounds"]
         used_bytes += self._prior_worker_budget["consumed_observation_bytes"]
         policy = self.patch_agent_loop_policy
-        remaining_models = policy.max_total_model_turns - self._prior_worker_budget["consumed_model_turns"] - self._receipt["model_call_count"]
-        remaining_reads = policy.max_tool_rounds - used_reads
-        feedback_bytes = self._revision_payload_bytes(previous_response, feedback, prior_request)
-        remaining_bytes = policy.max_observation_bytes - used_bytes - self._recovery_observation_bytes - feedback_bytes
         loop = self._receipt["patch_agent_loop"]
         phases = [loop, *(value["execution"] for value in iter_patch_recovery_revisions(loop)
                           if isinstance(value.get("execution"), dict))]
@@ -2344,6 +2477,25 @@ class LocalOllamaInitialPatchAdapter:
                   for result in exchange.tool_results)]
             used_ids.update(result.output["binding_id"] for result in retained_results
                             if isinstance(result.output, Mapping) and "binding_id" in result.output)
+        if policy.model_call_budget_policy == "meter_only":
+            unread = [binding for binding in inspector.available_read_binding_ids if binding not in used_ids]
+            readable = list(inspector.available_read_binding_ids) if policy.reuse_covered_source_observations else unread
+            reads_allowed = not (policy.finalize_after_first_observation and used_reads >= 1)
+            return {
+                "policy": "meter_only", "remaining_model_turns": None, "remaining_binding_reads": None,
+                "remaining_observation_bytes_after_feedback": None,
+                "feedback_utf8_bytes": self._revision_payload_bytes(previous_response, feedback, prior_request),
+                "read_phase_allowed_by_policy": reads_allowed,
+                "capacity_scope": "worker_meter_not_provider_context_admission",
+                "can_read_consume_and_revise": reads_allowed and bool(readable),
+                "can_read_new_source_consume_and_revise": reads_allowed and bool(unread),
+                "affordable_unread_binding_ids": unread,
+                "affordable_binding_ids": readable, "direct_revision_available": True,
+            }
+        remaining_models = policy.max_total_model_turns - self._prior_worker_budget["consumed_model_turns"] - self._receipt["model_call_count"]
+        remaining_reads = policy.max_tool_rounds - used_reads
+        feedback_bytes = self._revision_payload_bytes(previous_response, feedback, prior_request)
+        remaining_bytes = policy.max_observation_bytes - used_bytes - self._recovery_observation_bytes - feedback_bytes
         if policy.reuse_covered_source_observations:
             # Evaluate each alternative against the actual request, not against
             # hypothetical observations from another unselected alternative.
@@ -2401,17 +2553,18 @@ class LocalOllamaInitialPatchAdapter:
         feedback_bytes = len(_patch_agent_context_json([asdict(message) for message in revision_messages]).encode("utf-8"))
         loop = self._receipt["patch_agent_loop"]
         required_bytes = prior_bytes + used_bytes + self._recovery_observation_bytes + feedback_bytes
+        metered = self.patch_agent_loop_policy.model_call_budget_policy == "meter_only"
         correction_state["feedback_budget"] = {
             "feedback_utf8_bytes": feedback_bytes, "source_observation_utf8_bytes": used_bytes,
             "prior_feedback_utf8_bytes": self._recovery_observation_bytes,
             "prior_worker_observation_utf8_bytes": prior_bytes,
             "combined_utf8_bytes": required_bytes, "limit": self.patch_agent_loop_policy.max_observation_bytes,
-            "admitted": required_bytes <= self.patch_agent_loop_policy.max_observation_bytes,
+            "admitted": metered or required_bytes <= self.patch_agent_loop_policy.max_observation_bytes,
             "accounting_scope": "new_revision_messages_role_content_utf8",
         }
-        if required_bytes > self.patch_agent_loop_policy.max_observation_bytes:
+        if not metered and required_bytes > self.patch_agent_loop_policy.max_observation_bytes:
             raise LocalEntryError("PATCH_BEHAVIOR_OBSERVATION_BUDGET_EXHAUSTED")
-        if before_calls + self._prior_worker_budget["consumed_model_turns"] >= self.patch_agent_loop_policy.max_total_model_turns:
+        if not metered and before_calls + self._prior_worker_budget["consumed_model_turns"] >= self.patch_agent_loop_policy.max_total_model_turns:
             raise LocalEntryError("PATCH_AGENT_CORRECTION_BUDGET_EXHAUSTED")
         history = loop.setdefault("recovery_revisions", [])
         correction_state.update(revision_index=len(history) + 1, message_type=message_type)
@@ -2429,8 +2582,8 @@ class LocalOllamaInitialPatchAdapter:
         ))
         diagnosis_request = None
         if (message_type == "patch_behavior_correction" and self.patch_agent_loop_policy.diagnose_behavior_failures
-                and self.patch_agent_loop_policy.max_total_model_turns - before_calls
-                    - self._prior_worker_budget["consumed_model_turns"] >= 2):
+                and (metered or self.patch_agent_loop_policy.max_total_model_turns - before_calls
+                    - self._prior_worker_budget["consumed_model_turns"] >= 2)):
             from src.mod_agent.proposal.repair_diagnosis import build_repair_diagnosis_request
 
             diagnosis_request = build_repair_diagnosis_request(prior,
@@ -2444,6 +2597,7 @@ class LocalOllamaInitialPatchAdapter:
             consumed_tool_rounds=used_tools + self._prior_worker_budget["consumed_tool_rounds"],
             consumed_observation_bytes=prior_bytes + used_bytes + self._recovery_observation_bytes,
             upstream_effects=self._upstream_effects,
+            tool_argument_correction_used=self._tool_argument_correction_used,
             submission_validator=submission_validator,
             response_admission=self._worker_response_admission,
             request_projection=(self._repair_input_projection.project_request
@@ -2451,6 +2605,8 @@ class LocalOllamaInitialPatchAdapter:
             diagnosis_request=diagnosis_request,
         )
         self._receipt["model_call_count"] = before_calls + execution.model_turns_used
+        self._tool_argument_correction_used = execution.tool_argument_correction_used or self._tool_argument_correction_used
+        self._receipt["tool_argument_correction_used"] = self._tool_argument_correction_used
         correction_state.update(
             status="completed" if execution.completed else "blocked",
             model_call_count=execution.model_turns_used, execution=execution.to_dict(),
@@ -2701,21 +2857,20 @@ class LocalOllamaInitialPatchAdapter:
             evaluations.append(report)
             self._emit("local_patch_behavior_result_reused")
             return report
+        from src.mod_agent.candidate_execution import (
+            CandidateExecutionError,
+            invoke_candidate_evaluator,
+            validate_candidate_report,
+        )
+
         try:
-            # Evaluators receive a detached projection and cannot edit the generated Patch.
-            report = self.behavior_evaluator(json.loads(json.dumps(context, allow_nan=False)))
-            if not isinstance(report, Mapping):
-                raise ValueError("Behavior evaluator must return a structured observation.")
-            report = json.loads(json.dumps(dict(report), allow_nan=False))
-        except Exception as exc:
-            evaluations.append({
-                "status": "infrastructure_failed", "admission": "rejected",
-                "failure_owner": "unknown", "message": str(exc),
-                "generated_changes_sha256": changes_hash,
-                "model_response_sha256": context["model_response"]["output_sha256"],
-            })
+            # Scope: common execution primitives, unchanged A policy and receipt ordering.
+            # 为什么要有它：三臂共用同一候选/报告核验，不让新循环靠更宽执行条件获益；旧循环仍拥有预算、缓存和修订策略。
+            report = invoke_candidate_evaluator(self.behavior_evaluator, context)
+        except CandidateExecutionError as exc:
+            evaluations.append(exc.rejected_report)
             self._emit("local_patch_behavior_evaluation_failed")
-            raise LocalEntryError("PATCH_BEHAVIOR_EVALUATOR_FAILED") from exc
+            raise LocalEntryError(exc.code) from exc
         finally:
             inspector.validate_snapshot()
         if self.enable_recovery_loop and self._verification_identity() != verification_identity:
@@ -2728,58 +2883,18 @@ class LocalOllamaInitialPatchAdapter:
 
         evaluations.append(report)
         self._emit("local_patch_behavior_evaluation_recorded")
-        valid_statuses = {
-            "passed", "behavior_failed", "infrastructure_failed", "identity_failed", "needs_evidence",
-        }
-        owners = {None, "patch_implementation", "validator", "environment", "evidence", "planning", "unknown"}
         try:
-            if (
-                report.get("status") not in valid_statuses
-                or report.get("failure_owner") not in owners
-                or report.get("generated_changes_sha256") != changes_hash
-                or report.get("source_snapshot_sha256") != inspector.source_snapshot_sha256
-                or not isinstance(report.get("observations"), list)
-                or ("failure_state_observations" in report
-                    and not isinstance(report["failure_state_observations"], list))
-                or not isinstance(report.get("owner_binding_ids"), list)
-            ):
-                raise ValueError("Behavior observation is not bound to the current input.")
-            ids = report["owner_binding_ids"]
-            if any(type(item) is not str or item not in inspector.available_binding_ids for item in ids):
-                raise ValueError("Behavior owner is outside the selected Plan bindings.")
-            ref = report.get("report_ref")
-            if not isinstance(ref, dict) or set(ref) != {"path", "sha256"}:
-                raise ValueError("Behavior observation needs an exact persisted report reference.")
-            report_bytes = Path(ref["path"]).read_bytes()
-            if hashlib.sha256(report_bytes).hexdigest() != ref["sha256"]:
-                raise ValueError("Behavior report bytes differ from their bound hash.")
-            persisted = json.loads(report_bytes.decode("utf-8-sig"))
-            if not isinstance(persisted, dict) or any(
-                persisted.get(key) != report.get(key)
-                for key in (
-                    "status", "failure_owner", "owner_binding_ids", "observations",
-                    "generated_changes_sha256", "source_snapshot_sha256",
-                    "failure_state_observations",
-                )
-            ):
-                raise ValueError("Behavior report content differs from the returned observation.")
-            if report["status"] == "behavior_failed" and not report["observations"]:
-                raise ValueError("Behavior failure has no executable observations.")
-            if report["status"] == "passed" and report["failure_owner"] is not None:
-                raise ValueError("A passed report cannot still declare a failure owner.")
-            origin = report.get("execution_origin", "unknown")
-            if origin not in {"executed", "incomplete", "unknown"}:
-                raise ValueError("Only the execution owner may produce a verified reuse record.")
-            if origin != persisted.get("execution_origin", "unknown"):
-                raise ValueError("Validation execution origin differs from its persisted report.")
-            if report["status"] == "passed" and origin == "incomplete":
-                raise ValueError("A passed behavior report cannot declare incomplete execution.")
-            report["admission"] = "accepted"
-        except (ValueError, TypeError, KeyError, OSError) as exc:
-            report["admission"] = "rejected"
-            report["admission_error"] = str(exc)
+            admitted, persisted = validate_candidate_report(report, changes_sha256=changes_hash,
+                source_snapshot_sha256=inspector.source_snapshot_sha256,
+                allowed_binding_ids=inspector.available_binding_ids)
+            report.clear()
+            report.update(admitted)
+            origin = report["execution_origin"]
+        except CandidateExecutionError as exc:
+            report.clear()
+            report.update(exc.rejected_report)
             self._emit("local_patch_behavior_evaluation_rejected")
-            raise LocalEntryError("PATCH_BEHAVIOR_OBSERVATION_INVALID") from exc
+            raise LocalEntryError(exc.code) from exc
         report.update(callback_invoked=True, execution_origin=origin,
                       materialized_code_identity=code_identity, verification_identity=verification_identity,
                       code_revision=code_revision,
@@ -2803,7 +2918,7 @@ class LocalOllamaInitialPatchAdapter:
         post_response_admission: Callable[[ChatResponse], None], run_id: str,
         submission_validator: Callable[[AgentTurnResponse], None] | None = None,
     ) -> GeneratedPatch:
-        seen_failures: dict[str, int] = {}
+        seen_failures: dict[str, int] = dict(self._inherited_failure_counts)
         while True:
             report = self._evaluate_generated_behavior(generated, inspector)
             if report["status"] == "passed":
@@ -2812,18 +2927,11 @@ class LocalOllamaInitialPatchAdapter:
             if self.enable_recovery_loop:
                 phases = [loop, *(row["execution"] for row in iter_patch_recovery_revisions(loop)
                                   if isinstance(row.get("execution"), dict))]
-                source_facts = sorted({_sha256_json({key: item[key] for key in (
-                    "binding_id", "source_hash", "source_snapshot_sha256", "source_ref") if key in item})
-                    for phase in phases for item in phase.get("observation_trace", [])
-                    if item.get("admitted_to_model") or item.get("payload_admitted")})
-                # 为什么要有它：验收owner可绑定稳定失败语义；未提供投影的验收保留原有观察比较，不放宽通用门禁。
-                observations = [{key: value for key, value in item.items() if key != "result_ref"}
-                                if isinstance(item, dict) else item
-                                for item in report.get("failure_state_observations", report["observations"])]
-                signature = _sha256_json({"code": report.get("materialized_code_identity"),
-                    "status": report["status"], "failure_owner": report["failure_owner"],
-                    "owner_binding_ids": report["owner_binding_ids"], "observations": observations,
-                    "verification_identity": report.get("verification_identity"), "source_facts": source_facts})
+                from src.mod_agent.proposal.failure_state import failure_signature, source_fact_hashes
+
+                source_facts = sorted(set(self._inherited_source_facts) | set(source_fact_hashes(
+                    [item for phase in phases for item in phase.get("observation_trace", [])])))
+                signature = failure_signature(report, source_facts)
                 seen_failures[signature] = seen_failures.get(signature, 0) + 1
                 # One repeated failed submission still gets a chance to revise.
                 # A third identical code/failure/observation state is no progress.
@@ -2833,8 +2941,9 @@ class LocalOllamaInitialPatchAdapter:
                         "failure_signature_sha256": signature,
                         "same_state_observations": seen_failures[signature],
                         "report_ref": deepcopy(report["report_ref"]),
-                        "remaining_model_turns": self.patch_agent_loop_policy.max_total_model_turns
-                            - self._prior_worker_budget["consumed_model_turns"] - self._receipt["model_call_count"],
+                        "remaining_model_turns": (None if self.patch_agent_loop_policy.model_call_budget_policy == "meter_only"
+                            else self.patch_agent_loop_policy.max_total_model_turns
+                            - self._prior_worker_budget["consumed_model_turns"] - self._receipt["model_call_count"]),
                     }
                     raise LocalEntryError("PATCH_BEHAVIOR_NO_PROGRESS")
             generated, generation_request = self._revise_behavior_failure(
@@ -2901,6 +3010,7 @@ class LocalOllamaInitialPatchAdapter:
                           if self.enable_recovery_loop else len(_patch_agent_context_json(feedback).encode("utf-8")))
         _, source_bytes = self._recovery_observation_usage()
         combined_bytes = self._prior_worker_budget["consumed_observation_bytes"] + source_bytes + self._recovery_observation_bytes + feedback_bytes
+        metered = self.patch_agent_loop_policy.model_call_budget_policy == "meter_only"
         loop["behavior_feedback_budget"] = {
             "feedback_utf8_bytes": feedback_bytes,
             "source_observation_utf8_bytes": source_bytes,
@@ -2908,10 +3018,10 @@ class LocalOllamaInitialPatchAdapter:
             "prior_worker_observation_utf8_bytes": self._prior_worker_budget["consumed_observation_bytes"],
             "combined_utf8_bytes": combined_bytes,
             "limit": self.patch_agent_loop_policy.max_observation_bytes,
-            "admitted": combined_bytes <= self.patch_agent_loop_policy.max_observation_bytes,
+            "admitted": metered or combined_bytes <= self.patch_agent_loop_policy.max_observation_bytes,
         }
         self._emit("local_patch_behavior_feedback_budget_checked")
-        if combined_bytes > self.patch_agent_loop_policy.max_observation_bytes:
+        if not metered and combined_bytes > self.patch_agent_loop_policy.max_observation_bytes:
             raise LocalEntryError("PATCH_BEHAVIOR_OBSERVATION_BUDGET_EXHAUSTED")
         previous = self._receipt["model_response"]
         phases = [loop, *(row["execution"] for row in iter_patch_recovery_revisions(loop)
@@ -4336,6 +4446,7 @@ def _patch_generation_obligation_projection(
     feature_spec: Mapping[str, Any],
     implementation: Mapping[str, Any],
     planned_changes: list[dict[str, Any]],
+    evidence_pack: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Project exact feature-wide obligations and evidence-bound change identities."""
 
@@ -4382,6 +4493,19 @@ def _patch_generation_obligation_projection(
         "side_effect_boundaries",
         allow_empty=True,
     )
+    constraint_context = None
+    if implementation.get("constraint_context") is not None:
+        from src.mod_agent.planning.constraint_context import validate_constraint_context
+
+        # Scope: explicit source-priority Plans only; legacy A has no new prompt fields.
+        # 为什么要有它：恢复、重规划或已存候选验证都必须核对原来源，不能把自报SHA或丢失上下文当作旧模式继续。
+        if evidence_pack is None:
+            raise LocalEntryError("CONSTRAINT_CONTEXT_EVIDENCE_REQUIRED")
+        try:
+            constraint_context = validate_constraint_context(implementation["constraint_context"],
+                feature_spec=feature_spec, evidence_pack=evidence_pack, constraints=side_effect_boundaries)
+        except ValueError as exc:
+            raise LocalEntryError(str(exc)) from exc
     if not planned_changes:
         raise LocalEntryError(
             "Patch generation requires at least one proposed change."
@@ -4417,6 +4541,7 @@ def _patch_generation_obligation_projection(
 
     return {
         "target_behavior": target_behavior,
+        **({"constraint_context": constraint_context} if constraint_context is not None else {}),
         "required_change_units": required_change_units,
         "side_effect_boundaries": side_effect_boundaries,
         "acceptance_criteria": acceptance_criteria,
@@ -6598,12 +6723,18 @@ def _request_model_budget_stage(role):
 
 def _preflight_request_model_calls(budget, roles):
     """Project a bounded call sequence without reserving or changing any budget."""
-    from src.mod_agent.model_call_budget import as_task_total_only, total_only, validate_budget
+    from src.mod_agent.model_call_budget import (
+        as_task_total_only,
+        is_meter_only,
+        total_only,
+        validate_budget,
+    )
     original = validate_budget(budget)
     if total_only(original):
         original = as_task_total_only(original)
     stages = original["by_stage"]
-    shared_only = total_only(original)
+    metered = is_meter_only(original)
+    shared_only = total_only(original) or metered
     calls = [{"call_index": index, "role": role, "budget_stage": _request_model_budget_stage(role)}
              for index, role in enumerate(roles, 1)]
     required = {}
@@ -6611,7 +6742,7 @@ def _preflight_request_model_calls(budget, roles):
         stage = call["budget_stage"]
         required[stage] = required.get(stage, 0) + 1
     blockers = []
-    if original["remaining"] < len(calls):
+    if not metered and original["remaining"] < len(calls):
         blockers.append({"code": "PRODUCT_MODEL_CALL_BUDGET_EXHAUSTED", "scope": "total",
             "budget_stage": None, "required": len(calls), "remaining": original["remaining"]})
     for stage, count in required.items():
@@ -6623,7 +6754,7 @@ def _preflight_request_model_calls(budget, roles):
     reachable = True
     for call in calls:
         row = projected["by_stage"].get(call["budget_stage"])
-        individual_capacity = row is not None and (shared_only or row["remaining"] > 0) and projected["remaining"] > 0
+        individual_capacity = row is not None and (shared_only or row["remaining"] > 0) and (metered or projected["remaining"] > 0)
         available = not blockers and reachable and individual_capacity
         call.update(total_remaining_before=projected["remaining"],
                     stage_remaining_before=row["remaining"] if row is not None and not shared_only else None,
@@ -6632,7 +6763,8 @@ def _preflight_request_model_calls(budget, roles):
                     projected_reservation_allowed=available, reservation_performed=False)
         if available:
             projected["consumed"] += 1
-            projected["remaining"] -= 1
+            if not metered:
+                projected["remaining"] -= 1
             row["consumed"] += 1
             if not shared_only:
                 row["remaining"] -= 1
@@ -6729,10 +6861,16 @@ def make_run_dependency_api_reassessment_augmentation(*, run_root, run_id,
 
 def _reserve_request_model_call(budget, role):
     """The existing total/stage reservation rule, shared across one task's invocations."""
-    from src.mod_agent.model_call_budget import as_task_total_only, total_only, validate_budget
+    from src.mod_agent.model_call_budget import (
+        as_task_total_only,
+        is_meter_only,
+        total_only,
+        validate_budget,
+    )
     updated = as_task_total_only(budget) if total_only(budget) else validate_budget(budget)
     stages = updated["by_stage"]
-    if role not in stages or updated["remaining"] < 1 or not total_only(updated) and stages[role]["remaining"] < 1:
+    metered = is_meter_only(updated)
+    if role not in stages or not metered and (updated["remaining"] < 1 or not total_only(updated) and stages[role]["remaining"] < 1):
         error = LocalEntryError("PRODUCT_MODEL_CALL_BUDGET_EXHAUSTED")
         error.model_call_boundary = {
             "budget_stage": role, "budget": deepcopy(budget),
@@ -6741,11 +6879,69 @@ def _reserve_request_model_call(budget, role):
         }
         raise error
     updated["consumed"] += 1
-    updated["remaining"] -= 1
+    if not metered:
+        updated["remaining"] -= 1
     stages[role]["consumed"] += 1
-    if not total_only(updated):
+    if not total_only(updated) and not metered:
         stages[role]["remaining"] -= 1
     return updated
+
+
+def _request_technical_execution_selection(*, technical_executor, constraint_policy,
+        task_agent_allowed_edit_paths, local_ollama, defer_approval, run_gtfo_runtime,
+        source_retrieval_mode, model_call_budget_policy, patch_worker_configuration,
+        planning_target_evidence_ids, repair_ollama_model, task_agent_candidate_mode="baseline",
+        repository_profile=None):
+    """Validate an operator-selected experimental executor before any run effects."""
+    from pathlib import PurePosixPath
+    from src.mod_agent.planning.constraint_context import validate_constraint_policy
+
+    policy = validate_constraint_policy(constraint_policy)
+    if technical_executor not in {"workflow", "task_agent"}:
+        raise LocalEntryError("RUN_REQUEST_TECHNICAL_EXECUTOR_INVALID")
+    if task_agent_candidate_mode not in {"baseline", "current"}:
+        raise LocalEntryError("RUN_REQUEST_TASK_AGENT_CANDIDATE_MODE_INVALID")
+    paths = task_agent_allowed_edit_paths
+    if (not isinstance(paths, tuple) or any(type(path) is not str or not path for path in paths)
+            or len({path.casefold() for path in paths}) != len(paths)):
+        raise LocalEntryError("RUN_REQUEST_TASK_AGENT_EDIT_SCOPE_INVALID")
+    for path in paths:
+        selected = PurePosixPath(path)
+        if (selected.is_absolute() or selected.as_posix() != path
+                or any(part in {".", "..", ".git", "bin", "obj"} for part in selected.parts)
+                or re.search(r'[<>:"|?*\\\x00-\x1f]', path)
+                or any(part.endswith((".", " ")) or re.fullmatch(
+                    r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?", part, re.I)
+                    for part in selected.parts)):
+            raise LocalEntryError("RUN_REQUEST_TASK_AGENT_EDIT_SCOPE_INVALID")
+    if policy is not None and planning_target_evidence_ids:
+        raise LocalEntryError("RUN_REQUEST_CONSTRAINT_POLICY_REQUIRES_MODEL_PLANNING")
+    if technical_executor == "workflow":
+        if task_agent_candidate_mode != "baseline":
+            raise LocalEntryError("RUN_REQUEST_TASK_AGENT_MODE_WITHOUT_EXECUTOR")
+        if paths:
+            raise LocalEntryError("RUN_REQUEST_TASK_AGENT_SCOPE_WITHOUT_EXECUTOR")
+        return ({"technical_executor": technical_executor, "constraint_policy": policy}
+                if policy is not None else None)
+    # Scope: the first task-agent product comparison is local, new-task and deferred compile-only.
+    # 为什么要有它：已验证的候选循环不自动授予外部披露、游戏启动或历史恢复能力，未实现的组合应在运行前拒绝。
+    if (not local_ollama or not defer_approval or run_gtfo_runtime or repair_ollama_model is not None
+            or source_retrieval_mode != "rg_live" or model_call_budget_policy not in {"task_total_only", "meter_only"}
+            or policy != "source_priority_v1" or not paths
+            or patch_worker_configuration is None and repository_profile is None):
+        raise LocalEntryError("RUN_REQUEST_TASK_AGENT_CONFIGURATION_UNSUPPORTED")
+    from src.mod_agent.patch_worker_configuration import PatchWorkerConfiguration
+    if repository_profile is not None:
+        from src.mod_agent.domain.csharp_repository_backend import CSharpRepositoryProfile
+        if not isinstance(repository_profile, CSharpRepositoryProfile):
+            raise LocalEntryError("RUN_REQUEST_REPOSITORY_PROFILE_INVALID")
+    elif (not isinstance(patch_worker_configuration, PatchWorkerConfiguration)
+            or patch_worker_configuration.behavior_evaluator() is None):
+        raise LocalEntryError("RUN_REQUEST_TASK_AGENT_EVALUATOR_REQUIRED")
+    return {"technical_executor": technical_executor, "constraint_policy": policy,
+            **({"candidate_mode": task_agent_candidate_mode} if task_agent_candidate_mode != "baseline" else {}),
+            "allowed_edit_paths_relative_to_project": list(paths),
+            "scope": "common_initial_planning_then_continuous_technical_loop"}
 
 
 def run_local_request(
@@ -6800,12 +6996,17 @@ def run_local_request(
     knowledge_evidence_config: str | Path | None = None,
     planning_target_evidence_ids: tuple[str, ...] = (),
     patch_worker_configuration: Any = None,
+    repository_profile_path: str | Path | None = None,
     source_retrieval_mode: str = "rg_live",
     reuse_query_observations: bool = True,
     compress_findings_input: bool = True,
     task_model_call_limit: int | None = None,
     stage_model_call_limits: Mapping[str, int] | None = None,
     model_call_budget_policy: str = "task_total_only",
+    technical_executor: str = "workflow",
+    constraint_policy: str | None = None,
+    task_agent_allowed_edit_paths: tuple[str, ...] = (),
+    task_agent_candidate_mode: str = "baseline",
     execution_trace_configuration: Any = None,
     external_patch_profile: Any = None,
     defer_approval: bool = False,
@@ -6813,12 +7014,43 @@ def run_local_request(
     request_id: str | None = None,
 ) -> dict[str, Any]:
     """Run one request through the existing graph against an isolated target copy."""
-    from src.mod_agent.model_call_budget import STAGE_AND_TOTAL, TASK_TOTAL_ONLY, as_task_total_only
     from src.mod_agent.evidence.optimization_policy import optimization_policy
+    from src.mod_agent.model_call_budget import (
+        METER_ONLY,
+        STAGE_AND_TOTAL,
+        TASK_TOTAL_ONLY,
+        as_task_total_only,
+    )
+    repository_profile = None
+    repository_binding = None
+    repository_execution_binding = None
+    repository_backend = None
+    if repository_profile_path is not None:
+        from src.mod_agent.domain.csharp_repository import CSharpRepositoryAdapter
+        from src.mod_agent.domain.csharp_repository_backend import CSharpRepositoryProfile
+        repository_profile = CSharpRepositoryProfile.load(repository_profile_path)
+        if (patch_worker_configuration is not None or run_gtfo_runtime or game_folder_build_binding is not None
+                or dependency_api_config is not None or objective_verification_command is not None
+                or compiled_artifact_inspection_profile is not None or allow_game_launch or allow_game_directory_write):
+            raise LocalEntryError("RUN_REQUEST_REPOSITORY_PROFILE_CONFLICT")
+        if technical_executor == "task_agent":
+            selected_paths = tuple(repository_profile.data["allowed_edit_paths"])
+            if task_agent_allowed_edit_paths and task_agent_allowed_edit_paths != selected_paths:
+                raise LocalEntryError("RUN_REQUEST_REPOSITORY_EDIT_SCOPE_CONFLICT")
+            task_agent_allowed_edit_paths = selected_paths
 
+    technical_execution = _request_technical_execution_selection(
+        technical_executor=technical_executor, constraint_policy=constraint_policy,
+        task_agent_candidate_mode=task_agent_candidate_mode,
+        task_agent_allowed_edit_paths=task_agent_allowed_edit_paths, local_ollama=local_ollama,
+        defer_approval=defer_approval, run_gtfo_runtime=run_gtfo_runtime,
+        source_retrieval_mode=source_retrieval_mode, model_call_budget_policy=model_call_budget_policy,
+        patch_worker_configuration=patch_worker_configuration,
+        repository_profile=repository_profile,
+        planning_target_evidence_ids=planning_target_evidence_ids, repair_ollama_model=repair_ollama_model)
     evidence_optimization = optimization_policy(reuse_query_observations=reuse_query_observations,
         compress_findings_input=compress_findings_input)
-    if model_call_budget_policy not in {STAGE_AND_TOTAL, TASK_TOTAL_ONLY}:
+    if model_call_budget_policy not in {STAGE_AND_TOTAL, TASK_TOTAL_ONLY, METER_ONLY}:
         raise LocalEntryError("RUN_REQUEST_MODEL_BUDGET_POLICY_INVALID")
     if model_call_budget_policy == TASK_TOTAL_ONLY and (type(task_model_call_limit) is not int or task_model_call_limit < 1):
         raise LocalEntryError("RUN_REQUEST_TASK_MODEL_LIMIT_REQUIRED")
@@ -7176,8 +7408,15 @@ def run_local_request(
 
         with trace_operation("source.admission", attributes={"execution_phase": "pre_graph"}) as source_observation:
             source = Path(target_project).resolve()
+            if technical_executor == "task_agent":
+                for relative in task_agent_allowed_edit_paths:
+                    selected = (source / relative).resolve(strict=True)
+                    if not selected.is_relative_to(source) or not selected.is_file():
+                        raise LocalEntryError("RUN_REQUEST_TASK_AGENT_EDIT_SCOPE_OUTSIDE_SOURCE")
             source_directory_exists = source.is_dir()
-            project_file_discovered = any(source.glob("*.csproj")) if source_directory_exists else False
+            if repository_profile is not None:
+                repository_binding = repository_profile.bind(source)
+            project_file_discovered = (repository_profile is not None or any(source.glob("*.csproj"))) if source_directory_exists else False
             source_observation.update(source_directory_exists=source_directory_exists,
                                       project_file_discovered=project_file_discovered)
             if not source_directory_exists or not project_file_discovered:
@@ -7191,12 +7430,14 @@ def run_local_request(
                 snapshot_sha256=initial_source_snapshot_sha256,
                 binding=source_revision_binding,
                 strict_git_admission=source_git_admission,
+                **({"repository_profile_ref": repository_profile.reference} if repository_profile is not None else {}),
             )
         base.mkdir(parents=True, exist_ok=True)
         run_root.mkdir(parents=True)
         from .proposal.dependency_documentation import documentation_policy
 
         initial_manifest = {
+            **({"technical_execution": technical_execution} if technical_execution is not None else {}),
             "dependency_api": dependency_api_binding,
             **({"knowledge_evidence": knowledge_binding} if knowledge_binding is not None else {}),
             "small_project_context_policy": small_project_context_configuration,
@@ -7339,7 +7580,8 @@ def run_local_request(
             source_revision_binding=source_revision_binding,
             model_admission=model_admission,
         )
-        source_projects = tuple(source.glob("*.csproj"))
+        source_projects = ((source / repository_profile.data["project_path"],)
+            if repository_profile is not None else tuple(source.glob("*.csproj")))
         if len(source_projects) != 1:
             error = LocalEntryError(
                 "Target project must contain exactly one top-level .csproj file."
@@ -7358,7 +7600,7 @@ def run_local_request(
         assembly_name = _run_pre_graph_step(
             failure_stage="baseline_profile",
             action=lambda: (
-                _optional_project_text_property(
+                Path(repository_profile.data["expected_artifacts"][0]).stem if repository_profile is not None else _optional_project_text_property(
                     source_project,
                     property_name="AssemblyName",
                 )
@@ -7372,7 +7614,7 @@ def run_local_request(
         )
         source_bepinex_value = _run_pre_graph_step(
             failure_stage="baseline_profile",
-            action=lambda: _optional_project_text_property(
+            action=lambda: None if repository_profile is not None else _optional_project_text_property(
                 source_project,
                 property_name="BepInExDir",
             ),
@@ -7420,7 +7662,7 @@ def run_local_request(
             b'<?xml version="1.0" encoding="utf-8"?>\n'
             b"<configuration><packageSources><clear /></packageSources></configuration>\n"
         )
-        for copied_project_root in (target_copy, baseline_copy):
+        for copied_project_root in (() if repository_profile is not None else (target_copy, baseline_copy)):
             copied_config = copied_project_root / "nuget.config"
             if not copied_config.exists():
                 copied_config.write_bytes(isolated_nuget_config)
@@ -7431,7 +7673,8 @@ def run_local_request(
         )
         nuget_build_profile = _run_pre_graph_step(
             failure_stage=build_profile_stage,
-            action=lambda: _create_nuget_isolated_build_profile(
+            action=lambda: repository_profile.create_nuget_profile(run_root=run_root, source_root=target_copy)
+                if repository_profile is not None else _create_nuget_isolated_build_profile(
                 run_root=run_root,
                 working_directory=target_copy,
                 config_file=target_copy / "nuget.config",
@@ -7447,7 +7690,8 @@ def run_local_request(
         )
         baseline_build_profile = _run_pre_graph_step(
             failure_stage=build_profile_stage,
-            action=lambda: _create_nuget_isolated_build_profile(
+            action=lambda: repository_profile.create_nuget_profile(run_root=run_root, source_root=baseline_copy)
+                if repository_profile is not None else _create_nuget_isolated_build_profile(
                 run_root=run_root,
                 working_directory=baseline_copy,
                 config_file=baseline_copy / "nuget.config",
@@ -7513,11 +7757,11 @@ def run_local_request(
         )
         baseline_stdout.write_text(baseline.stdout, encoding="utf-8")
         baseline_stderr.write_text(baseline.stderr, encoding="utf-8")
-        target_framework = _optional_project_text_property(
+        target_framework = None if repository_profile is not None else _optional_project_text_property(
             source_project,
             property_name="TargetFramework",
         )
-        append_target_framework = _optional_project_text_property(
+        append_target_framework = None if repository_profile is not None else _optional_project_text_property(
             source_project,
             property_name="AppendTargetFrameworkToOutputPath",
         )
@@ -7525,7 +7769,7 @@ def run_local_request(
             target_framework is not None
             and append_target_framework != "false"
         )
-        expected_artifact = (
+        expected_artifact = repository_profile.data["expected_artifacts"][0] if repository_profile is not None else (
             f"bin/Debug/{target_framework}/{assembly_name}.dll"
             if append_target_framework_directory
             else f"bin/Debug/{assembly_name}.dll"
@@ -7675,6 +7919,33 @@ def run_local_request(
         from src.mod_agent.patch_worker_configuration import PatchWorkerConfiguration
         from src.mod_agent.planning.model_selection import ModelPlanningTargetSelector
         from src.mod_agent.request_patch_execution import RequestPatchExecution
+        if repository_profile is not None:
+            from src.mod_agent.domain import csharp_repository_backend as repository_module
+            from src.mod_agent.domain.csharp_repository_backend import CSharpRepositoryBackend
+            repository_backend = CSharpRepositoryBackend(profile_ref=repository_profile.reference,
+                source_root=target_copy, workspace_root=run_root,
+                output_root=run_root / "repository_validation", expected_fixed_inputs=repository_binding)
+            selected_policy = PatchAgentLoopPolicy(
+                max_total_model_turns=5 if model_call_budget_policy == STAGE_AND_TOTAL else (task_model_call_limit or 5),
+                model_call_budget_policy=model_call_budget_policy,
+                require_source_inspection=False, finalize_after_first_observation=False,
+                enable_supporting_reads=True, allow_upstream_request=True, allow_batched_reads=True,
+                deduplicate_source_excerpts=False, reuse_covered_source_observations=False)
+            worker_path = run_root / "repository-worker.json"
+            with worker_path.open("x", encoding="utf-8") as stream:
+                json.dump({"schema_version": "patch_worker_configuration_v1", "enable_recovery_loop": True,
+                    "policy": asdict(selected_policy), "behavior_evaluator": {
+                        "factory_ref": {"path": str(Path(repository_module.__file__).resolve()),
+                            "sha256": hashlib.sha256(Path(repository_module.__file__).read_bytes()).hexdigest()},
+                        "factory_name": "make_csharp_repository_evaluator", "kwargs": {
+                            "profile_ref": repository_profile.reference, "source_root": str(target_copy),
+                            "workspace_root": str(run_root), "output_root": str(run_root / "repository_candidates"),
+                            "expected_fixed_inputs": repository_binding}}},
+                    stream, ensure_ascii=False, indent=2)
+            patch_worker_configuration = PatchWorkerConfiguration.load(worker_path)
+            repository_execution_binding = {"configuration_ref": repository_profile.reference,
+                "fixed_inputs": repository_binding, "target_relative_root": target_copy.relative_to(run_root).as_posix(),
+                "worker_configuration_ref": patch_worker_configuration.reference}
 
         if patch_worker_configuration is not None and not isinstance(
             patch_worker_configuration, PatchWorkerConfiguration
@@ -7697,14 +7968,20 @@ def run_local_request(
                        if patch_worker_configuration is None else worker_policy.max_total_model_turns),
         })
         expected_roles = {"requirement_projection", "requirement_findings", "planning", "initial_patch", "repair"}
-        if set(limits) != expected_roles or any(type(value) is not int or value < 1 for value in limits.values()):
+        metered = model_call_budget_policy == METER_ONLY
+        if set(limits) != expected_roles or not metered and any(type(value) is not int or value < 1 for value in limits.values()):
             raise LocalEntryError("RUN_REQUEST_STAGE_MODEL_LIMITS_INVALID")
-        task_limit = sum(limits.values()) if task_model_call_limit is None else task_model_call_limit
-        if type(task_limit) is not int or task_limit < 1:
+        task_limit = None if metered else sum(limits.values()) if task_model_call_limit is None else task_model_call_limit
+        if not metered and (type(task_limit) is not int or task_limit < 1):
             raise LocalEntryError("RUN_REQUEST_TASK_MODEL_LIMIT_INVALID")
         stage_consumed = {role: 0 for role in limits}
 
         def model_budget_snapshot():
+            if model_call_budget_policy == METER_ONLY:
+                return {"policy": METER_ONLY, "maximum": None, "consumed": model_call_count,
+                    "remaining": None, "count_basis": "reserved_provider_invocations_not_transport_proof",
+                    "by_stage": {role: {"maximum": None, "consumed": stage_consumed[role], "remaining": None}
+                                 for role in limits}}
             snapshot = {"maximum": task_limit, "consumed": model_call_count,
                     "remaining": task_limit - model_call_count,
                     "count_basis": "reserved_provider_invocations_not_transport_proof",
@@ -8016,6 +8293,7 @@ def run_local_request(
                 client=PlanningClient(), workspace_root=run_root,
                 receipt_path=run_root / "planning_model_selection.json",
                 model_identity=(external_assembly.identity if external_assembly is not None else local_model_identity),
+                **({"constraint_policy": constraint_policy} if constraint_policy is not None else {}),
             )
         )
 
@@ -8040,7 +8318,46 @@ def run_local_request(
             workspace_root=run_root, receipt_path=run_root / "planning_upstream_model_selection.json",
             model_identity=(external_assembly.identity if external_assembly is not None
                             else local_model_identity),
+            **({"constraint_policy": constraint_policy} if constraint_policy is not None else {}),
         )
+
+        task_agent_execution = None
+        if technical_executor == "task_agent":
+            from src.mod_agent.task_agent_execution import TaskAgentExecution
+
+            bound_worker_ref = patch_worker_configuration.reference
+            providers = {"evidence_pack_factory": upstream_evidence_factory,
+                         "planning_target_selection_factory": upstream_planning_selector}
+
+            def validate_task_providers():
+                # Scope: reuse this invocation's actual providers and bound evaluator.
+                # 为什么要有它：B只能改变行动顺序，不能切换更宽资料来源、替代验证器或重新分配调用预算。
+                selected = PatchWorkerConfiguration.load(bound_worker_ref["path"])
+                if (selected.reference != bound_worker_ref or selected.policy != worker_policy
+                        or providers["evidence_pack_factory"] is not upstream_evidence_factory
+                        or providers["planning_target_selection_factory"] is not upstream_planning_selector
+                        or upstream_planning_selector.constraint_policy != constraint_policy):
+                    raise LocalEntryError("RUN_REQUEST_TASK_AGENT_PROVIDER_CHANGED")
+
+            task_agent_execution = TaskAgentExecution(
+                artifact_store=artifact_store, workspace_root=run_root, profile=worker_profile,
+                policy=worker_policy, behavior_evaluator=patch_worker_configuration.behavior_evaluator(),
+                worker_configuration_ref=bound_worker_ref, expected_model_identity=local_model_identity,
+                identity_reader=admitted_worker_identity, providers=providers,
+                validate_providers=validate_task_providers, reserve_model_call=reserve_model_call,
+                budget_snapshot=model_budget_snapshot,
+                candidate_mode=task_agent_candidate_mode,
+                allowed_edit_paths=tuple(f"generated_mods/{source.name}/{path}"
+                                         for path in task_agent_allowed_edit_paths),
+                allowed_read_roots=(target_copy,), output_root=artifact_store.root / "task-agent-execution")
+
+        def task_execution_result_fields():
+            if task_agent_execution is None:
+                return {}
+            receipt = task_agent_execution.execution_receipt()
+            return {"technical_execution": technical_execution,
+                    "task_agent_execution_ref": receipt.execution_ref if receipt is not None else None,
+                    "task_agent_outcome": asdict(receipt) if receipt is not None else None}
 
         def dry_run_factory(
             proposal: dict[str, Any],
@@ -8055,6 +8372,10 @@ def run_local_request(
                 review=review,
                 allow_write=False,
             )
+            if repository_profile is not None:
+                permitted = {f"generated_mods/{source.name}/{path}" for path in repository_profile.data["allowed_edit_paths"]}
+                if not set(pending_dry_run.get("changed_files", ())) <= permitted:
+                    raise LocalEntryError("RUN_REQUEST_REPOSITORY_EDIT_SCOPE_CHANGED")
             return pending_dry_run
 
         def isolated_apply_factory(
@@ -8082,6 +8403,10 @@ def run_local_request(
             )
 
         def build_result_factory(feature_id: str, input_execution_mode: str | None):
+            if repository_backend is not None:
+                outcome = repository_backend.run_build_test(source_root=target_copy, feature_id=feature_id,
+                    input_execution_mode=input_execution_mode)
+                return outcome["build_result"]
             final_command = (
                 objective_verification_command
                 if objective_verification_command is not None
@@ -8208,6 +8533,9 @@ def run_local_request(
         )
 
         manifest = {
+            **({"repository_profile": repository_execution_binding}
+                if repository_profile is not None else {}),
+            **({"technical_execution": technical_execution} if technical_execution is not None else {}),
             "dependency_api": dependency_api_binding,
             **({"knowledge_evidence": knowledge_binding} if knowledge_binding is not None else {}),
             "small_project_context_policy": small_project_context_configuration,
@@ -8334,7 +8662,7 @@ def run_local_request(
             run_id=run_id,
             request_id=request_id,
             user_request=description,
-            target_domain="gtfo",
+            target_domain="csharp_repository" if repository_profile is not None else "gtfo",
             target_mod=source.name,
             requested_completion_scope=(
                 "runtime_workflow" if run_gtfo_runtime else "compile_only"
@@ -8362,6 +8690,8 @@ def run_local_request(
                 ProductExecutionInputBindingV1.create(
                     "runtime_admission", runtime_admission
                 ),
+                *((ProductExecutionInputBindingV1.create("repository_build_and_test", repository_execution_binding),)
+                    if repository_execution_binding is not None else ()),
             ),
             completion_classification=tuple(
                 sorted(
@@ -8376,12 +8706,18 @@ def run_local_request(
             allow_build=True,
         )
         product_adapters = ProductExecutionAdaptersV1(
+            **({"domain_adapter": CSharpRepositoryAdapter(
+                (target_copy.relative_to(run_root).as_posix(),),
+                ("The declared repository build and nonempty test report pass on this exact revision.",
+                 "The declared artifacts are retained with source and test input identities."))}
+                if repository_profile is not None else {}),
             evidence_pack_factory=evidence_factory,
             planning_target_selection_factory=planning_selector,
-            patch_change_factory=patch_change_factory,
-            product_patch_upstream_execution=patch_change_factory,
-            patch_upstream_evidence_pack_factory=upstream_evidence_factory,
-            patch_upstream_planning_target_selection_factory=upstream_planning_selector,
+            patch_change_factory=task_agent_execution or patch_change_factory,
+            product_patch_upstream_execution=(patch_change_factory if task_agent_execution is None else None),
+            **({"task_agent_execution": task_agent_execution} if task_agent_execution is not None else {}),
+            patch_upstream_evidence_pack_factory=(upstream_evidence_factory if task_agent_execution is None else None),
+            patch_upstream_planning_target_selection_factory=(upstream_planning_selector if task_agent_execution is None else None),
             initial_findings_reassessment_factory=upstream_evidence_factory.reassess_initial,
             dry_run_factory=dry_run_factory,
             isolated_apply_factory=isolated_apply_factory,
@@ -8425,9 +8761,11 @@ def run_local_request(
                     model_admission=model_admission,
                     canonical_source_unchanged=_source_snapshot(source) == initial_source_snapshot,
                 )
-                patch_change_factory.complete_deferred(pending)
+                if task_agent_execution is None:
+                    patch_change_factory.complete_deferred(pending)
                 waiting["execution_trace"] = product_trace_identity(product_trace, run_root)
                 waiting["patch_execution_receipts"] = [journal.projection() for journal in patch_change_factory.journals]
+                waiting.update(task_execution_result_fields())
                 _persist_graph_terminal_result(
                     run_root=run_root, run_id=run_id, request_id=request_id, summary=waiting,
                     model_call_count=model_call_count, patch_payload_parser_entered=True,
@@ -8458,8 +8796,9 @@ def run_local_request(
                     f"Controlled product executor failed: {type(exc).__name__}: {exc}"
                 ) from exc
 
-        patch_change_factory.complete_product(product_result)
-        if patch_change_factory.receipts:
+        if task_agent_execution is None:
+            patch_change_factory.complete_product(product_result)
+        if task_agent_execution is None and patch_change_factory.receipts:
             current_patch_receipt = patch_change_factory.patch_attempt_receipt()
             local_model_input_audit = {
                 **current_patch_receipt,
@@ -8528,6 +8867,7 @@ def run_local_request(
         )
 
         summary = {
+            **task_execution_result_fields(),
             "run_id": run_id,
             "current_stage": product_result.terminal_node,
             "feature_id": product_result.feature_id,
@@ -12300,6 +12640,116 @@ def _execute_runtime_terminal_continuation(
     )
 
 
+@dataclass(frozen=True)
+class AcceptedRuntimeEvidenceRecoveryFactory:
+    """Source-bound developer adapter for an already-approved retained verifier.
+
+    This is a trusted local injection seam, not a sandbox for model-authored code.
+    """
+
+    factory: Callable[[str, dict[str, Any], dict[str, Any]], dict[str, Any]]
+    original_factory_ref: Mapping[str, str]
+    input_manifest_ref: Mapping[str, str]
+    recovery_source_ref: Mapping[str, str]
+
+    @staticmethod
+    def _validate_ref(reference: Mapping[str, str]) -> Path:
+        if not isinstance(reference, Mapping) or set(reference) != {"path", "sha256"}:
+            raise LocalEntryError("RETAINED_RECOVERY_FILE_REF_INVALID")
+        path = Path(reference["path"])
+        if (not path.is_absolute() or str(path).startswith(("\\\\", "//"))
+                or re.fullmatch(r"[a-f0-9]{64}", reference["sha256"]) is None):
+            raise LocalEntryError("RETAINED_RECOVERY_FILE_REF_INVALID")
+        for item in (path, *path.parents):
+            if item.is_symlink() or (item.exists() and getattr(item.lstat(), "st_file_attributes", 0) & 0x400):
+                raise LocalEntryError("RETAINED_RECOVERY_FILE_REF_REPARSE")
+        if hashlib.sha256(path.read_bytes()).hexdigest() != reference["sha256"]:
+            raise LocalEntryError("RETAINED_RECOVERY_FILE_CHANGED")
+        return path.resolve()
+
+    def validate_admission(self, admission: Mapping[str, Any]) -> dict[str, Any]:
+        import inspect
+
+        # Scope: reuse the exact accepted retained-input authority, never replace it.
+        # 为什么要有它：恢复适配器不能借旧审批引入新factory输入、部署、Build或源码写入。
+        if (admission.get("factory_ref") != self.original_factory_ref
+                or admission.get("input_manifest_ref") != self.input_manifest_ref
+                or admission.get("requested_side_effects") != ["runtime_execution"]
+                or admission.get("authorized_side_effects") != ["runtime_execution"]
+                or any(admission.get(key) is not False for key in (
+                    "new_process_launch", "new_game_directory_write", "new_build", "new_product_source_write"))):
+            raise LocalEntryError("RETAINED_RECOVERY_ACCEPTED_SCOPE_MISMATCH")
+        for reference in (self.original_factory_ref, self.input_manifest_ref):
+            self._validate_ref(reference)
+        source = self._validate_ref(self.recovery_source_ref)
+        observed_source = inspect.getsourcefile(self.factory)
+        if observed_source is None or Path(observed_source).resolve() != source:
+            raise LocalEntryError("RETAINED_RECOVERY_FACTORY_SOURCE_MISMATCH")
+        return {
+            "aggregation_origin": "development_assisted_retained_evidence_recovery",
+            "original_factory_ref": dict(self.original_factory_ref),
+            "input_manifest_ref": dict(self.input_manifest_ref),
+            "recovery_source_ref": dict(self.recovery_source_ref),
+            "new_model_calls": 0, "new_builds": 0, "new_game_runs": 0,
+            "new_product_source_writes": 0,
+        }
+
+    def __call__(self, feature_id, build, feature_spec):
+        return self.factory(feature_id, build, feature_spec)
+
+
+def resume_retained_task_agent_handoff(**kwargs):
+    """Public zero-model continuation; exact approval and delivery remain separate.
+
+    为什么要有它：CLI与调用方共用同一严格准入和幂等入口，不能用临时脚本绕过正常交付。
+    """
+    from src.mod_agent.retained_task_agent_handoff import resume_retained_task_agent_handoff as resume
+
+    return resume(**kwargs)
+
+
+def preflight_retained_visualsignal_correction(*, artifact_store_root, correction, verifier,
+                                             expected_correction_identity_hash):
+    """Read-only preparation for an exact retained-evidence representation repair."""
+    from src.mod_agent.runtime.retained_visualsignal import RetainedVisualSignalCorrection, prepare_correction
+
+    if (type(correction) is not RetainedVisualSignalCorrection
+            or type(verifier) is not AcceptedRuntimeEvidenceRecoveryFactory
+            or correction.identity_hash != expected_correction_identity_hash):
+        raise LocalEntryError("RETAINED_CORRECTION_EXACT_ACTION_REQUIRED")
+    prepared = prepare_correction(ArtifactStore(artifact_store_root), correction, verifier)
+    return {"status": "ready", "identity": correction.identity(), "identity_hash": correction.identity_hash,
+            "runtime_evidence_preview": prepared["payload"], "source_snapshot": prepared["source_snapshot"],
+            "new_model_calls": 0, "new_build": False, "new_apply": False, "new_game_run": False,
+            "artifact_store_written": False}
+
+
+def correct_retained_visualsignal_evidence(*, artifact_store_root, correction, verifier,
+                                         expected_correction_identity_hash):
+    """Execute one locked correction and bounded normal EvalGate/terminal graph."""
+    from src.mod_agent.workflow.graph import build_retained_visualsignal_correction_graph
+    from src.mod_agent.workflow.resume_lock import checkpoint_resume_lock
+
+    # Scope: all supported callers serialize the exact predecessor operation.
+    # 为什么要有它：同一旧RuntimeEvidence只能有一次校正，不能并发重复发布或用新审批掩盖原blocked。
+    with checkpoint_resume_lock(artifact_store_root, correction.checkpoint_ref):
+        preflight = preflight_retained_visualsignal_correction(artifact_store_root=artifact_store_root,
+            correction=correction, verifier=verifier, expected_correction_identity_hash=expected_correction_identity_hash)
+        graph = build_retained_visualsignal_correction_graph(ArtifactStore(artifact_store_root), correction=correction,
+            verifier=verifier, expected_identity_hash=expected_correction_identity_hash)
+        state = graph.invoke(preflight["source_snapshot"])
+    summary = state["runtime_summary"]
+    accepted = (state["current_stage"] == "done" and summary.get("terminal_final_status") == "accepted"
+                and summary.get("terminal_ready") is True and not summary.get("platform_failure_stage"))
+    return {"schema": "retained_visualsignal_correction_result_v1", "identity": correction.identity(),
+        "identity_hash": correction.identity_hash, "status": "accepted" if accepted else "blocked",
+        "current_stage": state["current_stage"], "run_id": state["run_id"], "feature_id": state["feature_id"],
+        "artifacts": state["artifacts"], "artifact_hashes": state["artifact_hashes"], "runtime_summary": summary,
+        "blockers": state["blockers"], "trace_events": state["trace_events"],
+        "aggregation_origin": "development_assisted_retained_evidence_correction",
+        "new_model_calls": 0, "new_build": False, "new_apply": False, "new_game_run": False, "new_approval": False}
+
+
 def _normalize_legacy_runtime_workflow_operation(
     *,
     run_root: str | Path,
@@ -12553,8 +13003,26 @@ def _execute_runtime_workflow_operation(
     checkpoint_ref = handoff.checkpoint_ref
     checkpoint = handoff.checkpoint
     repair_attempt_projection: dict[str, Any] | None = None
+    retained_recovery = None
+    backup_report = None
 
-    if injected_runtime_admission is not None:
+    if is_recovery and runtime_evidence_factory is not None:
+        if (type(runtime_evidence_factory) is not AcceptedRuntimeEvidenceRecoveryFactory
+                or allow_game_launch or allow_game_directory_write
+                or runtime_plugin_destination is not None):
+            raise LocalEntryError("RETAINED_RECOVERY_BOUND_FACTORY_REQUIRED")
+        snapshot = handoff.recovery_decision.applied_updates.get("runtime_admission")
+        original = snapshot.get("runtime_admission") if isinstance(snapshot, Mapping) else None
+        if not isinstance(original, Mapping):
+            raise LocalEntryError("RETAINED_RECOVERY_ORIGINAL_ADMISSION_MISSING")
+        runtime_admission = deepcopy(dict(original))
+        retained_recovery = runtime_evidence_factory.validate_admission(runtime_admission)
+
+        def graph_runtime_factory(feature_id, build, feature_spec):
+            runtime_evidence_factory.validate_admission(runtime_admission)
+            return runtime_evidence_factory(feature_id, build, feature_spec)
+
+    elif injected_runtime_admission is not None:
         if runtime_evidence_factory is None:
             raise LocalEntryError(
                 "Injected Runtime admission requires an injected Runtime factory."
@@ -13074,6 +13542,7 @@ def _execute_runtime_workflow_operation(
         "runtime_summary": runtime_summary,
         "resume_report": resume_projection,
         "runtime_admission": runtime_admission,
+        "retained_factory_recovery": retained_recovery,
         "deployment_backup": (
             backup_report if injected_runtime_admission is None else None
         ),

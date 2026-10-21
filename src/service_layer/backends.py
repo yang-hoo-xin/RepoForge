@@ -10,6 +10,13 @@ from pathlib import Path
 from uuid import uuid4
 
 from src.core.query_engine.result_cache import canonical, fingerprint
+from src.core.trace.execution_trace import trace_operation
+from src.service_layer.store import (
+    CapacityExceeded,
+    CapacityPolicyMismatch,
+    CapacityStateError,
+    RedisJobStore,
+)
 
 
 class BackendError(RuntimeError):
@@ -19,18 +26,29 @@ class BackendError(RuntimeError):
 
 
 class RedisQueryCache:
-    """Same content/version binding as QueryResultCache, with an atomic Redis SET."""
+    """Content-bound cache using the service's atomic capacity owner for writes."""
 
-    def __init__(self, client, namespace: str, ttl_seconds: int):
+    def __init__(self, client, namespace: str, ttl_seconds: int, *, retention_seconds=86400,
+                 max_pending=1000, capacity_bytes=64 * 1024**2, cache_capacity_bytes=16 * 1024**2):
         if type(ttl_seconds) is not int or ttl_seconds <= 0:
             raise ValueError("QUERY_CACHE_TTL_INVALID")
         self.client, self.namespace, self.ttl_seconds = client, namespace, ttl_seconds
+        self._policy = {"namespace": namespace, "retention_seconds": retention_seconds,
+            "max_pending": max_pending, "capacity_bytes": capacity_bytes,
+            "cache_capacity_bytes": cache_capacity_bytes, "cache_ttl_seconds": ttl_seconds}
+        self._store = None
+
+    def _owner(self):
+        if self._store is None:
+            self._store = RedisJobStore(self.client, **self._policy)
+        return self._store
 
     def _key(self, binding):
-        return self.namespace + ":query-cache:" + fingerprint(binding)
+        return self._owner().cache_key(fingerprint(binding))
 
     def get(self, binding):
-        raw = self.client.get(self._key(binding))
+        # Scope: cache reads only. 为什么要有它：旧raw namespace记录仍可校验读取，但不能在读取时迁移或绕过新写入配额。
+        raw = self._owner().cache_get(fingerprint(binding))
         if raw is None:
             return None
         try:
@@ -43,43 +61,56 @@ class RedisQueryCache:
         return None
 
     def put(self, binding, value):
+        from redis.exceptions import ConnectionError as RedisConnectionError
+        from redis.exceptions import ResponseError
+        from redis.exceptions import TimeoutError as RedisTimeoutError
+
         # 为什么要有它：继续由QueryService决定完整结果何时发布；Redis只替换存储，不能缓存半流输出或丢掉来源绑定。
         record = {"version": "query_model_cache_v1", "binding": binding,
                   "value": value, "value_sha256": fingerprint(value)}
-        self.client.set(self._key(binding), canonical(record), ex=self.ttl_seconds)
+        digest, encoded = fingerprint(binding), canonical(record)
+        try:
+            self._owner().cache_put(digest, encoded)
+        except (RedisConnectionError, RedisTimeoutError, ResponseError,
+                CapacityExceeded, CapacityPolicyMismatch, CapacityStateError) as error:
+            # Scope: storage/capacity refusal only. 为什么要有它：配额、策略和未完成写入状态均不得退回直接SET；沿既有OSError合同留警告，DataError等编程异常仍原样抛出。
+            raise OSError("QUERY_CACHE_WRITE_UNAVAILABLE") from error
 
 
 def run_query(payload, config, *, job_id, timeout_seconds, redis_client=None, service_factory=None):
-    from src.core.query_engine.query_service import QueryRequest
-    from src.core.query_engine.service_factory import create_query_service
-    from src.core.settings import QuerySettings, load_settings
+    with trace_operation("service.query.imports"):
+        from src.core.query_engine.query_service import QueryRequest
+        from src.core.query_engine.service_factory import create_query_service
+        from src.core.settings import QuerySettings, load_settings
 
-    if not isinstance(payload, dict):
-        raise BackendError("QUERY_PAYLOAD_REQUIRED")
-    payload = dict(payload)
-    expected = payload.pop("_settings_sha256", None)
-    if not isinstance(expected, str) or hashlib.sha256(Path(config.settings_path).read_bytes()).hexdigest() != expected:
-        raise BackendError("QUERY_SETTINGS_BINDING_CHANGED")
-    request = QueryRequest.from_dict(payload)
-    request = replace(request, request_id=request.request_id or job_id)
-    settings = load_settings(config.settings_path)
-    if hashlib.sha256(Path(config.settings_path).read_bytes()).hexdigest() != expected:
-        raise BackendError("QUERY_SETTINGS_BINDING_CHANGED")
-    query = settings.query or QuerySettings()
-    # 为什么要有它：服务作业的总限时不可被业务默认180秒放大；缓存绑定、有效性和发布仍走原业务owner。
-    query = replace(query, cache_enabled=True, timeout_seconds=min(query.timeout_seconds, timeout_seconds),
-                    queue_timeout_seconds=min(query.queue_timeout_seconds, timeout_seconds))
-    settings = replace(settings, query=query)
-    if redis_client is None:
-        import redis
-        redis_client = redis.Redis.from_url(config.redis_url, socket_connect_timeout=3, socket_timeout=3)
-    try:
-        redis_client.ping()
-    except Exception as error:
-        # This is before retrieval/provider execution; later business failures are not retried here.
-        retryable = isinstance(error, (ConnectionError, TimeoutError)) or (
-            type(error).__module__.startswith("redis.") and type(error).__name__ in {"ConnectionError", "TimeoutError", "BusyLoadingError"})
-        raise BackendError("QUERY_CACHE_UNAVAILABLE_BEFORE_EXECUTION", safe_retry=retryable) from error
+    with trace_operation("service.query.settings"):
+        if not isinstance(payload, dict):
+            raise BackendError("QUERY_PAYLOAD_REQUIRED")
+        payload = dict(payload)
+        expected = payload.pop("_settings_sha256", None)
+        if not isinstance(expected, str) or hashlib.sha256(Path(config.settings_path).read_bytes()).hexdigest() != expected:
+            raise BackendError("QUERY_SETTINGS_BINDING_CHANGED")
+        request = QueryRequest.from_dict(payload)
+        request = replace(request, request_id=request.request_id or job_id)
+        settings = load_settings(config.settings_path)
+        if hashlib.sha256(Path(config.settings_path).read_bytes()).hexdigest() != expected:
+            raise BackendError("QUERY_SETTINGS_BINDING_CHANGED")
+        query = settings.query or QuerySettings()
+        # 为什么要有它：服务作业的总限时不可被业务默认180秒放大；缓存绑定、有效性和发布仍走原业务owner。
+        query = replace(query, cache_enabled=True, timeout_seconds=min(query.timeout_seconds, timeout_seconds),
+                        queue_timeout_seconds=min(query.queue_timeout_seconds, timeout_seconds))
+        settings = replace(settings, query=query)
+    with trace_operation("service.query.redis_connect"):
+        if redis_client is None:
+            import redis
+            redis_client = redis.Redis.from_url(config.redis_url, socket_connect_timeout=3, socket_timeout=3)
+        try:
+            redis_client.ping()
+        except Exception as error:
+            # This is before retrieval/provider execution; later business failures are not retried here.
+            retryable = isinstance(error, (ConnectionError, TimeoutError)) or (
+                type(error).__module__.startswith("redis.") and type(error).__name__ in {"ConnectionError", "TimeoutError", "BusyLoadingError"})
+            raise BackendError("QUERY_CACHE_UNAVAILABLE_BEFORE_EXECUTION", safe_retry=retryable) from error
     factory = service_factory or create_query_service
     retrieval = getattr(settings, "retrieval", None)
     no_model = (not request.answer and not (query.rewrite_enabled if request.rewrite is None else request.rewrite)
@@ -88,9 +119,15 @@ def run_query(payload, config, *, job_id, timeout_seconds, redis_client=None, se
     # 为什么要有它：纯稀疏查询没有模型参与，可以绑定真实的无模型身份；不能为可能调用模型的路径编造revision来获得缓存命中。
     options = {"model_identity_provider": lambda: {"kind": "no_model_required",
         "scope": "answer_rewrite_dense_rerank_disabled"}} if no_model else {}
-    service = factory(settings, collection=request.collection, **options)
-    service.cache = RedisQueryCache(redis_client, config.namespace, config.query_cache_ttl)
-    return service.query(request).to_dict()  # QueryResponse.evidence is private and never returned.
+    # Scope: measured service boundaries only. 为什么要有它：逐job初始化和业务查询分别计时，不把嵌套阶段累加成总耗时。
+    with trace_operation("service.query.factory"):
+        service = factory(settings, collection=request.collection, **options)
+        # Scope: exact server policy propagation. 为什么要有它：子进程必须使用与API/Worker一致的自定义额度和保留期，不能悄悄回退默认值绕过策略冲突。
+        service.cache = RedisQueryCache(redis_client, config.namespace, config.query_cache_ttl,
+            retention_seconds=config.retention_seconds, max_pending=config.max_pending,
+            capacity_bytes=config.capacity_bytes, cache_capacity_bytes=config.cache_capacity_bytes)
+    with trace_operation("service.query.execute"):
+        return service.query(request).to_dict()  # QueryResponse.evidence is private and never returned.
 
 
 def _profile(path, description):

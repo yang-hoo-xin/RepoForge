@@ -66,6 +66,27 @@ class TraceService:
     # Public API
     # ------------------------------------------------------------------
 
+    def discover_runs(self, *, allowed_roots, cursor=0, limit=100):
+        from .run_records import RunRecordBrowser, _sanitize
+        return _sanitize(RunRecordBrowser(allowed_roots).discover(cursor=cursor, limit=limit), [])
+
+    def inspect_run(self, *, allowed_roots, run_id, record_cursor=0, record_limit=200):
+        from .run_records import RunRecordBrowser, _sanitize
+        return _sanitize(RunRecordBrowser(allowed_roots).inspect(run_id, record_cursor=record_cursor, record_limit=record_limit), [])
+
+    def read_record(self, *, allowed_roots, record_id, offset=0, limit=65536, expected_sha256=None):
+        from .run_records import RunRecordBrowser
+        return RunRecordBrowser(allowed_roots).read_record(record_id, offset=offset, limit=limit, expected_sha256=expected_sha256)
+
+    def verify_run_cloud(self, *, allowed_roots, run_id, trace_id, expected_source_fingerprint):
+        """Explicit readback only; no upload or product-state changes.
+
+        为什么要有它：云端核验必须由人主动触发且绑定当前原件，打开本地页面不能暗中联网或重写结果。
+        """
+        from .run_records import RunRecordBrowser, _sanitize
+        return _sanitize(RunRecordBrowser(allowed_roots).verify_cloud(run_id, trace_id,
+            expected_source_fingerprint=expected_source_fingerprint), [])
+
     def list_traces(
         self,
         trace_type: Optional[str] = None,
@@ -163,7 +184,7 @@ class TraceService:
         if not isinstance(run_id, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", run_id) is None:
             raise ValueError("Product run_id is invalid.")
         allowed = self._existing_directory(allowed_root, label="Allowed Runs Root")
-        original = self._selected_directory(run_root, allowed=allowed, label="Run Root")
+        original = self._selected_directory(run_root, allowed=allowed, label="Run Root", allow_equal=True)
         if original.name != run_id:
             raise ValueError("Run Root basename does not match run_id.")
         roots = [("original", original)]
@@ -184,7 +205,7 @@ class TraceService:
         original_budget = segments[0].get("model_call_budget") or {}
         latest_budget = latest.get("model_call_budget") or {}
         findings = (latest_budget.get("by_stage") or {}).get("requirement_findings") or {}
-        return {
+        projection = {
             "run_id": run_id,
             "read_only": True,
             "query_execution": {"model_calls_performed": 0, "writes_performed": False},
@@ -206,6 +227,24 @@ class TraceService:
                 "Missing parse, schema, business-validation, reservation, invocation, or transport facts remain unknown or not reached.",
             ],
         }
+        # Scope: all display fields, including summaries and explicitly selected raw bodies.
+        # 为什么要有它：完整性检查读取原字节，凭据保护只作用于最终展示；摘要和恢复字段不能绕过相同保护。
+        from src.mcp_server.safety import Redactor
+
+        from .run_records import _sanitize
+        notes: list[str] = []
+        sanitized = _sanitize(projection, notes)
+        protected = Redactor.configured()(sanitized)
+        if protected != sanitized:
+            notes.append("credential_assignment_or_configured_value")
+        protected["redaction"] = {
+            "applied": bool(notes), "count": len(notes), "notes": sorted(set(notes)),
+            "scope": "display_only_original_bytes_unchanged",
+            "coverage": "entire_product_run_display_including_selected_raw_records",
+            "validation_basis": "original_bytes_before_display_redaction",
+            "original_files_modified": False,
+        }
+        return protected
 
     @staticmethod
     def _budget_counts(value: Any) -> dict[str, Any]:
@@ -225,10 +264,12 @@ class TraceService:
         return resolved
 
     @classmethod
-    def _selected_directory(cls, value: str | Path, *, allowed: Path, label: str) -> Path:
+    def _selected_directory(cls, value: str | Path, *, allowed: Path, label: str, allow_equal: bool = False) -> Path:
         path = cls._existing_directory(value, label=label)
         allowed = allowed.resolve(strict=True)
-        if path == allowed or not path.is_relative_to(allowed):
+        # Scope: an explicitly authorized run directory can itself be selected; never broaden its parent.
+        # 为什么要有它：仅授权一个任务目录是更窄的权限，不能为打开它反而要求授权父目录。
+        if path == allowed and not allow_equal or not path.is_relative_to(allowed):
             raise ValueError(f"{label} is outside the allowed root.")
         return path
 
@@ -255,6 +296,11 @@ class TraceService:
 
     def _product_segment(self, kind: str, root: Path, run_id: str, include_raw: bool,
                          *, selected_run_root: Path) -> dict[str, Any]:
+        if kind == "continuation":
+            try:
+                (root / "run_manifest.json").lstat()
+            except FileNotFoundError:
+                return self._result_only_continuation(root, run_id, selected_run_root=selected_run_root)
         manifest, manifest_hash = self._read_product_json(root / "run_manifest.json", root=root)
         result, result_hash = self._read_product_json(root / "run_result.json", root=root)
         if manifest.get("run_id") != run_id or result.get("run_id") != run_id:
@@ -302,6 +348,8 @@ class TraceService:
         )
         return {
             "segment": kind,
+            "record_format": "product_manifest_and_result",
+            "manifest_status": "recorded",
             "run_root": str(root),
             "manifest_ref": {"path": str(root / "run_manifest.json"), "sha256": manifest_hash},
             "result_ref": {"path": str(root / "run_result.json"), "sha256": result_hash,
@@ -336,6 +384,99 @@ class TraceService:
             },
             "observation_count": len(ordered),
         }
+
+    @classmethod
+    def _continuation_reference(cls, reference: Any, *, root: Path, expected: Path) -> tuple[dict[str, Any], dict[str, str]]:
+        """Read a recorded exact reference inside the caller's already selected root."""
+        if (not isinstance(reference, dict) or not isinstance(reference.get("path"), str)
+                or not isinstance(reference.get("sha256"), str)
+                or re.fullmatch(r"[a-f0-9]{64}", reference["sha256"]) is None):
+            raise ValueError("Continuation reference is missing its exact path or SHA256.")
+        path = Path(reference["path"])
+        if not path.is_absolute() or path.resolve(strict=True) != expected.resolve(strict=True):
+            raise ValueError("Continuation reference does not match the selected record.")
+        for part in (path, *path.parents):
+            if part == root:
+                break
+            attributes = part.lstat()
+            if part.is_symlink() or getattr(attributes, "st_file_attributes", 0) & 0x400:
+                raise ValueError("Continuation record links are not allowed.")
+        document, digest = cls._read_product_json(path, root=root)
+        if digest != reference["sha256"]:
+            raise ValueError("Continuation record SHA256 mismatch.")
+        return document, {"path": str(path.resolve()), "sha256": digest}
+
+    def _result_only_continuation(self, root: Path, run_id: str, *, selected_run_root: Path) -> dict[str, Any]:
+        """Show a hash-bound recovery result without borrowing the parent's trace.
+
+        为什么要有它：恢复可以复用候选而不产生模型调用；缺失manifest不能伪造，也不能把历史调用重复计入恢复。
+        """
+        if not root.is_relative_to(selected_run_root / "continuations"):
+            raise ValueError("Continuation Root is outside the selected run's continuations directory.")
+        result, result_hash = self._read_product_json(root / "run_result.json", root=root)
+        if result.get("run_id") != run_id:
+            raise ValueError("Product run record identity does not match run_id.")
+        result_ref = {"path": str(root / "run_result.json"), "sha256": result_hash}
+        view = {"segment": "continuation", "run_root": str(root), "record_format": "result_without_manifest",
+            "recorded_entry": result.get("entry"), "manifest_ref": None, "manifest_status": "not_recorded",
+            "result_ref": {**result_ref, "binding": "locally_read_identity_not_yet_confirmed"},
+            "identity_status": "unconfirmed", "reported_status": result.get("status"), "status": "unconfirmed",
+            "trace": {}, "trace_status": "not_recorded", "observation_count": 0, "calls": [], "diagnostics": [],
+            "model_call_count": None, "current_invocation_model_call_count": None, "model_call_budget": None,
+            "blockers": [], "post_findings_gate": {}, "initial_findings_reassessment": {},
+            "runtime_identity": {"llama_cpp_version_status": "unknown_not_recorded"},
+            "counting_scope": "No parent generation records are attributed to this continuation; missing trace is not proof of zero calls."}
+        required = ("parent_run_id", "parent_manifest_ref", "parent_result_ref", "continuation_claim_ref", "fresh_result_ref")
+        missing = [key for key in required if result.get(key) is None]
+        for filename in ("completion.json", "selection.json", "graph_result.json"):
+            try:
+                (root / filename).lstat()
+            except FileNotFoundError:
+                missing.append(filename)
+        if missing:
+            view["missing_identity_fields"] = missing
+            return view
+        if result["parent_run_id"] != run_id:
+            raise ValueError("Continuation parent run identity mismatch.")
+        for key, expected in (("run_root", selected_run_root), ("continuation_root", root)):
+            if key in result and Path(result[key]).resolve(strict=True) != expected:
+                raise ValueError("Continuation declared root mismatch.")
+        parent_manifest, manifest_ref = self._continuation_reference(result["parent_manifest_ref"],
+            root=selected_run_root, expected=selected_run_root / "run_manifest.json")
+        parent_result, parent_ref = self._continuation_reference(result["parent_result_ref"],
+            root=selected_run_root, expected=selected_run_root / "run_result.json")
+        if parent_manifest.get("run_id") != run_id or parent_result.get("run_id") != run_id:
+            raise ValueError("Continuation parent record identity mismatch.")
+        claim, claim_ref = self._continuation_reference(result["continuation_claim_ref"], root=root, expected=root / "selection.json")
+        fresh, fresh_ref = self._continuation_reference(result["fresh_result_ref"], root=root, expected=root / "graph_result.json")
+        if fresh.get("run_id") != run_id:
+            raise ValueError("Continuation graph result identity mismatch.")
+        for key, expected in (("parent_manifest_ref", selected_run_root / "run_manifest.json"),
+                              ("parent_result_ref", selected_run_root / "run_result.json")):
+            self._continuation_reference(claim.get(key), root=selected_run_root, expected=expected)
+            if claim[key]["sha256"] != result[key]["sha256"]:
+                raise ValueError("Continuation selection differs from result parent binding.")
+        completion, completion_hash = self._read_product_json(root / "completion.json", root=root)
+        for key, expected, digest in (("result_ref", root / "run_result.json", result_hash),
+                ("claim_ref", root / "selection.json", claim_ref["sha256"]),
+                ("fresh_result_ref", root / "graph_result.json", fresh_ref["sha256"])):
+            self._continuation_reference(completion.get(key), root=root, expected=expected)
+            if completion[key]["sha256"] != digest:
+                raise ValueError("Continuation completion differs from result binding.")
+        counters = [result[key] for key in ("current_invocation_model_call_count", "model_calls_performed") if key in result]
+        if any(type(value) is not int or value < 0 for value in counters) or len(set(counters)) > 1:
+            raise ValueError("Continuation current-invocation model counts conflict.")
+        view.update(record_format="hash_bound_continuation_result", identity_status="verified_parent_and_completion_refs",
+            result_ref={**result_ref, "binding": "completion_sha256_and_selected_parent_refs"}, status=result.get("status") or "unknown",
+            model_call_count=result.get("model_call_count") if type(result.get("model_call_count")) is int else None,
+            current_invocation_model_call_count=counters[0] if counters else None,
+            model_call_budget=result.get("model_call_budget") if isinstance(result.get("model_call_budget"), dict) else None,
+            new_provider_sends=result.get("new_provider_sends") if type(result.get("new_provider_sends")) is int else None,
+            identity_refs={"parent_manifest": manifest_ref, "parent_result": parent_ref, "selection": claim_ref,
+                "fresh_result": fresh_ref, "completion": {"path": str(root / "completion.json"), "sha256": completion_hash}},
+            blockers=[{key: row.get(key) for key in ("owner", "stage", "code", "message", "source_node")}
+                for row in result.get("blockers", []) if isinstance(row, dict)])
+        return view
 
     @classmethod
     def _initial_findings_reassessment(

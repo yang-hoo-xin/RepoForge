@@ -4,13 +4,29 @@ from __future__ import annotations
 from copy import deepcopy
 
 
+_SELECTED_TARGETS_RULE = {
+    "scope": "Planning candidate edit-target selection",
+    "effect": "required_non_noop_edit_per_selected_source_unit",
+    "rule": (
+        "Each selected source unit becomes a required real modification in the ImplementationPlan "
+        "and Patch contract, not merely permission to inspect or optionally edit it. Select only "
+        "the units that actually need modification to satisfy the requested behavior. Membership "
+        "in allowed_edit_evidence_ids and preservation-only or supporting relevance do not require "
+        "an edit. Leave already-correct units unselected; do not manufacture unrelated changes "
+        "or no-op replacements to fill the selected scope."
+    ),
+    "why": "为什么要有它：允许修改与必须修改不同，范围过选会把保持原样的文件变成必改项，阻断本可成立的最小补丁。",
+}
+
+
 def candidate_scope_contract() -> dict:
-    """Disclose configuration only; no question coverage or execution is inferred.
+    """Disclose evaluator configuration and target obligations, not verified results.
 
     为什么要有它：候选源码的选择可以先于行为实验，但配置了检查器不等于所有疑问已解决或行为已通过。
     """
     return {
         "mode": "candidate_edit_scope",
+        "selected_targets_rule": deepcopy(_SELECTED_TARGETS_RULE),
         "behavior_evaluator": {
             "configured": True,
             "execution_status": "not_established_by_planning",
@@ -37,7 +53,9 @@ def candidate_scope_schema(legacy: dict) -> dict:
 
 
 CANDIDATE_SCOPE_INSTRUCTION = (
-    "Select a non-empty candidate edit scope from allowed_edit_evidence_ids for a read-only Patch proposal. "
+    "Select a non-empty necessary edit subset from allowed_edit_evidence_ids for a read-only Patch proposal. "
+    f"Scope: {_SELECTED_TARGETS_RULE['scope']}. {_SELECTED_TARGETS_RULE['rule']} "
+    f"{_SELECTED_TARGETS_RULE['why']} "
     "Reason from current source, the requested behavior and preservation obligations; supporting evidence "
     "is not automatically an edit target. Record unresolved behavior or API questions in verification_questions. "
     "A behavior evaluator is configured for candidate evaluation; its execution, coverage of these questions "

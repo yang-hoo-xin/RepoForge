@@ -114,6 +114,24 @@ def _rewrite_attempt(case):
     case.adapter._replay_attempt_ref = _json_file(case.attempt_path, case.document)
 
 
+def _native_id_history(case, *, legacy):
+    """Create a fixture for old normalization despite an original native ID.
+
+    为什么要有它：历史raw响应和当时解析对象必须同时验证，不能只测试没有原生ID的旧记录。
+    """
+    for index, retained in enumerate(case.responses):
+        retained["tool_calls"] = list(retained["tool_calls"])
+        call = retained["raw_response"]["message"]["tool_calls"][0]
+        call["id"] = f"native-original-{index}"
+        retained["provider_state"]["tool_calls"][0]["id"] = call["id"]
+        if not legacy:
+            retained["tool_calls"][0]["call_id"] = call["id"]
+        ref = _json_file(Path(case.response_refs[index]["path"]), retained)
+        case.response_refs[index] = ref
+        case.document["factory_receipt"]["worker_turns"][index]["response_ref"] = ref
+    _rewrite_attempt(case)
+
+
 def _prepare(case):
     case.adapter._prepare_verified_tool_replay(case.state, case.identity)
 
@@ -278,3 +296,59 @@ def test_replay_retains_original_file_and_consumes_shared_budget(tmp_path):
     with pytest.raises(LocalEntryError, match="PATCH_AGENT_CORRECTION_BUDGET_EXHAUSTED"):
         recorded.complete_turn(_request())
     assert len(sends) == 2
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_native_or_legacy_complete_history_restores_exact_calls_then_live_native_identity(tmp_path, legacy):
+    case = _case(tmp_path)
+    _native_id_history(case, legacy=legacy)
+    originals = {ref["path"]: Path(ref["path"]).read_bytes() for ref in case.response_refs}
+    _prepare(case)
+    sends = []
+    case.raw["message"]["tool_calls"][0]["id"] = "live-new-identity"
+    client = _client(case, sends)
+    case.adapter._install_verified_tool_replay(client)
+    recorded = case.adapter._recording_agent_client(client, "synthetic_verified_replay")
+    for index in range(2):
+        response = recorded.complete_turn(_request())
+        assert [asdict(call) for call in response.tool_calls] == case.responses[index]["tool_calls"]
+        assert response.raw_response == case.responses[index]["raw_response"]
+    assert sends == []
+    receipt = case.adapter.patch_attempt_receipt()
+    assert [row["response_ref"] for row in receipt["worker_turns"]] == case.response_refs
+    response = recorded.complete_turn(_request())
+    assert response.tool_calls[0].call_id == "live-new-identity" and len(sends) == 1
+    assert all(Path(path).read_bytes() == content for path, content in originals.items())
+
+
+@pytest.mark.parametrize("mutation", ["name", "arguments", "id", "mixed", "order", "count"])
+def test_replay_mapping_rejects_changed_calls_or_mixed_identity_policy(tmp_path, mutation):
+    case = _case(tmp_path)
+    _native_id_history(case, legacy=True)
+    retained = deepcopy(case.responses[0])
+    first_raw = retained["raw_response"]["message"]["tool_calls"][0]
+    second_raw = deepcopy(first_raw)
+    second_raw["id"] = "another-original-id"
+    second_raw["function"]["arguments"] = {"binding_id": "another-binding"}
+    retained["raw_response"]["message"]["tool_calls"].append(second_raw)
+    second_identity = json.dumps({"name": second_raw["function"]["name"], "arguments": second_raw["function"]["arguments"]},
+        ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    retained["tool_calls"].append({"name": second_raw["function"]["name"], "arguments": second_raw["function"]["arguments"],
+        "call_id": "ollama-call-" + hashlib.sha256(second_identity).hexdigest()[:16]})
+    if mutation == "name":
+        retained["tool_calls"][1]["name"] = "another-tool"
+    elif mutation == "arguments":
+        retained["tool_calls"][1]["arguments"] = {"binding_id": "changed"}
+    elif mutation == "id":
+        retained["tool_calls"][1]["call_id"] = "invented"
+    elif mutation == "mixed":
+        retained["tool_calls"][1]["call_id"] = second_raw["id"]
+    elif mutation == "order":
+        retained["tool_calls"].reverse()
+    else:
+        retained["tool_calls"].pop()
+    ref = _json_file(Path(case.response_refs[0]["path"]), retained)
+    case.document["factory_receipt"]["worker_turns"][0]["response_ref"] = ref
+    _rewrite_attempt(case)
+    with pytest.raises(LocalEntryError, match="PATCH_REPLAY_RESPONSE_NOT_TOOL_SELECTION"):
+        _prepare(case)

@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 from src.core.trace.trace_context import TraceContext
-from src.libs.evaluator.base_evaluator import BaseEvaluator
+from src.libs.evaluator.base_evaluator import BaseEvaluator, NoneEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +106,7 @@ class GoldenTestCase:
     source_pages: list[int] = field(default_factory=list)
     diagnostic_types: list[str] = field(default_factory=list)
     expected_behavior: str | None = None
+    retrieval_requirement: dict[str, Any] | None = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> GoldenTestCase:
@@ -118,16 +119,24 @@ class GoldenTestCase:
             source_pages=data.get("source_pages", []),
             diagnostic_types=data.get("diagnostic_types", []),
             expected_behavior=data.get("expected_behavior"),
+            retrieval_requirement=deepcopy(data.get("retrieval_requirement")),
         )
 
     def metadata(self) -> dict[str, Any]:
         """Return suite-author facts that are not answer-generation inputs."""
-        return {
+        metadata = {
             "source_sections": list(self.source_sections),
             "source_pages": list(self.source_pages),
             "diagnostic_types": list(self.diagnostic_types),
             "expected_behavior": self.expected_behavior,
         }
+        if self.expected_chunk_ids:
+            metadata["expected_chunk_ids"] = list(self.expected_chunk_ids)
+        if self.expected_sources:
+            metadata["expected_sources"] = list(self.expected_sources)
+        if self.retrieval_requirement is not None:
+            metadata["retrieval_requirement"] = deepcopy(self.retrieval_requirement)
+        return metadata
 
 
 @dataclass
@@ -169,6 +178,7 @@ class QueryResult:
     citation_measurement: MeasurementState = field(
         default_factory=lambda: MeasurementState(status=NOT_APPLICABLE)
     )
+    citation_required: bool = False
     reference_answer: str | None = None
     case_metadata: dict[str, Any] = field(default_factory=dict)
     retrieved_contexts: list[dict[str, Any]] = field(default_factory=list)
@@ -178,6 +188,7 @@ class QueryResult:
     embedding_observations: list[dict[str, Any]] = field(default_factory=list)
     started_at: str | None = None
     finished_at: str | None = None
+    unified_evaluation: dict[str, Any] | None = None
 
 
 @dataclass
@@ -205,6 +216,7 @@ class EvalReport:
     run_metadata: dict[str, Any] = field(default_factory=dict)
     test_set_metadata: dict[str, Any] = field(default_factory=dict)
     comparison_arm: str = "rag_on"
+    unified_evaluation_enabled: bool = False
 
     @property
     def measurement_status(self) -> str:
@@ -224,7 +236,11 @@ class EvalReport:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialise report to dictionary."""
+        from .unified_hooks import summarize_rag_batch
+
         return {
+            "unified_evaluation": summarize_rag_batch(self.query_results)
+            if self.unified_evaluation_enabled else None,
             "evaluator_name": self.evaluator_name,
             "measurement_status": self.measurement_status,
             "test_set_path": self.test_set_path,
@@ -243,6 +259,7 @@ class EvalReport:
             "query_count": len(self.query_results),
             "query_results": [
                 {
+                    "unified_evaluation": deepcopy(qr.unified_evaluation),
                     "case_index": qr.case_index,
                     "query": qr.query,
                     "retrieved_chunk_ids": qr.retrieved_chunk_ids,
@@ -259,6 +276,7 @@ class EvalReport:
                     "embedding_observations": deepcopy(qr.embedding_observations),
                     "evaluator_measurement": qr.evaluator_measurement.to_dict(),
                     "citation_measurement": qr.citation_measurement.to_dict(),
+                    "citation_required": qr.citation_required,
                     "elapsed_ms": round(qr.elapsed_ms, 1),
                     "started_at": qr.started_at,
                     "finished_at": qr.finished_at,
@@ -339,6 +357,7 @@ class EvalRunner:
         expected_metrics: Optional[Sequence[str]] = None,
         synthetic_fallback: bool = True,
         query_service: Any = None,
+        unified_hook: Any = None,
     ) -> None:
         """Initialize EvalRunner.
 
@@ -369,6 +388,7 @@ class EvalRunner:
         self.reranker = reranker
         self.expected_metrics = self._validated_metric_names(expected_metrics or [])
         self.synthetic_fallback = synthetic_fallback
+        self.unified_hook = unified_hook
 
     def run(
         self,
@@ -405,6 +425,10 @@ class EvalRunner:
         if comparison_arm not in {"rag_on", "rag_off"}:
             raise ValueError("comparison_arm must be 'rag_on' or 'rag_off'.")
 
+        input_ref = None
+        if self.unified_hook is not None:
+            from src.observability.evaluation.unified import file_ref
+            input_ref = file_ref(test_set_path)
         test_cases = load_test_set(test_set_path)
         if not test_cases:
             raise ValueError("Golden test set is empty.")
@@ -414,6 +438,15 @@ class EvalRunner:
             raise TypeError("run_metadata must be a JSON-compatible dictionary.")
         # Fail before retrieval or model calls if provenance cannot be exported.
         json.dumps(metadata, allow_nan=False)
+        if self.unified_hook is not None:
+            # Scope: actual loader input, never caller-supplied provenance.
+            # 为什么要有它：登记A与执行B必须在检索/模型调用之前被拒绝，且载入期间改变的题集不能取得旧身份。
+            if file_ref(test_set_path) != input_ref:
+                raise ValueError('EVALUATION_TEST_SET_CHANGED_DURING_LOAD')
+            metadata['evaluation_test_set_ref'] = input_ref
+            self.unified_hook.validate_run(test_cases, metadata)
+            if set(self._declared_metric_names()) & {"faithfulness", "answer_relevancy", "context_precision"}:
+                raise ValueError("UNIFIED_SEMANTIC_EVALUATOR_DUPLICATED")
 
         logger.info(
             "Starting evaluation: %d test cases, evaluator=%s",
@@ -427,6 +460,7 @@ class EvalRunner:
             run_metadata=metadata,
             test_set_metadata=load_test_set_metadata(test_set_path),
             comparison_arm=comparison_arm,
+            unified_evaluation_enabled=self.unified_hook is not None,
         )
         declared_metrics = self._declared_metric_names()
 
@@ -447,6 +481,7 @@ class EvalRunner:
                 report.query_results.append(QueryResult(
                     query=tc.query,
                     case_index=idx,
+                    citation_required=bool(report.test_set_metadata.get("citation_policy")),
                     reference_answer=tc.reference_answer,
                     case_metadata=tc.metadata(),
                     retrieval_measurement=stopped,
@@ -470,6 +505,11 @@ class EvalRunner:
             )
             qr.finished_at = datetime.now(timezone.utc).isoformat()
             qr.started_at = started_at
+            if self.unified_hook is not None:
+                try:
+                    qr.unified_evaluation = self.unified_hook(qr, metadata)
+                except Exception as error:
+                    qr.unified_evaluation = {"status": "evaluation_error", "error_type": type(error).__name__, "report_ref": None}
             report.query_results.append(qr)
             if stop_on_failure and any(
                 stage.status == FAILED_TO_MEASURE
@@ -529,6 +569,7 @@ class EvalRunner:
         """
         t0 = time.monotonic()
         qr = QueryResult(query=test_case.query, case_index=case_index,
+                         citation_required=require_context_citations,
                          reference_answer=test_case.reference_answer,
                          case_metadata=test_case.metadata())
         expected = self._validated_metric_names(expected_metrics or [])
@@ -625,6 +666,12 @@ class EvalRunner:
         # because BaseEvaluator.evaluate requires retrieved_chunks. If every
         # declared metric is not applicable, do not invoke an evaluator merely
         # to manufacture scores outside its prerequisites.
+        # Scope: explicitly disabled legacy scorer. 为什么要有它：统一评测接管时，未启用的旧评分器应为不适用，不能因空分数字典制造假故障。
+        if type(self.evaluator) is NoneEvaluator:
+            qr.evaluator_measurement = MeasurementState(status=NOT_APPLICABLE, mode="disabled")
+            qr.elapsed_ms = (time.monotonic() - t0) * 1000.0
+            return qr
+
         should_evaluate = qr.retrieval_measurement.status != FAILED_TO_MEASURE
         if expected and all(
             status in {FAILED_TO_MEASURE, NOT_APPLICABLE}

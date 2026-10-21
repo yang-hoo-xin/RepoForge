@@ -306,7 +306,7 @@ def test_feature_spec_builder_creates_verifiable_contract() -> None:
     assert spec.non_goals == ()
 
 
-def test_feature_spec_builder_consumes_planning_brief_handoff() -> None:
+def test_feature_spec_builder_keeps_runtime_proof_in_post_change_handoff() -> None:
     plan = RequestPlanner().plan(
         "make Load enable diagnostics",
         target_mod="BetterHitFeedback",
@@ -315,7 +315,7 @@ def test_feature_spec_builder_consumes_planning_brief_handoff() -> None:
 
     spec = FeatureSpecBuilder().build(plan, planning_brief=brief_payload)
 
-    assert "log marker or startup evidence" in spec.evidence_requirements
+    assert "log marker or startup evidence" not in spec.evidence_requirements
     assert "startup_loaded" in spec.runtime_verification_plan
     assert "diagnostic marker observed" in spec.runtime_verification_plan
 

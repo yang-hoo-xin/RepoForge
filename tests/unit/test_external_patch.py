@@ -156,7 +156,7 @@ def test_external_qwen_reuses_source_feedback_revision_and_original_review_witho
     assert result.execution_counts["review"] == result.execution_counts["dry_run"] == 1
     assert result.execution_counts["apply"] == result.execution_counts["build"] == result.execution_counts["runtime"] == 0
     assert _source_hashes(case.inputs.workspace) == before
-    journal = json.loads(Path(result.attempt_receipt["path"]).read_text())
+    journal = json.loads(Path(result.attempt_receipt["path"]).read_text(encoding="utf-8"))
     receipt = journal["factory_receipt"]
     assert receipt["adapter"] == "ExternalQwenPatchAdapter"
     assert receipt["model_identity"]["model_digest"] is None
@@ -200,7 +200,7 @@ def test_initial_external_patch_does_not_claim_unsent_feedback_classes(tmp_path,
     result = _run(case, profile, _consent(profile, feedback=False), request=request)
     assert result.status == "terminal", result.to_dict()
     assert len(handler.wires) == 1 and not handler.reads
-    receipt = json.loads(Path(result.attempt_receipt["path"]).read_text())["factory_receipt"]
+    receipt = json.loads(Path(result.attempt_receipt["path"]).read_text(encoding="utf-8"))["factory_receipt"]
     assert receipt["external_provider_requests"][0]["requested_data_classes"] == list(SOURCE_DISCLOSURE_DATA_CLASSES)
     assert receipt["source_disclosure"]["requested_data_classes"] == list(SOURCE_DISCLOSURE_DATA_CLASSES)
     assert receipt["external_provider_requests"][0]["requested_response_format"] == {"type": "json_object"}
@@ -247,14 +247,14 @@ def test_json_mode_does_not_extract_patch_from_prose_and_retains_exact_response(
     assert result.status != "terminal" and len(handler.wires) == 2
     assert result.execution_counts["review"] == result.execution_counts["dry_run"] == 0
     assert result.execution_counts["build"] == result.execution_counts["runtime"] == 0
-    journal = json.loads(Path(result.attempt_receipt["path"]).read_text())
+    journal = json.loads(Path(result.attempt_receipt["path"]).read_text(encoding="utf-8"))
     receipt = journal["factory_receipt"]
     assert receipt["patch_agent_loop"]["termination"]["code"] == "PATCH_AGENT_REPEATED_INVALID_SUBMISSION"
     assert [row["status"] for row in receipt["patch_agent_loop"]["submission_trace"]] == ["rejected", "rejected"]
     request = receipt["external_provider_requests"][0]
     assert request["requested_response_format"] == {"type": "json_object"}
     assert receipt["model_response"] is None and not receipt["model_responses"]
-    retained = json.loads(Path(receipt["worker_turns"][0]["response_ref"]["path"]).read_text())
+    retained = json.loads(Path(receipt["worker_turns"][0]["response_ref"]["path"]).read_text(encoding="utf-8"))
     assert retained["content"] == handler.outputs[0]
     raw = Path(request["response_body_ref"]["path"]).read_bytes()
     assert json.loads(raw)["choices"][0]["message"]["content"] == handler.outputs[0]
@@ -404,7 +404,7 @@ def test_external_timeout_is_retained_without_retry_or_secret_echo(tmp_path, mon
     result = _run(case, profile, _consent(profile))
     assert result.status != "terminal" and len(handler.wires) == 1
     assert result.execution_counts["model"] == 1
-    journal = json.loads(Path(result.attempt_receipt["path"]).read_text())
+    journal = json.loads(Path(result.attempt_receipt["path"]).read_text(encoding="utf-8"))
     assert "unit-test-secret" not in json.dumps(journal)
     assert journal["factory_receipt"]["source_disclosure"]["occurred"] is None
 
@@ -417,10 +417,10 @@ def test_wrong_response_model_is_retained_and_stops_before_source_tool_execution
     result = _run(case, profile, _consent(profile))
     assert result.first_failure["code"] == "EXTERNAL_PATCH_RESPONSE_MODEL_MISMATCH"
     assert len(handler.wires) == 1
-    receipt = json.loads(Path(result.attempt_receipt["path"]).read_text())["factory_receipt"]
+    receipt = json.loads(Path(result.attempt_receipt["path"]).read_text(encoding="utf-8"))["factory_receipt"]
     first = receipt["worker_turns"][0]
     assert first["status"] == "responded"
-    retained = json.loads(Path(first["response_ref"]["path"]).read_text())
+    retained = json.loads(Path(first["response_ref"]["path"]).read_text(encoding="utf-8"))
     assert retained["raw_response"].get("model") != profile.model
     assert not receipt["patch_agent_loop"].get("observation_trace")
 
@@ -454,7 +454,7 @@ def test_http_json_is_retained_when_agent_turn_parsing_fails(tmp_path, monkeypat
     monkeypatch.setattr("socket.socket.connect", lambda *_: pytest.fail("No real network in this parser rejection test."))
     result = _run(case, profile, _consent(profile))
     assert result.status != "terminal" and len(sent) == 1
-    receipt = json.loads(Path(result.attempt_receipt["path"]).read_text())["factory_receipt"]
+    receipt = json.loads(Path(result.attempt_receipt["path"]).read_text(encoding="utf-8"))["factory_receipt"]
     request = receipt["external_provider_requests"][0]
     assert request["response_received"] is True
     assert request["agent_turn_parse_status"] == "rejected"
@@ -498,7 +498,7 @@ def test_rejected_http_bodies_keep_bounded_truthful_evidence_without_retry(tmp_p
     result = _run(case, profile, _consent(profile))
     assert result.status != "terminal" and len(sent) == 1
     assert result.execution_counts["model"] == 1
-    receipt = json.loads(Path(result.attempt_receipt["path"]).read_text())["factory_receipt"]
+    receipt = json.loads(Path(result.attempt_receipt["path"]).read_text(encoding="utf-8"))["factory_receipt"]
     request = receipt["external_provider_requests"][0]
     assert request["response_received"] is True and request["http_status"] == 200
     assert request["agent_turn_parse_status"] == "not_attempted"

@@ -7,6 +7,80 @@ import yaml
 from scripts.probe_mcp_stdio import probe_stdio
 
 
+def test_real_stdio_argument_feedback_then_corrected_artifact_read(tmp_path):
+    """Exercise the registered knowledge and artifact surface, with no model calls."""
+    import hashlib
+
+    from jsonschema import validate
+
+    from src.mod_agent.artifacts import ArtifactStore
+    from tests.unit.test_controlled_agent_mcp_protocol import _feature_spec_payload
+
+    storage = tmp_path / "storage"
+    storage.mkdir()
+    artifacts = storage / "artifacts"
+    artifacts.mkdir()
+    store = ArtifactStore(artifacts)
+    store.write(feature_id="feature_001", artifact_type="feature_spec", payload=_feature_spec_payload(),
+                trace_refs=["trace_feature_spec"])
+    marker = "MCP_ARGUMENT_SYNTHETIC_SECRET_6357942"
+    settings = yaml.safe_load(Path("config/settings.yaml").read_text(encoding="utf-8"))
+    settings["storage_root"] = str(storage)
+    settings["vector_store"]["persist_directory"] = str(storage / "chroma")
+    settings["llm"].update(provider="ollama", model="unused", base_url="http://127.0.0.1:1")
+    settings["embedding"].update(provider="ollama", model="unused", base_url="http://127.0.0.1:1")
+    settings["observability"]["trace_file"] = str(storage / "trace.jsonl")
+    config = tmp_path / "settings.yaml"
+    config.write_text(yaml.safe_dump(settings), encoding="utf-8")
+
+    def snapshot():
+        return {str(path.relative_to(artifacts)): hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in artifacts.rglob("*") if path.is_file()}
+
+    before = snapshot()
+    assert before
+    calls = [
+        {"name": "query_knowledge_hub", "arguments": {}},
+        {"name": "query_knowledge_hub", "arguments": {"query": marker, "top_k": True, marker: marker}},
+        {"name": "list_features", "arguments": {marker: marker}},
+        {"name": "list_features", "arguments": {}},
+        {"name": "get_feature_status", "arguments": {}},
+        {"name": "get_feature_status", "arguments": {"feature_id": "feature_001"}},
+    ]
+    report = probe_stdio(command=sys.executable, arguments=["-B", "-m", "src.mcp_server.server",
+        "--settings", str(config), "--artifact-store", str(artifacts)], calls=calls,
+        cwd=str(Path.cwd()), output_root=tmp_path / "probe", environment={"MCP_TEST_SECRET": marker}, timeout_seconds=45)
+    assert report["status"] == "completed", report
+    assert report["stdout_protocol_only"] and report["all_processes_exited"]
+    assert report["processes"][0]["exit_code"] == 0 and not report["sdk_forced_terminations"]
+    schemas = {tool["name"]: tool for tool in report["tools"]["tools"]}
+    assert len(schemas) == 11 and "apply_patch" not in schemas
+    for index in (0, 1, 2, 4):
+        response = report["calls"][index]["response"]
+        payload = response["structuredContent"]
+        assert response["isError"] and payload["error"]["code"] == "INVALID_PARAMS"
+        details = payload["error"]["details"]
+        assert details["execution"] == "not_executed" and details["retryable"] is True
+        assert details["issues"] and not details["issues_truncated"]
+        assert json.loads(response["content"][0]["text"]) == payload
+        validate(payload, schemas[calls[index]["name"]]["outputSchema"])
+    first = report["calls"][0]["response"]["structuredContent"]["error"]["details"]
+    assert any(issue["path"] == "/query" and issue["code"] == "required" for issue in first["issues"])
+    second = report["calls"][1]["response"]["structuredContent"]["error"]["details"]
+    assert any(issue["path"] == "/top_k" and issue["expected"]["type"] == "integer" for issue in second["issues"])
+    corrected = report["calls"][3]["response"]
+    assert not corrected["isError"] and corrected["structuredContent"]["schema_version"] == "artifact_read_v1"
+    validate(corrected["structuredContent"], schemas["list_features"]["outputSchema"])
+    assert corrected["structuredContent"]["structuredContent"]["feature_ids"] == ["feature_001"]
+    status_read = report["calls"][5]["response"]
+    assert not status_read["isError"]
+    assert status_read["structuredContent"]["structuredContent"]["feature_id"] == "feature_001"
+    assert status_read["structuredContent"]["artifact_refs"]
+    assert snapshot() == before
+    assert marker not in (tmp_path / "probe/stdout.jsonl").read_text(encoding="utf-8")
+    assert marker not in (tmp_path / "probe/stderr.log").read_text(encoding="utf-8")
+
+
 def test_sdk_client_consumes_real_bm25_and_artifact_results_with_clean_stdout(tmp_path, monkeypatch):
     from tests.unit.test_incremental_ingestion_correctness import _pipeline_factory
     make, _ = _pipeline_factory(tmp_path / "storage", monkeypatch)

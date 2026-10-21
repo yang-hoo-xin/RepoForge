@@ -510,6 +510,13 @@ def _persist_applied_checkpoint(store, state, binding, source_snapshot, applied_
         "applied_source_root": str(applied_source_root),
         "applied_source_snapshot": _copy_source_snapshot(applied_source_root),
     }
+    original_request = state["runtime_summary"].get("deferred_product_request_json")
+    if original_request is not None:
+        from src.mod_agent.domain.csharp_repository_delivery import repository_binding_from_request
+        from src.mod_agent.product_execution import ProductExecutionRequestV1
+        repository = repository_binding_from_request(ProductExecutionRequestV1.from_dict(json.loads(original_request)))
+        if repository is not None:
+            state["runtime_summary"]["reviewed_apply"]["repository_build_and_test"] = repository
     trace = current_trace()
     if trace is not None and "logical_request_id" in trace.context.metadata:
         state["runtime_summary"]["reviewed_apply"]["trace_correlation"] = {
@@ -644,10 +651,16 @@ def continue_reviewed_patch(*, artifact_store_root, checkpoint_ref, resume_paylo
 
     if allow_build is not True:
         raise ValueError("REVIEWED_BUILD_AUTHORIZATION_REQUIRED")
-    if not callable(build_result_factory):
-        raise ValueError("REVIEWED_BUILD_FACTORY_REQUIRED")
     store = ArtifactStore(artifact_store_root)
     checkpoint, source_binding, apply_ref, destination = _reviewed_build_inputs(store, checkpoint_ref, resume_payload)
+    repository_binding = source_binding.get("repository_build_and_test")
+    if repository_binding is not None:
+        from src.mod_agent.domain.csharp_repository_delivery import repository_build_factory
+        if build_result_factory is not None:
+            raise ValueError("REPOSITORY_BUILD_FACTORY_OVERRIDE_FORBIDDEN")
+        build_result_factory = repository_build_factory(repository_binding, destination)
+    if not callable(build_result_factory):
+        raise ValueError("REVIEWED_BUILD_FACTORY_REQUIRED")
     checkpoint_store = WorkflowCheckpointStore(store)
     base = {"entry": "continue-reviewed-patch", "run_id": checkpoint["run_id"],
         "feature_id": checkpoint["feature_id"], "isolated_workspace": str(destination),
@@ -798,6 +811,11 @@ def resume_deferred_approval(*, artifact_store_root, checkpoint_ref, resume_payl
     source = Path(request.source_root)
     destination = Path(request.isolated_workspace_root)
     target = Path(request.isolated_target_root)
+    from src.mod_agent.domain.csharp_repository_delivery import (
+        repository_binding_from_request,
+        validate_repository_changes,
+    )
+    repository_binding = repository_binding_from_request(request)
 
     def verify_source():
         if source_snapshot_sha256(source_snapshot(source)) != request.source_snapshot_sha256:
@@ -811,6 +829,8 @@ def resume_deferred_approval(*, artifact_store_root, checkpoint_ref, resume_payl
         implementation_plan=documents["implementation_plan"], review=documents["proposal_review"], allow_write=False)
     if current["diff_hash"] != dry["diff_hash"] or current["unified_diff_sha256"] != dry["unified_diff_sha256"]:
         raise ValueError("DEFERRED_APPROVAL_CURRENT_DIFF_CHANGED")
+    if repository_binding is not None:
+        validate_repository_changes(repository_binding, destination, current["changes"])
     decision, report_ref = checkpoint_store.resume(checkpoint_ref, resume_payload)
     base.update(resume_report=_artifact_reference(report_ref), diff_hash=dry["diff_hash"])
     if not decision.allowed or approval_decision != "approve":

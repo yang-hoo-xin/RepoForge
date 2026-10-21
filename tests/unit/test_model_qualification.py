@@ -77,7 +77,7 @@ def evidence(tmp_path, monkeypatch, capsys):
             transport = _install_transport(patch, tmp_path / f"wire-{index}", scenario="direct_pass")
             assert main(case.argv) == 0
             output = json.loads(capsys.readouterr().out)
-            assert len(transport.chat_requests) == 1
+            assert len(transport.chat_requests) == 2
         journal_path = Path(output["attempt_receipt"]["path"])
         journal = json.loads(journal_path.read_text(encoding="utf-8"))
         factory = journal["factory_receipt"]
@@ -209,7 +209,7 @@ def test_public_cli_consumes_qualified_profile_and_rejects_explicit_conflict(evi
     transport = _install_transport(monkeypatch, tmp_path / "consumer-wire", scenario="direct_pass")
     assert main(case.argv) == 0
     output = json.loads(capsys.readouterr().out)
-    assert len(transport.chat_requests) == 1
+    assert len(transport.chat_requests) == 2
     journal = json.loads(Path(output["attempt_receipt"]["path"]).read_text(encoding="utf-8"))
     assert journal["factory_receipt"]["model_qualification"]["status"] == "qualified"
     assert journal["qualified_model_routing_ref"] == _ref(evidence["path"])

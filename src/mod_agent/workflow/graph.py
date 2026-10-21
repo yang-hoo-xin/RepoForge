@@ -114,6 +114,7 @@ from src.mod_agent.verification_operations import (
     BuildInvocationProtocolBindingV1,
     EvidenceConsolidationOperationV1,
     NewRuntimeResumeProtocolBindingV1,
+    ObservationRetryAttemptV1,
     RuntimeTerminalizationOperationV1,
     VerificationBuildOperationV1,
     VerificationOperationDeclaration,
@@ -583,6 +584,7 @@ def build_graph(
     interrupt_before: list[str] | None = None,
     interrupt_after: list[str] | None = None,
     feature_spec_revision_projection: Mapping[str, Any] | None = None,
+    domain_feature_spec_factory: Callable[..., FeatureSpec] | None = None,
     approved_feature_spec_revision_payload_hash: str | None = None,
     approved_feature_spec_revision_projection_hash: str | None = None,
     verification_operation: VerificationOperationEnvelope | None = None,
@@ -592,6 +594,7 @@ def build_graph(
     patch_upstream_request: Mapping[str, Any] | None = None,
     enable_patch_upstream_replanning: bool = False,
     product_patch_upstream_execution: Any = None,
+    task_agent_execution: Any = None,
     patch_upstream_evidence_pack_factory: EvidencePackFactory | None = None,
     patch_upstream_planning_target_selection_factory: PlanningTargetSelectionFactory | None = None,
     initial_findings_reassessment_factory: EvidencePackFactory | None = None,
@@ -630,6 +633,15 @@ def build_graph(
             "product_execution_mode must be ProductExecutionGraphModeV1.",
             side_effects_may_have_started=False,
         )
+    if task_agent_execution is not None:
+        from src.mod_agent.task_agent_execution import TaskAgentExecution
+
+        if (not isinstance(task_agent_execution, TaskAgentExecution) or validated_product_execution_mode is None
+                or product_patch_upstream_execution is not None or enable_patch_upstream_replanning
+                or patch_continuation_mode is not None or patch_replanning_context is not None
+                or patch_change_factory is None):
+            raise ProductExecutionContractError("Task execution requires its explicit Product-only technical owner.",
+                side_effects_may_have_started=False)
     validated_planning_continuation_mode = planning_continuation_mode
     if validated_planning_continuation_mode is not None and not isinstance(
         validated_planning_continuation_mode,
@@ -1116,6 +1128,7 @@ def build_graph(
             lambda state: _run_draft_feature_spec(
                 state,
                 artifact_store,
+                domain_feature_spec_factory=domain_feature_spec_factory,
                 revision_projection=feature_spec_revision_projection,
                 approved_payload_hash=approved_feature_spec_revision_payload_hash,
                 approved_projection_hash=(
@@ -1200,6 +1213,7 @@ def build_graph(
                 upstream_planning_factory=(patch_upstream_planning_target_selection_factory
                     if product_patch_upstream_execution is not None else planning_target_selection_factory),
                 product_patch_upstream_execution=product_patch_upstream_execution,
+                task_agent_execution=task_agent_execution,
                 upstream_continues_patch=(patch_replanning_context is not None or product_patch_upstream_execution is not None),
                 proposal_git_binding_factory=effective_proposal_git_binding_factory,
                 patch_change_factory=(patch_replanning_context.factory if patch_replanning_context is not None else patch_change_factory),
@@ -1666,6 +1680,116 @@ def build_graph(
 
 
 
+def build_retained_task_agent_handoff_graph(artifact_store: ArtifactStore, *, admission):
+    """Re-enter only the normal proposal, review and no-write dry-run nodes.
+
+    为什么要有它：恢复已通过候选不应重新执行技术模型，也不能绕过正常提案审查或直接Apply。
+    """
+    from src.mod_agent.local_entry import make_exact_no_write_dry_run_factory
+    from src.mod_agent.retained_task_agent_handoff import RetainedHandoffAdmission
+
+    if type(admission) is not RetainedHandoffAdmission or artifact_store.root.resolve() != admission.root / "a":
+        raise ValueError("RETAINED_TASK_AGENT_GRAPH_ADMISSION_REQUIRED")
+
+    def proposal(state):
+        current = admission.revalidate()
+        if (state["run_id"] != current.manifest["run_id"]
+                or state["request_id"] != current.manifest["request_id"]):
+            raise ValueError("RETAINED_TASK_AGENT_GRAPH_IDENTITY_CHANGED")
+        selected = _copy_state(state)
+        selected["feature_id"] = current.outcome.final_context.feature_spec_ref.feature_id
+        selected["current_stage"] = "implementation_plan"
+        for role in ("feature_spec", "evidence_pack", "implementation_plan"):
+            _record_artifact(selected, role, getattr(current.outcome.final_context, role + "_ref"))
+        return _run_generate_patch_proposal(selected, artifact_store,
+            source_snippet_char_limit=None, retained_task_agent_handoff=current)
+
+    graph = StateGraph(ModAgentState)
+    graph.add_node("generate_patch_proposal", _make_real_graph_node("generate_patch_proposal", proposal))
+    graph.add_node("review_proposal", _make_real_graph_node("review_proposal", lambda state:
+        _run_review_proposal(state, artifact_store, require_executable_patch=True)))
+    graph.add_node("dry_run_apply", _make_real_graph_node("dry_run_apply", lambda state:
+        _run_dry_run_apply(state, artifact_store,
+            dry_run_factory=make_exact_no_write_dry_run_factory(admission.root))))
+    graph.add_edge(START, "generate_patch_proposal")
+    _add_traced_conditional_edges(graph, "generate_patch_proposal",
+        lambda state: "stop" if state["blockers"] else "continue", {"stop": END, "continue": "review_proposal"})
+    _add_traced_conditional_edges(graph, "review_proposal",
+        lambda state: "stop" if state["blockers"] else "continue", {"stop": END, "continue": "dry_run_apply"})
+    graph.add_edge("dry_run_apply", END)
+    return graph.compile()
+
+
+def build_retained_visualsignal_correction_graph(
+    artifact_store: ArtifactStore, *, correction, verifier, expected_identity_hash: str,
+):
+    """One retained binding revision followed by the existing mutation EvalGate.
+
+    Scope: no execution/review/Build/Apply/game nodes are included.
+    为什么要有它：表示修正须重新经过正常评估门禁，不能以重跑Runtime或verification_only绕过已存在的失败。
+    """
+    from src.mod_agent.runtime.retained_visualsignal import (
+        RetainedVisualSignalCorrection,
+        prepare_correction,
+    )
+
+    if type(correction) is not RetainedVisualSignalCorrection or correction.identity_hash != expected_identity_hash:
+        raise ValueError("RETAINED_CORRECTION_ACTION_IDENTITY_CHANGED")
+
+    def correct_binding(state):
+        prepared = prepare_correction(artifact_store, correction, verifier)
+        if correction.identity_hash != expected_identity_hash:
+            raise ValueError("RETAINED_CORRECTION_ACTION_IDENTITY_CHANGED")
+        next_state = ModAgentState(**copy.deepcopy(prepared["source_snapshot"]))
+        next_state["trace_events"] = list(state["trace_events"])
+        _record_artifact(next_state, "workflow_checkpoint", correction.checkpoint_ref)
+        _record_artifact(next_state, "resume_report", correction.accepted_resume_report_ref)
+        payload = prepared["payload"]
+        _validate_runtime_evidence_result_identity(next_state, artifact_store, payload,
+            build=artifact_store.read(correction.build_result_ref)["data"],
+            build_artifact_ref=correction.build_result_ref, requires_verification_only_input=False)
+        artifact_store.preflight_atomic_commit(feature_id=correction.checkpoint_ref.feature_id,
+            artifact_types=("runtime_evidence", "eval_report", "workflow_summary", "blocked_report"))
+        write_result = artifact_store.write_with_result(feature_id=correction.checkpoint_ref.feature_id,
+            artifact_type="runtime_evidence", payload=payload, status="success",
+            upstream_refs=[correction.build_result_ref, correction.feature_spec_ref, correction.prior_runtime_ref,
+                           correction.prior_eval_ref, correction.prior_blocked_ref],
+            exact_revision_upstream_types={"runtime_evidence", "eval_report", "blocked_report"})
+        next_state["current_stage"] = "runtime_evidence"
+        next_state["next_stage"] = "evaluation"
+        next_state["runtime_summary"] = _runtime_summary_from_payload(payload)
+        ready = write_result.outcome == "committed" and write_result.artifact_ref is not None
+        next_state["runtime_summary"].update(runtime_evidence_ready=ready,
+            runtime_evidence_store_result=write_result.to_dict(),
+            retained_binding_correction=payload["retained_binding_correction"],
+            platform_failure_stage=None if ready else "runtime_evidence_correction_store")
+        if write_result.artifact_ref is not None:
+            _record_artifact(next_state, "runtime_evidence", write_result.artifact_ref)
+        if not ready:
+            next_state["blockers"].append({"stage": "runtime_evidence", "code": "RETAINED_CORRECTION_NOT_COMMITTED",
+                                           "message": "Correction revision did not reach a committed Store outcome."})
+        return next_state
+
+    graph = StateGraph(ModAgentState)
+    graph.add_node("correct_retained_runtime_binding", _make_real_graph_node("correct_retained_runtime_binding", correct_binding))
+    graph.add_node("evaluate", _make_real_graph_node("evaluate", lambda state: _run_terminal_node_with_boundary(
+        state, lambda selected: _run_fake_evaluate(selected, artifact_store, use_store_result=True),
+        failure_stage="eval_report_execution", blocker_code="EVAL_REPORT_EXECUTION_FAILED", use_boundary=True)))
+    graph.add_node("done", _make_real_graph_node("done", lambda state: _run_terminal_node_with_boundary(
+        state, lambda selected: _run_workflow_summary(selected, artifact_store, use_store_result=True),
+        failure_stage="workflow_summary_execution", blocker_code="WORKFLOW_SUMMARY_EXECUTION_FAILED", use_boundary=True)))
+    graph.add_node("blocked", _make_stub_graph_node("blocked", StubNodeRunner(artifact_store), use_store_result=True))
+    graph.add_edge(START, "correct_retained_runtime_binding")
+    _add_traced_conditional_edges(graph, "correct_retained_runtime_binding",
+        lambda state: "continue" if state["runtime_summary"].get("runtime_evidence_ready") else "stop",
+        {"continue": "evaluate", "stop": END})
+    _add_traced_conditional_edges(graph, "evaluate", _route_after_terminal_evaluate,
+        {"continue": "done", "blocked": "blocked", "stop": END})
+    graph.add_edge("done", END)
+    graph.add_edge("blocked", END)
+    return graph.compile()
+
+
 def _route_input_summary(state: ModAgentState, from_node: str) -> dict[str, Any]:
     """Project selector fields; never copy blocker messages or model rationale."""
     blockers = state.get("blockers", [])
@@ -1940,6 +2064,7 @@ def _run_draft_feature_spec(
     state: ModAgentState,
     artifact_store: ArtifactStore,
     *,
+    domain_feature_spec_factory: Callable[..., FeatureSpec] | None = None,
     revision_projection: Mapping[str, Any] | None = None,
     approved_payload_hash: str | None = None,
     approved_projection_hash: str | None = None,
@@ -1960,10 +2085,16 @@ def _run_draft_feature_spec(
     plan_data = _read_artifact_data(state, artifact_store, "request_planning_report")
     plan = _request_plan_from_payload(plan_data)
     planning_brief = _read_artifact_data(state, artifact_store, "mod_planning_brief")
-    feature_spec = FeatureSpecBuilder().build(
+    feature_spec = (domain_feature_spec_factory or FeatureSpecBuilder().build)(
         plan,
         planning_brief=planning_brief,
     )
+    # Scope: an explicitly injected domain adapter may change domain defaults, not the user's task.
+    # 为什么要有它：共享外部工程接入需要去掉游戏模板，但不得借适配器替换原始需求或任务身份。
+    if (not isinstance(feature_spec, FeatureSpec)
+            or feature_spec.feature_id != plan.feature_id
+            or feature_spec.user_request != plan.user_request):
+        raise ValueError("DOMAIN_FEATURE_SPEC_TASK_IDENTITY_CHANGED")
     artifact_ref = artifact_store.write(
         feature_id=feature_spec.feature_id,
         artifact_type="feature_spec",
@@ -2145,8 +2276,10 @@ def _run_create_implementation_plan(
     preserved_plan_boundaries = ()
     if state["runtime_summary"].get("patch_upstream_return") and isinstance(
             planning_target_selection_factory, ModelPlanningTargetSelector):
-        from src.mod_agent.model_call_budget import total_only
-        if product_patch_upstream_execution is not None and total_only(product_patch_upstream_execution.budget_snapshot()):
+        from src.mod_agent.model_call_budget import is_meter_only, total_only
+        if product_patch_upstream_execution is not None and (
+                total_only(product_patch_upstream_execution.budget_snapshot())
+                or is_meter_only(product_patch_upstream_execution.budget_snapshot())):
             planning_target_selection_factory = planning_target_selection_factory.for_product_assessment(
                 state["artifact_hashes"]["repair_plan"])
         repair = artifact_store.semantic_read_immutable(_artifact_ref_from_state(state, "repair_plan"))["data"]
@@ -2159,11 +2292,13 @@ def _run_create_implementation_plan(
         if upstream.get("source_worker_response_ref") is not None:
             recommendation["source_worker_response_ref"] = {
                 "sha256": upstream["source_worker_response_ref"]["sha256"]}
+        from src.mod_agent.proposal.behavior_feedback_view import project_execution_reference_paths
+
         planning_target_selection_factory.semantic_feedback = tuple(dict.fromkeys((
             *prior_feedback, *preserved_plan_boundaries,
-            json.dumps({"recommendation": recommendation,
+            json.dumps(project_execution_reference_paths({"recommendation": recommendation,
                 "observed_failure": repair["failure_findings"], "failure_report_ref": upstream["failure_report_ref"],
-                "recommendation_is_not_observation": True}, ensure_ascii=False, sort_keys=True))))
+                "recommendation_is_not_observation": True}), ensure_ascii=False, sort_keys=True))))
     try:
         if prior_feedback is not None and (patch_continuation_mode is not None or product_patch_upstream_execution is not None):
             from src.mod_agent.repair.upstream import prepare_patch_upstream_assessment
@@ -2247,6 +2382,7 @@ def _run_create_implementation_plan(
             evidence_pack=evidence_pack,
             formal_requirement_coverage_required=formal_requirement_coverage_required,
             planning_target_evidence_ids=planning_target_evidence_ids,
+            constraint_policy=getattr(planning_target_selection_factory, "constraint_policy", None),
         )
         from src.mod_agent.planning.target_correction import correct_unsafe_target_selection
 
@@ -2275,6 +2411,17 @@ def _run_create_implementation_plan(
                     )
                 ),
             )
+            if implementation.constraint_context is not None:
+                from src.mod_agent.planning.constraint_context import build_constraint_context
+
+                # Scope: synchronize explicit experimental context with retained caller constraints.
+                # 为什么要有它：未知来源的既有边界不能被文本巧合降级；重规划也不能让来源上下文与实际硬边界分离。
+                context = implementation.constraint_context
+                context = build_constraint_context(feature_spec=feature_spec.to_artifact_payload(),
+                    evidence_pack=evidence_pack, plan_boundaries=context["source_plan_boundaries"],
+                    retained_hard_boundaries=(*context["retained_hard_boundaries"], *boundary_feedback))
+                implementation = replace(implementation, constraint_context=context,
+                    side_effect_boundaries=tuple(context["hard_boundaries"]))
     except PlanningTargetSelectionError as exc:
         implementation = ImplementationPlanner._blocked(
             feature_id=feature_spec.feature_id,
@@ -2419,11 +2566,15 @@ def _valid_patch_agent_loop_receipt(
     policy = value.get("policy", {})
     if not isinstance(policy, Mapping):
         return False
+    metered = policy.get("model_call_budget_policy") == "meter_only"
+    if metered and any(policy.get(name, False) is not None for name in (
+            "max_tool_rounds", "max_total_model_turns", "max_observation_bytes")):
+        return False
     read_limit = policy.get("max_tool_rounds", 3)
     require_read = policy.get("require_source_inspection", True)
     reuse_enabled = policy.get("reuse_covered_source_observations", False)
-    if (type(read_limit) is not int or read_limit < 0 or type(require_read) is not bool
-            or (require_read and read_limit == 0)
+    if (not metered and (type(read_limit) is not int or read_limit < 0)
+            or type(require_read) is not bool or (not metered and require_read and read_limit == 0)
             or type(reuse_enabled) is not bool):
         return False
     origin = value.get("prior_worker_budget", {
@@ -2454,14 +2605,14 @@ def _valid_patch_agent_loop_receipt(
         byte_limit = policy.get("max_observation_bytes", 32_768)
         model_limit = policy.get("max_total_model_turns", 5)
         if (type(extra_bytes) is not int or extra_bytes < 0
-                or type(byte_limit) is not int or byte_limit < 0
-                or type(model_limit) is not int or not 1 <= model_limit <= 5
+                or not metered and (type(byte_limit) is not int or byte_limit < 0)
+                or not metered and (type(model_limit) is not int or not 1 <= model_limit <= 5)
                 or type(model_call_count) is not int or model_call_count < 1
-                or model_call_count + origin["consumed_model_turns"] > model_limit
+                or not metered and model_call_count + origin["consumed_model_turns"] > model_limit
                 or any(not isinstance(phase, Mapping) or type(phase.get("total_observation_bytes")) is not int
                     or phase["total_observation_bytes"] < 0 for phase in phases)
-                or origin["consumed_observation_bytes"] + extra_bytes
-                    + sum(phase["total_observation_bytes"] for phase in phases) > byte_limit):
+                or not metered and (origin["consumed_observation_bytes"] + extra_bytes
+                    + sum(phase["total_observation_bytes"] for phase in phases) > byte_limit)):
             return False
     recovery_reads = 0
     correction_calls = 0
@@ -2511,7 +2662,7 @@ def _valid_patch_agent_loop_receipt(
         and len(usage) == loop_model_turns
         and type(tool_rounds) is int
         and (1 if require_read else 0) <= tool_rounds + origin["consumed_tool_rounds"]
-        and origin["consumed_tool_rounds"] + tool_rounds + recovery_reads <= read_limit
+        and (metered or origin["consumed_tool_rounds"] + tool_rounds + recovery_reads <= read_limit)
         and isinstance(observations, list)
         and _valid_patch_read_accounting(value, reuse_enabled=reuse_enabled)
         and all(
@@ -2723,9 +2874,10 @@ def _run_generate_patch_with_upstream(state, artifact_store, *, enable_upstream_
     if enable_upstream_replanning and product_patch_upstream_execution is not None and not isinstance(
             upstream_planning_factory, ModelPlanningTargetSelector):
         effects = {"planning": "provider_unavailable_stop", "evidence": "provider_unavailable_stop"}
-    from src.mod_agent.model_call_budget import total_only
+    from src.mod_agent.model_call_budget import is_meter_only, total_only
     if (product_patch_upstream_execution is not None and product_patch_upstream_execution.replan_count
-            and not total_only(product_patch_upstream_execution.budget_snapshot())):
+            and not (total_only(product_patch_upstream_execution.budget_snapshot())
+                     or is_meter_only(product_patch_upstream_execution.budget_snapshot()))):
         effects = {"planning": "record_and_stop", "evidence": "record_and_stop"}
     binder = getattr(product_patch_upstream_execution or kwargs.get("patch_change_factory"), "bind_upstream_effects", None)
     if callable(binder):
@@ -2776,9 +2928,53 @@ def _run_generate_patch_proposal(
         PatchContinuationAttemptRecorder | None
     ) = None,
     patch_continuation_max_model_calls: int = 1,
+    task_agent_execution: Any = None,
+    retained_task_agent_handoff: Any = None,
 ) -> ModAgentState:
     saved_patch = None
     saved_candidate = None
+    task_handoff = None
+    if retained_task_agent_handoff is not None:
+        from src.mod_agent.retained_task_agent_handoff import RetainedHandoffAdmission
+
+        if (type(retained_task_agent_handoff) is not RetainedHandoffAdmission
+                or task_agent_execution is not None or patch_change_factory is not None
+                or patch_continuation_mode is not None):
+            raise ValueError("RETAINED_TASK_AGENT_GRAPH_OWNER_CONFLICT")
+        admitted = retained_task_agent_handoff.revalidate()
+        task_handoff, outcome = admitted.handoff, admitted.outcome
+        for role in ("feature_spec", "evidence_pack", "implementation_plan"):
+            if _artifact_ref_from_state(state, role) != getattr(outcome.final_context, role + "_ref"):
+                raise ValueError("RETAINED_TASK_AGENT_GRAPH_CONTEXT_CHANGED")
+        patch_change_factory = lambda *_args: task_handoff.changes
+    if task_agent_execution is not None:
+        from src.mod_agent.task_agent_execution import TaskAgentPatchOutcome
+        from src.mod_agent.task_agent_tools import TaskAgentContext
+
+        initial_context = TaskAgentContext(**{role + "_ref": _artifact_ref_from_state(state, role)
+            for role in ("feature_spec", "evidence_pack", "implementation_plan")})
+        outcome = patch_change_factory(state,
+            _read_artifact_data(state, artifact_store, "implementation_plan"),
+            _read_artifact_data(state, artifact_store, "evidence_pack"))
+        if not isinstance(outcome, TaskAgentPatchOutcome) or outcome.initial_context != initial_context:
+            raise ProductExecutionContractError("Task technical outcome does not identify its actual inputs.",
+                side_effects_may_have_started=True)
+        if outcome.status != "candidate_ready":
+            next_state = _copy_state(state)
+            next_state["runtime_summary"]["task_agent_execution"] = outcome.to_dict()
+            next_state["blockers"].append({"stage": "generate_patch_proposal",
+                "code": outcome.termination.get("code", "TASK_AGENT_EXECUTION_BLOCKED"),
+                "message": "Technical execution did not produce a current qualified candidate.",
+                "execution_ref": outcome.execution_ref, "unknown_effects": outcome.unknown_effects})
+            return next_state
+        task_handoff = task_agent_execution.validate_handoff(outcome, expected_initial_context=initial_context)
+        # Scope: admitted final refs only; the original builder and all delivery nodes remain owners.
+        # 为什么要有它：B可能已重新调查和规划，旧Plan不能绑定新候选；候选通过也不能替代Review、审批或正式Build。
+        state = _copy_state(state)
+        for role in ("feature_spec", "evidence_pack", "implementation_plan"):
+            _record_artifact(state, role, getattr(task_handoff.final_context, role + "_ref"))
+        state["runtime_summary"]["task_agent_execution"] = outcome.to_dict()
+        patch_change_factory = lambda *_args: task_handoff.changes
     if patch_continuation_mode is not None and patch_continuation_mode.candidate_reverification_selection is not None:
         admitted = preflight_patch_continuation(patch_continuation_mode, artifact_store=artifact_store)
         if (patch_change_factory is not None or patch_continuation_max_model_calls != 0
@@ -2954,6 +3150,10 @@ def _run_generate_patch_proposal(
             "generated_against_snapshot_sha256": saved_patch["source_snapshot_sha256"],
             "current_snapshot_sha256": saved_patch["source_snapshot_sha256"],
         })
+    if task_handoff is not None:
+        proposal = replace(proposal, context_pack={**proposal.context_pack, "task_agent_lineage": {
+            "execution_ref": task_handoff.execution_ref, "candidate_ref": outcome.candidate_ref,
+            "check_ref": outcome.check_ref, "approval_inherited": False, "whole_task_delivered": False}})
     artifact_ref = artifact_store.write(
         feature_id=proposal.feature_id,
         artifact_type="patch_proposal",
@@ -4747,9 +4947,13 @@ def _route_runtime_continuation_entry(
         raise ValueError(
             "Runtime continuation state changed the accepted ResumeReport ref."
         )
-    checkpoint = artifact_store.read_for_stage(
+    checkpoint = WorkflowCheckpointStore(artifact_store).read_accepted_runtime_checkpoint(
         checkpoint_ref,
-        consumer_stage="resume",
+        resume_report_ref=report_ref,
+        resume_id=protocol.resume_id,
+        approved_by=protocol.approved_by,
+        runtime_action_scope=dict(envelope.variant_payload.runtime_action_scope),
+        allow_prior_runtime_state=isinstance(envelope.attempt_policy, ObservationRetryAttemptV1),
     )["data"]
     report = artifact_store.read(report_ref)["data"]
     if (
@@ -6453,6 +6657,7 @@ def _node_artifact_refs(state: ModAgentState, node_name: str) -> list[str]:
         "dry_run_apply": "dry_run_result",
         "build": "build_result",
         "collect_runtime_evidence": "runtime_evidence",
+        "correct_retained_runtime_binding": "runtime_evidence",
         "resolve_runtime_binding": "binding_resolution",
         "create_repair_plan": "repair_plan",
         "evaluate": "eval_report",

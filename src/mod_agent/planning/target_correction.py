@@ -27,4 +27,4 @@ def correct_unsafe_target_selection(*, implementation, selector, feature_spec, e
             open_questions=(*implementation.open_questions, error.reason))
     return ImplementationPlanner().build(feature_spec=feature_spec, evidence_pack=evidence_pack,
         formal_requirement_coverage_required=formal_requirement_coverage_required,
-        planning_target_evidence_ids=selected)
+        planning_target_evidence_ids=selected, constraint_policy=child.constraint_policy)

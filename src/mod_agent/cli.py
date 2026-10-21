@@ -117,6 +117,15 @@ class PlanRequestResult:
     mod_planning_brief: dict[str, object]
 
 
+def _task_agent_edit_paths(value):
+    if value is None:
+        return ()
+    parsed = json.loads(value)
+    if not isinstance(parsed, list) or not parsed or any(type(item) is not str for item in parsed):
+        raise ValueError("RUN_REQUEST_TASK_AGENT_EDIT_SCOPE_INVALID")
+    return tuple(parsed)
+
+
 def _apply_failure_cli_details(error):
     from .execution.patch_apply import patch_apply_failure_details
 
@@ -200,14 +209,22 @@ def _continue_reviewed_build_from_cli(args):
     )
 
     if (not args.allow_build or not all((args.artifact_store_root, args.feature_id,
-            args.checkpoint_path, args.checkpoint_hash, args.resume_payload, args.build_profile))):
+            args.checkpoint_path, args.checkpoint_hash, args.resume_payload))):
         raise ValueError("REVIEWED_BUILD_EXPLICIT_CONFIGURATION_REQUIRED")
     if any((args.confirm, args.workspace_root, args.run_id, args.isolated_root)):
         raise ValueError("REVIEWED_BUILD_APPLY_ARGUMENTS_FORBIDDEN")
     checkpoint_ref = ArtifactRef(feature_id=args.feature_id, artifact_type="workflow_checkpoint",
         path=args.checkpoint_path, artifact_hash=args.checkpoint_hash)
     payload = _load_reviewed_build_resume(args.resume_payload)
-    _, _, _, destination = _reviewed_build_inputs(ArtifactStore(args.artifact_store_root), checkpoint_ref, payload)
+    _, source_binding, _, destination = _reviewed_build_inputs(ArtifactStore(args.artifact_store_root), checkpoint_ref, payload)
+    if source_binding.get("repository_build_and_test") is not None:
+        if args.build_profile is not None:
+            raise ValueError("REPOSITORY_BUILD_PROFILE_OVERRIDE_FORBIDDEN")
+        return continue_reviewed_patch(artifact_store_root=args.artifact_store_root,
+            checkpoint_ref=checkpoint_ref, resume_payload=payload, allow_build=True,
+            execution_trace_configuration=_execution_trace_configuration(args))
+    if not args.build_profile:
+        raise ValueError("REVIEWED_BUILD_EXPLICIT_CONFIGURATION_REQUIRED")
     profile = _load_reviewed_build_profile(args.build_profile, destination)
 
     def build_applied(selected_destination, feature_id, mode):
@@ -632,6 +649,14 @@ def build_parser(
         description="RepoForge — evidence-grounded Coding Agent CLI",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+    retained_handoff = subparsers.add_parser("resume-retained-task-agent-handoff",
+        help="Recover an already checked native candidate to exact approval without models, Build or Apply.")
+    retained_handoff.add_argument("--execution-config", required=True)
+    retained_handoff.add_argument("--run-root", required=True)
+    retained_handoff.add_argument("--run-id", required=True)
+    retained_handoff.add_argument("--execution-path", required=True)
+    retained_handoff.add_argument("--execution-sha256", required=True)
+    retained_handoff.add_argument("--attempt-id", required=True)
 
     plan_parser = subparsers.add_parser(
         "plan-request",
@@ -1127,6 +1152,8 @@ def build_parser(
     )
     run_parser.add_argument("description", help="Natural-language Mod request.")
     run_parser.add_argument("--target-project", required=True)
+    run_parser.add_argument("--repository-profile",
+        help="Explicit SDK-style C# repository build/test profile; keeps the existing product workflow and disables game scope.")
     run_parser.add_argument("--game-folder-build-binding", help="JSON with the existing exact read-only GameFolder binding.")
     run_parser.add_argument("--external-patch-profile", help="Explicit existing external Qwen worker profile JSON.")
     run_parser.add_argument("--run-id", help="Explicit identity for one new product invocation.")
@@ -1167,8 +1194,16 @@ def build_parser(
         help="Persist the completed exact Dry-run and pause before asking for or performing Apply; resume through apply-patch --resume-approval.")
     run_parser.add_argument("--task-model-call-limit", type=int,
         help="Positive total model-call limit shared across this product task.")
-    run_parser.add_argument("--model-call-budget-policy", choices=("task_total_only", "stage_and_total"),
-        default="task_total_only", help="Task total is the default hard limit; stage_and_total reproduces legacy bounded runs.")
+    run_parser.add_argument("--model-call-budget-policy", choices=("task_total_only", "stage_and_total", "meter_only"),
+        default="task_total_only", help="meter_only counts resources without quotas; other policies reproduce bounded runs.")
+    run_parser.add_argument("--technical-executor", choices=("workflow", "task_agent"), default="workflow",
+        help="Explicit experimental technical executor; workflow remains the default.")
+    run_parser.add_argument("--constraint-policy", choices=("source_priority_v1",),
+        help="Separate model-derived preservation hints from user and platform constraints.")
+    run_parser.add_argument("--task-agent-edit-paths",
+        help="JSON list of operator-authorized project-relative existing files; required only for task_agent.")
+    run_parser.add_argument("--task-agent-candidate-mode", choices=("baseline", "current"), default="baseline",
+        help="Experimental task_agent revision base; baseline preserves the existing candidate protocol.")
     run_parser.add_argument("--stage-model-call-limits",
         help="JSON object with the existing requirement_projection, requirement_findings, planning, initial_patch and repair call limits.")
     run_parser.add_argument("--dependency-api-config", help="Explicit hash-bound metadata/IL inspector configuration for the run-local GameFolder copy.")
@@ -1719,6 +1754,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser = build_parser(_prepare_continuation=prepare_continuation)
     args = parser.parse_args(selected_argv)
+
+    # Scope: opt-in host resource grant, never an authorization to build or edit.
+    # 为什么要有它：普通CLI与冻结入口必须遵守同一构建总额，不能绕过父进程批准的资源上限。
+    from src.mod_agent.build.execution_budget import BuildBudgetError, install_build_budget_from_environment
+    try:
+        install_build_budget_from_environment()
+    except (BuildBudgetError, OSError, ValueError) as error:
+        print(json.dumps({"status": "BLOCKED", "command": args.command,
+            "code": str(error) if isinstance(error, BuildBudgetError) else "BUILD_BUDGET_CONFIGURATION_NOT_ADMITTED",
+            "process_launched": False, "source_modified": False}, ensure_ascii=False))
+        return 2
 
     if args.command == "fresh-coverage":
         fresh_coverage_started = time.perf_counter()
@@ -2529,6 +2575,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
 
+    if args.command == "resume-retained-task-agent-handoff":
+        from src.mod_agent.local_entry import resume_retained_task_agent_handoff
+
+        try:
+            result = resume_retained_task_agent_handoff(execution_config=args.execution_config,
+                run_root=args.run_root, run_id=args.run_id,
+                ready_execution_ref={"path": str(Path(args.execution_path).resolve()), "sha256": args.execution_sha256},
+                attempt_id=args.attempt_id)
+        except (OSError, ValueError, KeyError) as error:
+            print(json.dumps({"status": "blocked", "command": args.command,
+                "reason": str(error), "new_provider_sends": 0, "new_builds": 0,
+                "actual_write_performed": False}, ensure_ascii=False, indent=2))
+            return 2
+        print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0 if result.get("status") in {"awaiting_approval", "delivered"} else 2
+
     if args.command == "run-request":
         if args.resume_initial_findings is not None:
             from src.mod_agent.initial_findings_continuation import (
@@ -2585,6 +2647,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = run_local_request(
                 description=args.description,
                 target_project=args.target_project,
+                repository_profile_path=args.repository_profile,
                 run_id=args.run_id,
                 request_id=args.request_id,
                 game_folder_build_binding=dependency_binding,
@@ -2619,6 +2682,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 compress_findings_input=args.compress_findings_input,
                 task_model_call_limit=args.task_model_call_limit,
                 model_call_budget_policy=args.model_call_budget_policy,
+                **({"technical_executor": args.technical_executor,
+                    "constraint_policy": args.constraint_policy,
+                    "task_agent_candidate_mode": args.task_agent_candidate_mode,
+                    "task_agent_allowed_edit_paths": _task_agent_edit_paths(args.task_agent_edit_paths)}
+                   if (args.technical_executor != "workflow" or args.constraint_policy is not None
+                       or args.task_agent_edit_paths is not None or args.task_agent_candidate_mode != "baseline") else {}),
                 stage_model_call_limits=stage_limits,
                 execution_trace_configuration=_execution_trace_configuration(args),
                 defer_approval=bool(args.defer_approval),

@@ -27,6 +27,31 @@ def test_invalid_arguments_never_enter_handler(arguments):
     assert "CANARY" not in result.model_dump_json()
 
 
+def test_invalid_argument_feedback_supports_correction_without_executing_or_echoing_input():
+    invoked = []
+
+    async def handler(number):
+        invoked.append(number)
+        return {"number": number}
+
+    protocol = ProtocolHandler("test", "1")
+    protocol.register_tool("number", "number", {"type": "object", "required": ["number"],
+        "properties": {"number": {"type": "integer", "minimum": 1, "maximum": 20}}}, handler)
+    invalid = asyncio.run(protocol.execute_tool("number", {"number": "private-input-value", "private-input-key": "secret"}))
+    feedback = invalid.structuredContent["error"]["details"]
+    assert feedback["execution"] == "not_executed" and feedback["retryable"] is True
+    assert any(issue["path"] == "/number" and issue["code"] == "type"
+               and issue["expected"]["type"] == "integer" for issue in feedback["issues"])
+    assert any(issue["code"] == "additional_properties" for issue in feedback["issues"])
+    assert not invoked
+    assert "private-input" not in invalid.model_dump_json()
+    validate(invalid.structuredContent, ERROR_SCHEMA)
+    assert json.loads(invalid.content[0].text) == invalid.structuredContent
+    corrected = asyncio.run(protocol.execute_tool("number", {"number": 3}))
+    assert not corrected.isError and corrected.structuredContent == {"number": 3}
+    assert invoked == [3]
+
+
 def test_internal_type_error_not_misclassified_or_exposed(caplog):
     marker = "synthetic-secret-canary-123456"
     async def handler():

@@ -31,6 +31,12 @@ _WORKER_FILES = (
     "proposal/behavior_feedback_view.py",  # 为什么要有它：反馈投影会改变worker实际收到的事实表示，仅改helper也必须改变worker身份。
     "proposal/observation_value_refs.py",  # 为什么要有它：内联引用的编码和还原影响实际反馈，独立修改该模块必须使旧资格身份失效。
     "proposal/repair_diagnosis.py",  # 为什么要有它：可选诊断的输入供给影响真实修订与调用成本，需绑定执行版本。
+    "candidate_execution.py",  # 为什么要有它：共同候选物化与验收逻辑影响真实结果，必须纳入运行版本。
+    "task_agent_loop.py", "task_agent_tools.py", "task_agent_owners.py",  # 为什么要有它：实验执行器的工具调度、预算与实际动作也属于本轮实现身份。
+    "comparison_checkpoint.py", "proposal/failure_state.py",  # 为什么要有它：检查点准入与失败计数影响继承历史后的可执行额度。
+    "planning/constraint_context.py",  # 为什么要有它：约束来源投影会改变模型实际输入，独立修改也须改变运行版本。
+    "repair/upstream.py",  # 为什么要有它：原失败是否进入重新调查会改变实际决策，不能沿用缺失该反馈路径的worker身份。
+    "proposal/tool_argument_feedback.py",  # 为什么要有它：只读工具参数纠错的反馈与一次额度影响worker实际执行，单独修改helper也必须使旧身份失效。
     "evidence/reassessment.py",  # 为什么要有它：相同证据的复用会改变worker续接与模型调用，复用实现漂移也须绑定到执行身份。
     "request_patch_execution.py",  # 为什么要有它：多段worker历史的累计偏移决定真实续接预算，不能只改该所有者而沿用旧执行身份。
     "build/nuget.py",  # 为什么要有它：这段原由local_entry覆盖的实现迁出后，构建代码漂移仍须改变worker身份。
@@ -130,9 +136,10 @@ def _verify_materialized_response(*, feature: dict[str, Any], evidence: dict[str
 
     try:
         obligations = _patch_generation_obligation_projection(
-            feature_spec=feature, implementation=plan, planned_changes=list(plan["proposed_changes"]))
+            feature_spec=feature, implementation=plan, planned_changes=list(plan["proposed_changes"]), evidence_pack=evidence)
         generator = LLMExactPatchGenerator(None)
         prepared = generator.prepare_native_contract(
+            **({"constraint_context": obligations["constraint_context"]} if "constraint_context" in obligations else {}),
             user_request=feature["user_request"], evidence_items=_external_evidence_items(evidence["items"]),
             binding_registry=plan["binding_registry"], constraints=obligations["side_effect_boundaries"],
             target_behavior=obligations["target_behavior"], acceptance_criteria=obligations["acceptance_criteria"],

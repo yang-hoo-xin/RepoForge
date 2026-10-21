@@ -199,7 +199,7 @@ def prepare_initial_findings_continuation(*, run_root, run_id, execution_config=
             raise ValueError("INITIAL_FINDINGS_EXECUTION_CONFIG_INVALID") from exc
         stage_ref, stage_limits = (_file(parsed.stage_model_call_limits)
                                    if parsed.stage_model_call_limits is not None else (None, None))
-        from src.mod_agent.model_call_budget import total_only
+        from src.mod_agent.model_call_budget import is_meter_only, total_only
         recorded_limits = manifest["ollama_patch_generation_profile"]
         if (parsed.run_id != run_id or parsed.request_id != manifest["request_id"]
                 or Path(parsed.workspace_root).resolve() / run_id != root
@@ -212,7 +212,8 @@ def prepare_initial_findings_continuation(*, run_root, run_id, execution_config=
                 or parsed.ollama_context_window != recorded_limits["context_window"]
                 or parsed.ollama_max_output_tokens != recorded_limits["output_budget"]
                 or (parsed.ollama_timeout_seconds is not None and parsed.ollama_timeout_seconds != recorded_limits["timeout_seconds"])
-                or not total_only(budget) and stage_limits != {key: row["maximum"] for key, row in budget["by_stage"].items()}):
+                or not (total_only(budget) or is_meter_only(budget))
+                and stage_limits != {key: row["maximum"] for key, row in budget["by_stage"].items()}):
             raise ValueError("INITIAL_FINDINGS_EXECUTION_CONFIG_CHANGED")
         configuration_refs = [config_ref, *([stage_ref] if stage_ref is not None else [])]
         for path in (parsed.settings, parsed.patch_worker_config, parsed.game_folder_build_binding):
@@ -413,10 +414,10 @@ def prepare_initial_findings_continuation(*, run_root, run_id, execution_config=
             raise ValueError("INITIAL_FINDINGS_CORRECTION_REVISION_NOT_PREPARED")
     stage = "requirement_findings"
     blockers = list(configuration_blockers)
-    if budget["remaining"] < 1:
+    from src.mod_agent.model_call_budget import is_meter_only, total_only
+    if not is_meter_only(budget) and budget["remaining"] < 1:
         blockers.append("PRODUCT_MODEL_CALL_BUDGET_EXHAUSTED")
-    from src.mod_agent.model_call_budget import total_only
-    if not total_only(budget) and budget["by_stage"][stage]["remaining"] < 1:
+    if not (total_only(budget) or is_meter_only(budget)) and budget["by_stage"][stage]["remaining"] < 1:
         blockers.append("PRODUCT_STAGE_MODEL_CALL_BUDGET_EXHAUSTED")
     packet = {"run_id": run_id, "request_id": manifest["request_id"], "feature_spec_ref": selected[0],
               "parent_refs": references, "configuration_refs": configuration_refs,
@@ -660,9 +661,15 @@ def preview_initial_findings_execution(*, run_root, run_id, execution_config, al
                "dependency_api", "provider_backend", "resume_mode",
                "initial_reassessment_max_cycles", "include_downstream_preflight",
                "request_interpretation_revision", "model_call_budget_policy"}
-    from src.mod_agent.model_call_budget import STAGE_AND_TOTAL, TASK_TOTAL_ONLY, as_task_total_only
+    from src.mod_agent.model_call_budget import (
+        METER_ONLY,
+        STAGE_AND_TOTAL,
+        TASK_TOTAL_ONLY,
+        as_meter_only,
+        as_task_total_only,
+    )
     policy = allocation.get("model_call_budget_policy", STAGE_AND_TOTAL)
-    required = {"max_execution_seconds"} | (set() if policy == TASK_TOTAL_ONLY else {"stage_model_call_limits"})
+    required = {"max_execution_seconds"} | (set() if policy in {TASK_TOTAL_ONLY, METER_ONLY} else {"stage_model_call_limits"})
     if set(allocation) - allowed or not required.issubset(allocation):
         raise ValueError("INITIAL_FINDINGS_ALLOCATION_SHAPE_INVALID")
     if policy not in {STAGE_AND_TOTAL, TASK_TOTAL_ONLY}:
@@ -726,7 +733,7 @@ def preview_initial_findings_execution(*, run_root, run_id, execution_config, al
     selected_total = (sum(maximums.values())
                       if isinstance(maximums, dict)
                       and all(type(value) is int for value in maximums.values()) else -1)
-    if policy != TASK_TOTAL_ONLY and (not isinstance(maximums, dict) or set(maximums) != set(original["by_stage"])
+    if policy not in {TASK_TOTAL_ONLY, METER_ONLY} and (not isinstance(maximums, dict) or set(maximums) != set(original["by_stage"])
             or any(type(value) is not int or value < max(1, original["by_stage"][key]["consumed"])
                    for key, value in maximums.items())
             or (selected_total < original["maximum"] if extended_total_allowed
@@ -735,13 +742,18 @@ def preview_initial_findings_execution(*, run_root, run_id, execution_config, al
     seconds = allocation["max_execution_seconds"]
     if type(seconds) is not int or not 1 <= seconds <= 3600:
         raise ValueError("INITIAL_FINDINGS_TIME_SCOPE_INVALID")
-    effective = as_task_total_only(original) if policy == TASK_TOTAL_ONLY else deepcopy(original)
-    if policy != TASK_TOTAL_ONLY:
+    effective = (as_meter_only(original) if policy == METER_ONLY else
+                 as_task_total_only(original) if policy == TASK_TOTAL_ONLY else deepcopy(original))
+    if policy not in {TASK_TOTAL_ONLY, METER_ONLY}:
         for key, maximum in maximums.items():
             effective["by_stage"][key].update(maximum=maximum, remaining=maximum - effective["by_stage"][key]["consumed"])
         effective.update(maximum=selected_total, remaining=selected_total - effective["consumed"])
     blockers = [item for item in prepared["blockers"] if item != "PRODUCT_STAGE_MODEL_CALL_BUDGET_EXHAUSTED"]
-    if policy != TASK_TOTAL_ONLY and effective["by_stage"]["requirement_findings"]["remaining"] < 1:
+    if policy == METER_ONLY:
+        # Scope: preserve historical use and non-resource failures while changing the selected counting policy.
+        # 为什么要有它：计量模式不继承旧实验额度阻断，但来源、执行故障和明确进程截止不能因此被放行。
+        blockers = [item for item in blockers if item != "PRODUCT_MODEL_CALL_BUDGET_EXHAUSTED"]
+    if policy not in {TASK_TOTAL_ONLY, METER_ONLY} and effective["by_stage"]["requirement_findings"]["remaining"] < 1:
         blockers.append("PRODUCT_STAGE_MODEL_CALL_BUDGET_EXHAUSTED")
     if seconds < prepared["continuation_input"]["model_limits"]["timeout_seconds"]:
         blockers.append("INITIAL_FINDINGS_TIME_WINDOW_CANNOT_FIT_ONE_CALL")
@@ -880,7 +892,10 @@ def read_initial_findings_execution(run_root, *, claim_name=None):
         raise ValueError("INITIAL_FINDINGS_CONTINUATION_PARENT_CHANGED")
     recorded_budget = _budget(receipt["model_call_budget"])
     parent_budget = _budget(parent["model_call_budget"])
-    if (recorded_budget["maximum"] < parent_budget["maximum"]
+    from src.mod_agent.model_call_budget import is_meter_only
+    maximum_reduced = (not is_meter_only(recorded_budget) and (
+        is_meter_only(parent_budget) or recorded_budget["maximum"] < parent_budget["maximum"]))
+    if (maximum_reduced
             or recorded_budget["consumed"] < parent_budget["consumed"]
             or set(recorded_budget["by_stage"]) != set(parent_budget["by_stage"])
             or any(recorded_budget["by_stage"][key]["consumed"]

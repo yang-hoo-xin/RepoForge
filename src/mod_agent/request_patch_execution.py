@@ -145,9 +145,11 @@ def admit_product_repair_context(*, artifact_store, workspace_root, state,
     response_ref = {"path": response["path"], "sha256": response_hash}
     previous_response = _read_hashed_repair_file(response_ref).decode("utf-8")
     obligations = _patch_generation_obligation_projection(
-        feature_spec=feature, implementation=old_plan, planned_changes=old_plan["proposed_changes"])
+        feature_spec=feature, implementation=old_plan, planned_changes=old_plan["proposed_changes"],
+        evidence_pack=old_evidence)
     generator = LLMExactPatchGenerator(None)
     prepared = generator.prepare_native_contract(
+        **({"constraint_context": obligations["constraint_context"]} if "constraint_context" in obligations else {}),
         user_request=feature["user_request"], evidence_items=_external_evidence_items(old_evidence["items"]),
         binding_registry=old_plan["binding_registry"], constraints=obligations["side_effect_boundaries"],
         target_behavior=obligations["target_behavior"], acceptance_criteria=obligations["acceptance_criteria"],
@@ -270,6 +272,7 @@ class RequestPatchExecution:
         self._upstream_effects = normalize_upstream_effects(None)
         self._consumed_reads = 0
         self._consumed_bytes = 0
+        self._tool_argument_correction_used = False
         self.last_worker: Any = None
         self.last_state: dict[str, Any] | None = None
         self.upstream_context: dict[str, Any] | None = None
@@ -300,13 +303,13 @@ class RequestPatchExecution:
             _validate_selected_plan,
             _validate_source_items,
         )
-        from src.mod_agent.model_call_budget import call_allowance, total_only
+        from src.mod_agent.model_call_budget import call_allowance, is_meter_only, total_only
 
         if state.get("blockers") or not state["runtime_summary"].get("patch_upstream_return"):
             return state
         next_state = deepcopy(state)
         try:
-            if ((self.replan_count and not total_only(self.budget_snapshot()))
+            if ((self.replan_count and not (total_only(self.budget_snapshot()) or is_meter_only(self.budget_snapshot())))
                     or self.last_worker is None or self.upstream_context is None):
                 raise PatchContinuationError("PATCH_UPSTREAM_CONTINUATION_BUDGET_EXHAUSTED", "upstream_admission",
                     "The product invocation admits one complete upstream cycle.")
@@ -336,16 +339,17 @@ class RequestPatchExecution:
                 raise PatchContinuationError("PATCH_UPSTREAM_RETAIN_PLAN_IDENTITY_CHANGED", "upstream_admission",
                     "Plan retention requires all original assessed references unchanged.")
             budget = self.budget_snapshot()
+            metered = is_meter_only(budget)
             previous_receipt = self.last_worker.patch_attempt_receipt()
             # 为什么要有它：保留request包含全部历史turn，连续续接不能只用当前segment增量覆盖累计偏移；共享预算仍只计新调用。
             previous_calls = previous_receipt["model_call_count"] + (
                 previous_receipt.get("patch_agent_loop", {}).get("prior_worker_budget", {}).get("consumed_model_turns", 0))
             available = call_allowance(budget, self._last_role,
-                self.last_worker.patch_agent_loop_policy.max_total_model_turns - previous_calls)
+                None if metered else self.last_worker.patch_agent_loop_policy.max_total_model_turns - previous_calls)
             if available < 1:
                 raise PatchContinuationError("PATCH_UPSTREAM_CONTINUATION_BUDGET_EXHAUSTED", "model_admission",
                     "The original product budget has no remaining worker call.")
-            if min(self.policy.max_tool_rounds - self._consumed_reads,
+            if not metered and min(self.policy.max_tool_rounds - self._consumed_reads,
                    self.policy.max_observation_bytes - self._consumed_bytes) < 0:
                 raise PatchContinuationError("PATCH_UPSTREAM_CONTINUATION_BUDGET_EXHAUSTED", "model_admission",
                     "The original product observation allowance is exhausted.")
@@ -361,7 +365,7 @@ class RequestPatchExecution:
                     ("origin", "required_owner", "reason", "source_refs")},
                 planning_assessment={key: deepcopy(assessment[key]) for key in
                     ("decision", "rationale", "selected_evidence_ids", "missing_evidence") if key in assessment})
-            self._upstream_resume = {"retain": retain, "history": history, "remaining": available,
+            self._upstream_resume = {"retain": retain, "history": history, "remaining": None if metered else available,
                 "previous_calls": previous_calls, "assessment": deepcopy(assessment),
                 "context_calibration": self.last_worker.retained_context_calibration() if retain else None,
                 "retained_request": self.last_worker.retained_worker_request(complete_upstream=True) if retain else None}
@@ -376,10 +380,10 @@ class RequestPatchExecution:
                 if key not in {"previous_response", "failure_report"}}
             self.journals[-1].record({"phase": "replanned_patch_prepared",
                 "replanned_selected_artifacts": {kind: asdict(ref) for kind, ref in refs.items()},
-                "shared_model_budget": dict(budget), "effective_worker_model_allowance": available,
+                "shared_model_budget": dict(budget), "effective_worker_model_allowance": None if metered else available,
                 "shared_observation_budget": {
-                    "maximum_reads": self.policy.max_tool_rounds, "consumed_reads": self._consumed_reads,
-                    "maximum_bytes": self.policy.max_observation_bytes, "consumed_bytes": self._consumed_bytes},
+                    "maximum_reads": None if metered else self.policy.max_tool_rounds, "consumed_reads": self._consumed_reads,
+                    "maximum_bytes": None if metered else self.policy.max_observation_bytes, "consumed_bytes": self._consumed_bytes},
                 "plan_retained": retain, "approval_inherited": False, "proposal_admitted": False})
         except (PatchContinuationError, ValueError) as exc:
             next_state["blockers"].append({"stage": "upstream_admission",
@@ -415,11 +419,15 @@ class RequestPatchExecution:
         profile = self.repair_profile if role == "repair" and self.repair_profile is not None else self.profile
         limits = self.budget_snapshot()
         from src.mod_agent.model_call_budget import (
+            METER_ONLY,
             STAGE_AND_TOTAL,
             TASK_TOTAL_ONLY,
             call_allowance,
+            is_meter_only,
             total_only,
         )
+        metered = is_meter_only(limits)
+        budget_policy = METER_ONLY if metered else TASK_TOTAL_ONLY if total_only(limits) else STAGE_AND_TOTAL
         remaining = call_allowance(limits, role,
             resumed["remaining"] if resumed else self.policy.max_total_model_turns)
         interrupted = None
@@ -443,17 +451,17 @@ class RequestPatchExecution:
         if remaining < 1 and interrupted is None:
             raise LocalEntryError("PRODUCT_MODEL_CALL_BUDGET_EXHAUSTED")
         inherited_calls = interrupted['factory_receipt']['model_call_count'] if interrupted else 0
-        allowance = inherited_calls + remaining
+        allowance = None if metered else inherited_calls + remaining
         policy = replace(self.policy, max_total_model_turns=allowance,
-                         model_call_budget_policy=TASK_TOTAL_ONLY if total_only(limits) else STAGE_AND_TOTAL,
-                         max_tool_rounds=max(0, self.policy.max_tool_rounds - self._consumed_reads),
-                         max_observation_bytes=max(0, self.policy.max_observation_bytes - self._consumed_bytes))
+                         model_call_budget_policy=budget_policy,
+                         max_tool_rounds=None if metered else max(0, self.policy.max_tool_rounds - self._consumed_reads),
+                         max_observation_bytes=None if metered else max(0, self.policy.max_observation_bytes - self._consumed_bytes))
         journal = PatchContinuationAttemptJournal.for_product_execution(
             artifact_root=self.store.root, run_id=invocation, request_id=state["request_id"],
             parent_run_id=state["run_id"], feature_spec_ref=refs["feature_spec"],
             evidence_pack_ref=refs["evidence_pack"], implementation_plan_ref=refs["implementation_plan"],
             workspace_root=self.workspace_root, max_model_calls=allowance,
-            model_call_budget_policy=TASK_TOTAL_ONLY if total_only(limits) else STAGE_AND_TOTAL,
+            model_call_budget_policy=budget_policy,
             worker_configuration_ref=self.worker_configuration_ref,
             worker_profile_sha256=(hashlib.sha256(json.dumps(
                 profile.to_dict(), sort_keys=True, separators=(",", ":"), ensure_ascii=False,
@@ -464,14 +472,16 @@ class RequestPatchExecution:
             profile=profile, artifact_store=self.store, workspace_root=self.workspace_root,
             patch_agent_loop_policy=policy, identity_reader=self.identity_reader,
             behavior_evaluator=self.behavior_evaluator, enable_recovery_loop=True)
+        if self._tool_argument_correction_used:
+            worker.bind_tool_argument_correction_used(True)
         if interrupted is not None:
             worker.bind_interrupted_attempt(interrupted)
         if resumed is not None:
             if resumed["retain"]:
                 worker.patch_agent_loop_policy = replace(policy,
-                    max_total_model_turns=resumed["previous_calls"] + remaining,
-                    max_tool_rounds=self.policy.max_tool_rounds,
-                    max_observation_bytes=self.policy.max_observation_bytes)
+                    max_total_model_turns=None if metered else resumed["previous_calls"] + remaining,
+                    max_tool_rounds=None if metered else self.policy.max_tool_rounds,
+                    max_observation_bytes=None if metered else self.policy.max_observation_bytes)
                 worker.bind_retained_worker_request(resumed["retained_request"],
                     consumed_model_turns=resumed["previous_calls"], consumed_tool_rounds=self._consumed_reads,
                     consumed_observation_bytes=self._consumed_bytes,
@@ -485,6 +495,8 @@ class RequestPatchExecution:
         def record(event):
             if isinstance(event.get("factory_receipt"), Mapping):
                 receipt = deepcopy(event["factory_receipt"])
+                from src.mod_agent.proposal.tool_argument_feedback import receipt_correction_used
+                self._tool_argument_correction_used = receipt_correction_used(receipt) or self._tool_argument_correction_used
                 if len(self.receipts) < len(self.journals):
                     self.receipts.append(receipt)
                 else:
@@ -526,6 +538,10 @@ class RequestPatchExecution:
                 return changes
         finally:
             receipt = worker.patch_attempt_receipt()
+            from src.mod_agent.proposal.tool_argument_feedback import receipt_correction_used
+            # Scope: all subsequent workers of this product invocation, including a new Plan.
+            # 为什么要有它：丢弃旧request只重建上下文，不重置已经消费的纠错状态；旧receipt缺字段兼容为false。
+            self._tool_argument_correction_used = receipt_correction_used(receipt) or self._tool_argument_correction_used
             if len(self.receipts) < len(self.journals):
                 self.receipts.append(deepcopy(receipt))
             else:

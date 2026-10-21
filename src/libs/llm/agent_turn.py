@@ -6,7 +6,8 @@ import json
 import math
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from copy import deepcopy
+from dataclasses import asdict, dataclass, field
 from hashlib import sha256
 from typing import Any, Literal, Protocol
 from urllib.parse import urlsplit
@@ -339,6 +340,8 @@ class OllamaChatAgentAdapter:
         )
         self._prompt_token_calibrations: list[tuple[int, int]] = []
         self._transferable_prompt_calibrations: list[tuple[int, int]] = []
+        self._prefix_identity_binding = None
+        self._prompt_prefix_anchor = None
 
     def _calibration_binding(self, model_identity, owner_profile_sha256):
         identity = tuple(model_identity.get(key) for key in ("base_url", "name", "model", "digest"))
@@ -352,9 +355,36 @@ class OllamaChatAgentAdapter:
                    self.max_output_tokens, self.seed, self.request_timeout_seconds)
         return identity, profile, owner_profile_sha256
 
+    def bind_context_identity(self, *, model_identity, owner_profile_sha256):
+        """Use the owner's already verified model manifest and profile, without a new request."""
+        binding = self._calibration_binding(model_identity, owner_profile_sha256)
+        if binding != self._prefix_identity_binding:
+            self._prompt_prefix_anchor = None
+            self._prompt_token_calibrations.clear()
+            self._transferable_prompt_calibrations.clear()
+        self._prefix_identity_binding = binding
+
+    def _current_prefix_binding(self):
+        binding = self._prefix_identity_binding
+        profile = (self.provider, self.base_url, self.model, self.context_window,
+                   self.max_output_tokens, self.seed, self.request_timeout_seconds)
+        if binding is None:
+            self._prompt_prefix_anchor = None
+            return None
+        if binding[1] != profile:
+            self._prompt_prefix_anchor = None
+            self._prompt_token_calibrations.clear()
+            self._transferable_prompt_calibrations.clear()
+            self._prefix_identity_binding = None
+            return None
+        return binding
+
     def export_context_calibration(self, *, model_identity, owner_profile_sha256):
         """Bind previously observed native counts to the admitted identity/profile."""
         binding = self._calibration_binding(model_identity, owner_profile_sha256)
+        # Scope: exported numeric observations obey the same identity boundary as prefix anchors.
+        # 为什么要有它：首次绑定或模型/配置变化不能把旧未知来源计数追认为当前身份的观测。
+        self.bind_context_identity(model_identity=model_identity, owner_profile_sha256=owner_profile_sha256)
         return OllamaContextCalibration(*binding, tuple(self._transferable_prompt_calibrations))
 
     def inherit_context_calibration(self, calibration, *, model_identity, owner_profile_sha256):
@@ -367,6 +397,7 @@ class OllamaChatAgentAdapter:
         if any(len(row) != 2 or any(type(value) is not int or value <= 0 for value in row)
                for row in calibration.observations):
             raise AgentTurnProviderError("OLLAMA_CONTEXT_CALIBRATION_OBSERVATIONS_INVALID")
+        self.bind_context_identity(model_identity=model_identity, owner_profile_sha256=owner_profile_sha256)
         self._prompt_token_calibrations = list(calibration.observations)
         self._transferable_prompt_calibrations = list(calibration.observations)
         return True
@@ -439,13 +470,20 @@ class OllamaChatAgentAdapter:
                 },
             )
         request_started = time.perf_counter()
+        anchor_binding = self._current_prefix_binding()
+        anchor_payload = deepcopy(payload) if anchor_binding is not None else None
         try:
             data = self._send(request_url, payload, {"Content-Type": "application/json"})
         except AgentTurnProviderError as exc:
+            self._prompt_prefix_anchor = None
             raise AgentTurnProviderError(
                 str(exc), diagnostic={**exc.diagnostic, "request_identity": request_identity},
             ) from exc
+        except Exception:
+            self._prompt_prefix_anchor = None
+            raise
         client_elapsed_seconds = time.perf_counter() - request_started
+        self._prompt_prefix_anchor = None
         prompt_eval_count = _int_value(data.get("prompt_eval_count"))
         if prompt_eval_count > 0:
             self._prompt_token_calibrations.append(
@@ -483,6 +521,18 @@ class OllamaChatAgentAdapter:
                 and type(prompt_eval_count) is int and prompt_eval_count > 0):
             self._transferable_prompt_calibrations.append(
                 (int(context_admission["provider_body_utf8_bytes"]), prompt_eval_count))
+            output_tokens = data.get("eval_count")
+            if (not stopped and type(output_tokens) is int and output_tokens >= 0
+                    and self.context_window is not None
+                    and prompt_eval_count + output_tokens <= self.context_window
+                    and data.get("truncated") is not True
+                    and anchor_binding is not None and anchor_binding == self._current_prefix_binding()
+                    and anchor_payload == payload and self._text_prefix_payload(anchor_payload)):
+                self._prompt_prefix_anchor = {
+                    "binding": anchor_binding, "payload": anchor_payload,
+                    "prompt_tokens": prompt_eval_count,
+                    "request_sha256": request_identity["provider_body_sha256"],
+                }
         return AgentTurnResponse(
             provider=self.provider,
             model=str(data.get("model") or self.model),
@@ -525,8 +575,12 @@ class OllamaChatAgentAdapter:
         if (
             conservative["admitted"] is True
             or self.context_window is None
-            or not self._prompt_token_calibrations
         ):
+            return conservative
+        prefix = self._prefix_context_admission(payload, conservative)
+        if prefix is not None:
+            return prefix
+        if not self._prompt_token_calibrations:
             return conservative
         body_bytes = int(conservative["provider_body_utf8_bytes"])
         observed_upper_ratio = max(
@@ -560,6 +614,67 @@ class OllamaChatAgentAdapter:
                 "conservative_required_context"
             ],
             "admitted": estimated_required_context <= self.context_window,
+        }
+
+    @staticmethod
+    def _text_prefix_payload(payload):
+        if not isinstance(payload, Mapping) or not isinstance(payload.get("messages"), list):
+            return False
+        return bool(payload["messages"]) and all(
+            isinstance(message, dict)
+            and set(message) <= {"role", "content", "tool_name", "tool_calls"}
+            and message.get("role") in {"system", "user", "assistant", "tool"}
+            and isinstance(message.get("content"), str)
+            for message in payload["messages"]
+        )
+
+    def _prefix_context_admission(self, payload, conservative):
+        binding = self._current_prefix_binding()
+        anchor = self._prompt_prefix_anchor
+        if (binding is None or anchor is None or anchor["binding"] != binding
+                or not self._text_prefix_payload(payload)):
+            return None
+        previous = anchor["payload"]
+        def encode(item):
+            return json.dumps(item, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        try:
+            if encode({key: value for key, value in previous.items() if key != "messages"}) != encode(
+                    {key: value for key, value in payload.items() if key != "messages"}):
+                return None
+            count = len(previous["messages"])
+            if len(payload["messages"]) <= count or any(
+                    encode(before) != encode(after)
+                    for before, after in zip(previous["messages"], payload["messages"])):
+                return None
+            appended = payload["messages"][count:]
+            added_bytes = len(encode(appended))
+        except (TypeError, ValueError):
+            return None
+        # Scope: text-only append estimates under a verified, unchanged model/profile.
+        # 为什么要有它：已实测的相同前缀不用再次整体乘倍数；新增内容仍按UTF8计入，并为聊天模板/拼接边界保守留量。
+        # This is a conservative heuristic, not a tokenizer measurement or a universal template proof.
+        per_message_margin = 256
+        boundary_margin = 256
+        template_margin = per_message_margin * len(appended) + boundary_margin
+        estimated_prompt = anchor["prompt_tokens"] + added_bytes + template_margin
+        required = estimated_prompt + self.max_output_tokens
+        return {
+            "mode": "bound_observed_prefix_plus_appended_utf8_v1",
+            "exact_prompt_tokens_available_pre_call": False,
+            "provider_body_utf8_bytes": conservative["provider_body_utf8_bytes"],
+            "configured_num_ctx": self.context_window, "num_predict": self.max_output_tokens,
+            "anchor_request_sha256": anchor["request_sha256"],
+            "anchor_prompt_tokens": anchor["prompt_tokens"],
+            "anchor_message_count": count, "appended_message_count": len(appended),
+            "appended_messages_utf8_bytes": added_bytes,
+            "template_margin_tokens_per_message": per_message_margin,
+            "boundary_margin_tokens": boundary_margin,
+            "template_margin_tokens": template_margin,
+            "model_manifest_digest": binding[0][3],
+            "owner_profile_sha256": binding[2],
+            "estimated_prompt_tokens": estimated_prompt, "estimated_required_context": required,
+            "conservative_fallback_required_context": conservative["conservative_required_context"],
+            "admitted": required <= self.context_window,
         }
 
 
@@ -950,7 +1065,7 @@ def _parse_chat_tool_call(item: object) -> AgentToolCall:
     )
 
 
-def _parse_ollama_tool_call(item: object) -> AgentToolCall:
+def _parse_ollama_tool_call(item: object, *, legacy_identity: bool = False) -> AgentToolCall:
     if not isinstance(item, dict) or not isinstance(item.get("function"), dict):
         raise AgentTurnProviderError("OLLAMA_CHAT_TOOL_CALL_INVALID")
     function = item["function"]
@@ -958,6 +1073,13 @@ def _parse_ollama_tool_call(item: object) -> AgentToolCall:
     arguments = _parse_arguments(function.get("arguments"))
     if not name:
         raise AgentTurnProviderError("OLLAMA_CHAT_TOOL_CALL_IDENTITY_INVALID")
+    native_id = item.get("id")
+    if native_id is not None and (type(native_id) is not str or not native_id.strip()):
+        raise AgentTurnProviderError("OLLAMA_CHAT_TOOL_CALL_IDENTITY_INVALID")
+    # Scope: live native IDs identify invocations, not their argument values.
+    # 为什么要有它：同参数的新调用不是原调用重放；缺ID时仍保留旧哈希兼容边界，不能假称可区分两次同参调用。
+    if native_id is not None and not legacy_identity:
+        return AgentToolCall(call_id=native_id, name=name, arguments=arguments)
     identity = json.dumps(
         {"name": name, "arguments": arguments},
         ensure_ascii=False,
@@ -969,6 +1091,28 @@ def _parse_ollama_tool_call(item: object) -> AgentToolCall:
         name=name,
         arguments=arguments,
     )
+
+
+def _ollama_replay_call_identity(raw_calls, retained_calls):
+    """Accept one complete exact historical mapping, never a mixed/guessed one.
+
+    Caller must authenticate the retained response file and unexecuted replay
+    boundary. 为什么要有它：历史记录曾用参数哈希表示调用，兼容只能在已核准恢复入口使用，不能让实时provider自行降级身份。
+    """
+    if not isinstance(raw_calls, list) or not raw_calls or not isinstance(retained_calls, list):
+        raise AgentTurnProviderError("OLLAMA_REPLAY_TOOL_CALL_IDENTITY_INVALID")
+    # Scope: exact JSON values, including bool versus number, across a whole batch.
+    # 为什么要有它：Python把False与0视为相等，但工具调用的原始参数类型不能因此被替换。
+    def canonical(value):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+    current = [asdict(_parse_ollama_tool_call(item)) for item in raw_calls]
+    if canonical(current) == canonical(retained_calls):
+        return "native_id_or_missing_id_fallback"
+    legacy = [asdict(_parse_ollama_tool_call(item, legacy_identity=True)) for item in raw_calls]
+    if canonical(legacy) == canonical(retained_calls):
+        return "legacy_name_arguments_sha256_v1"
+    raise AgentTurnProviderError("OLLAMA_REPLAY_TOOL_CALL_IDENTITY_INVALID")
 
 
 def _ollama_provider_diagnostic(

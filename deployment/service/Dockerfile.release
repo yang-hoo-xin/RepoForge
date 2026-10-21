@@ -1,0 +1,23 @@
+# Scope: an already-present, identity-checked local dependency image only.
+# 为什么要有它：当前锁文件需真实离线同步，不能把旧image的锁误称为相同，也不能隐式拉取新的基础镜像。
+ARG BASE_IMAGE=rag-agent-service:release-base-d3770b0eab08
+FROM ${BASE_IMAGE}
+USER root
+WORKDIR /app
+ENV UV_OFFLINE=true UV_PYTHON_DOWNLOADS=never
+# Scope: remove obsolete application files inside the new image layer, never on the host.
+# 为什么要有它：COPY覆盖不能移除已删除源码，否则新版本会混入旧模块。
+RUN rm -rf /app/src /app/scripts
+COPY pyproject.toml uv.lock README.md ./
+RUN python --version && uv --version && uv sync --frozen --extra service --no-dev --no-install-project --no-cache --offline
+COPY src ./src
+COPY scripts ./scripts
+COPY build-source-manifest.json ./build-source-manifest.json
+ARG SOURCE_DIGEST
+ARG BASE_IMAGE_ID
+LABEL org.repoforge.source-manifest-sha256="${SOURCE_DIGEST}" org.repoforge.base-image-id="${BASE_IMAGE_ID}"
+# Scope: verify every copied byte and reject any leftover source file in this image.
+# 为什么要有它：镜像构建成功不自动证明实际源码等于被冻结输入，必须直接检查容器文件系统。
+RUN python -c "import hashlib,json,os; from pathlib import Path; p=Path('/app/build-source-manifest.json'); assert hashlib.sha256(p.read_bytes()).hexdigest()==os.environ['SOURCE_DIGEST']; m=json.loads(p.read_bytes()); expected={r['path'] for r in m['files']}; actual={q.relative_to('/app').as_posix() for d in ('src','scripts') for q in Path('/app',d).rglob('*') if q.is_file()}|{'pyproject.toml','uv.lock','README.md'}; assert actual==expected, (actual-expected,expected-actual); assert all(hashlib.sha256(Path('/app',r['path']).read_bytes()).hexdigest()==r['sha256'] for r in m['files']); print('COPY_INPUTS_VERIFIED',len(expected),os.environ['SOURCE_DIGEST'])"
+USER service
+CMD ["uvicorn", "src.service_layer.api:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

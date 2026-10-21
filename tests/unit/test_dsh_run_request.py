@@ -94,6 +94,53 @@ def test_dependency_api_context_detects_valid_config_drift(execution_config):
     assert before[1]["dependency_api"] != after[1]["dependency_api"]
 
 
+def _repository_config(execution_config):
+    from tests.unit.test_csharp_repository_backend import _profile
+
+    profile, source = _profile(execution_config.parent / "repository")
+    def select(arguments):
+        arguments[arguments.index("--target-project") + 1] = str(source)
+        return [*arguments, "--repository-profile", profile.reference["path"]]
+    _arguments(execution_config, select)
+    return profile
+
+
+@pytest.mark.parametrize("changed", ["configuration", "sdk"])
+def test_prepared_repository_profile_is_forwarded_and_rejects_drift(execution_config, changed):
+    profile = _repository_config(execution_config)
+    prepared = bridge.prepare_new_task(execution_config=str(execution_config), description="Correct the library behavior.")
+    document = json.loads(Path(prepared).read_text(encoding="utf-8"))
+    assert document["repository_profile_binding"]["configuration_ref"] == profile.reference
+    argv = bridge.build_product_argv(execution_config=prepared, description="Correct the library behavior.")
+    assert cli.build_parser().parse_args(argv).repository_profile == profile.reference["path"]
+    if changed == "configuration":
+        path = Path(profile.reference["path"])
+        value = json.loads(path.read_text(encoding="utf-8"))
+        value["configuration"] = "Debug"
+        path.write_text(json.dumps(value), encoding="utf-8")
+    else:
+        Path(profile.data["dotnet_ref"]["path"]).write_bytes(b"changed sdk")
+    with pytest.raises(ValueError, match="CHANGED"):
+        bridge.build_product_argv(execution_config=prepared, description="Correct the library behavior.")
+
+
+def test_repository_routing_tracks_profile_but_never_initializes_a_game_project(execution_config):
+    from scripts.dsh_request_routing import routing_context
+
+    profile = _repository_config(execution_config)
+    before = routing_context(execution_config=str(execution_config))
+    path = Path(profile.reference["path"])
+    value = json.loads(path.read_text(encoding="utf-8"))
+    value["configuration"] = "Debug"
+    path.write_text(json.dumps(value), encoding="utf-8")
+    after = routing_context(execution_config=str(execution_config))
+    assert before[0] == after[0]
+    assert before[1]["repository_profile"] != after[1]["repository_profile"]
+    with pytest.raises(ValueError, match="REQUIRES_EXISTING_REPOSITORY"):
+        bridge.prepare_new_task(execution_config=str(execution_config), description="A new game plugin.", project_name="Plugin")
+    assert not (execution_config.parent / "runs" / ".dsh-inputs").exists()
+
+
 def test_normal_entry_dependency_api_reaches_reassessment_owner(execution_config, monkeypatch, capsys):
     _install_execution_boundaries(execution_config.parent, monkeypatch)
     _dependency_api_config(execution_config)
@@ -349,6 +396,17 @@ def test_real_cli_owner_graph_reaches_patch_review_and_deferred_approval(
     assert {"implementation_plan", "patch_proposal", "proposal_review", "dry_run_result"} <= types
     assert "isolated_apply_result" not in types
     assert "build_result" not in types
+    feature = next(value["data"] for value in envelopes if value.get("artifact_type") == "feature_spec")
+    assert "log marker or startup evidence" not in feature["evidence_requirements"]
+    assert {"startup_loaded", "diagnostic marker observed"} <= set(feature["runtime_verification_plan"])
+    pack = next(value["data"] for value in envelopes if value.get("artifact_type") == "evidence_pack")
+    assert pack["can_generate_patch"] is True
+    assert pack["requirement_coverage"]["sufficiency"] == {"status": "sufficient", "reasons": []}
+    runtime = [row for row in pack["requirement_coverage"]["input_obligations"]
+               if row["origin"]["field"] == "runtime_verification_plan"]
+    assert runtime and all(row["required_before_patch"] is False for row in runtime)
+    plan = next(value["data"] for value in envelopes if value.get("artifact_type") == "implementation_plan")
+    assert "diagnostic marker observed" in plan["test_plan"]
 
 
 def test_real_product_blocked_result_is_not_replaced_with_bridge_success(

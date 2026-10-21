@@ -217,15 +217,21 @@ class RequestPlanner:
         lowered = request.lower()
         if len(request) < 8:
             return True
-        ambiguous_phrases = (
-            "fix it",
-            "that issue",
-            "那个问题",
-            "这个东西",
-            "修一下",
-            "test",
+        # Scope: the whole vague-only request, never an embedded token or path.
+        # 为什么要有它：具体需求中的test、Latest或“修一下”不是歧义证据；只有没有具体对象/行为的泛指请求在这里阻断。
+        english_vague = (
+            r"(?:(?:please|can you|could you|would you|help me|just)\s+)*"
+            r"(?:fix (?:it|that issue)|that issue|test)"
+            r"(?:\s+(?:please|thanks))?[.!?]*"
         )
-        if any(phrase == lowered or phrase in lowered for phrase in ambiguous_phrases):
+        chinese_vague = (
+            r"(?:(?:请|麻烦你?|帮我|帮忙|处理(?:一下)?|修复|修一下|"
+            r"解决(?:一下)?|测试|那个问题|这个问题|这个东西|一下|吧|谢谢)\s*)+"
+            r"[。！？.!?]*"
+        )
+        if re.fullmatch(english_vague, lowered.strip()) or re.fullmatch(
+            chinese_vague, lowered.strip()
+        ):
             return True
         if len(terms) >= 2:
             return False

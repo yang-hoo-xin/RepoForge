@@ -46,8 +46,12 @@ class ImplementationPlanner:
         evidence_pack: dict[str, Any],
         formal_requirement_coverage_required: bool = False,
         planning_target_evidence_ids: tuple[str, ...] | None = None,
+        constraint_policy: str | None = None,
     ) -> ImplementationPlan:
         """Return an implementation plan or a blocking result."""
+        from .constraint_context import build_constraint_context, validate_constraint_policy
+
+        validate_constraint_policy(constraint_policy)
 
         if feature_spec.blocked:
             return self._blocked(
@@ -403,16 +407,20 @@ class ImplementationPlanner:
             for index, (_, merged_evidence_ids) in enumerate(edit_units, start=1)
         )
 
+        boundaries = tuple(dict.fromkeys((*PLATFORM_SIDE_EFFECT_BOUNDARIES,
+                            *feature_spec.non_goals, *preservation_boundaries)))
+        # Scope: explicit experiment only; baseline plans emit exactly their previous fields.
+        # 为什么要有它：A的语义不能随A*/B实验悄悄改变，派生提示也不能继续被当成用户硬限制。
+        constraint_context = (build_constraint_context(feature_spec=feature_spec.to_artifact_payload(),
+            evidence_pack=evidence_pack, plan_boundaries=boundaries) if constraint_policy is not None else None)
         return ImplementationPlan(
             feature_id=feature_spec.feature_id,
             target_files=target_files,
             target_symbols=target_symbols,
             evidence_refs=evidence_refs,
             proposed_changes=proposed_changes,
-            side_effect_boundaries=tuple(
-                dict.fromkeys((*PLATFORM_SIDE_EFFECT_BOUNDARIES,
-                               *feature_spec.non_goals, *preservation_boundaries))
-            ),
+            side_effect_boundaries=tuple(constraint_context["hard_boundaries"]) if constraint_context else boundaries,
+            constraint_context=constraint_context,
             test_plan=feature_spec.runtime_verification_plan,
             rollback_plan=tuple(
                 f"Rollback {change['change_id']}: {change['rollback_hint']}"

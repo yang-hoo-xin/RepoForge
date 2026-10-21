@@ -233,7 +233,7 @@ def test_compiler_candidate_rechecks_bound_inputs_after_model(tmp_path, damage):
     with pytest.raises(PlanningTargetSelectionError):
         selector(inputs.feature_payload, evidence)
     assert len(client.calls) == 1
-    receipt = json.loads(selector.receipt_path.read_text())
+    receipt = json.loads(selector.receipt_path.read_text(encoding="utf-8"))
     assert receipt["status"] == "blocked"
 
 
@@ -272,7 +272,7 @@ def test_candidate_correction_uses_child_questions_and_preserves_parent_receipt(
     assert selector._target_correction.behavior_evaluator_configured is True
     assert len(plan["trace_refs"]) == 2
     assert "needs_evidence" not in client.calls[1].messages[1].content["correction_context"]["instruction"]
-    parent = json.loads(selector.receipt_path.read_text())
+    parent = json.loads(selector.receipt_path.read_text(encoding="utf-8"))
     assert json.loads(parent["response_content"]) == first
 
 

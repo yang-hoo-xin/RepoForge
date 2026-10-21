@@ -65,13 +65,13 @@ def test_actual_long_workspace_uses_short_components_and_replays_without_new_cla
     assert again.turn.read_bytes() == claim_bytes
 
 
-def test_old_full_length_claim_replays_and_new_turn_uses_short_name_without_migration(tmp_path):
-    root, old_claim, result = legacy(tmp_path)
-    before = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
-    previous = state(tmp_path, turn="old")
+def test_old_full_length_claim_replays_and_new_turn_uses_short_name_without_migration(short_workspace):
+    root, old_claim, result = legacy(short_workspace)
+    before = {path: path.read_bytes() for path in short_workspace.rglob("*") if path.is_file()}
+    previous = state(short_workspace, turn="old")
     assert previous.root == root and previous.turn == old_claim
     assert previous.begin(None) == result and not previous.locked
-    next_turn = state(tmp_path, turn="new", clarification_for=result["route_id"], description="answer")
+    next_turn = state(short_workspace, turn="new", clarification_for=result["route_id"], description="answer")
     assert next_turn.root == root and len(next_turn.turn.stem) == 32
     assert next_turn.begin(result["route_id"]) is None
     assert next_turn.parent == result

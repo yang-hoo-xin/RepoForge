@@ -8,22 +8,24 @@ This module provides the ProtocolHandler class that encapsulates:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from copy import deepcopy
-import json
 import asyncio
+import json
+from collections.abc import Callable
+from copy import deepcopy
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
+
 from jsonschema import Draft202012Validator, validators
-from src.mcp_server.safety import Redactor
-
-StrictInputValidator = validators.extend(Draft202012Validator,
-    type_checker=Draft202012Validator.TYPE_CHECKER.redefine("integer", lambda checker, value: type(value) is int))
-from typing import Any, Callable, Dict, List, Optional
-
 from mcp import types
 from mcp.server.lowlevel import Server
 
+from src.mcp_server.argument_feedback import validation_feedback
+from src.mcp_server.safety import Redactor
 from src.observability.logger import get_logger
+
+StrictInputValidator = validators.extend(Draft202012Validator,
+    type_checker=Draft202012Validator.TYPE_CHECKER.redefine("integer", lambda checker, value: type(value) is int))
 
 
 # JSON-RPC 2.0 Error Codes
@@ -144,8 +146,9 @@ class ProtocolHandler:
         if name not in self.tools:
             return self.error_result("UNKNOWN_TOOL", "Tool not found")
         tool = self.tools[name]
-        if not isinstance(arguments, dict) or not StrictInputValidator(tool.input_schema).is_valid(arguments):
-            return self.error_result("INVALID_PARAMS", "Invalid parameters")
+        feedback = validation_feedback(arguments, tool.input_schema, StrictInputValidator)
+        if feedback is not None:
+            return self.error_result("INVALID_PARAMS", "Invalid parameters", details=feedback)
         try:
             result = await tool.handler(**arguments)
             if isinstance(result, types.CallToolResult):
@@ -173,9 +176,14 @@ class ProtocolHandler:
             self._logger.error("Tool execution failed: %s (%s)", name, type(error).__name__)
             return self.error_result("INTERNAL_ERROR", "Internal server error")
 
-    def error_result(self, code, message):
+    def error_result(self, code, message, *, details=None):
         payload = {"schema_version": "mcp_error_v1", "status": "error", "request_id": uuid4().hex,
                    "error": {"code": code, "message": message}}
+        if details is not None:
+            payload["error"]["details"] = details
+        # Scope: both text and structured error views share the output redaction boundary.
+        # 为什么要有它：纠正反馈不能回显凭据，两个客户端可见表示也不能因脱敏而互相矛盾。
+        payload = self.redactor(payload)
         return types.CallToolResult(content=[types.TextContent(type="text", text=json.dumps(payload))],
                                     structuredContent=payload, isError=True)
 

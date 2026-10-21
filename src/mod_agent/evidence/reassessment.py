@@ -20,6 +20,7 @@ from src.mod_agent.evidence.requirement_coverage_provider import (
     build_requirement_coverage_pack,
 )
 from src.mod_agent.fresh_planning_continuation import _validate_source_items
+from src.mod_agent.proposal.behavior_feedback_view import project_execution_reference_paths
 
 
 def gap_investigation_targets(projection, old):
@@ -464,8 +465,8 @@ class RequirementCoverageReassessmentFactory:
             "sufficiency": deepcopy(old.requirement_coverage["sufficiency"]),
         }, "interpretation_is_not_observation": True}
         self._initial_reassessment_used = True
-        from src.mod_agent.model_call_budget import total_only
-        if self.budget_snapshot is not None and total_only(self.budget_snapshot()):
+        from src.mod_agent.model_call_budget import is_meter_only, total_only
+        if self.budget_snapshot is not None and (total_only(self.budget_snapshot()) or is_meter_only(self.budget_snapshot())):
             return self._reassess_task_total(state, feature_data, old, ref, feedback)
         revision_number = old.budget_summary.get("reassessment_revision_number")
         first = self._reassess(state, feature_data, old, feedback, initial_lineage={
@@ -528,6 +529,8 @@ class RequirementCoverageReassessmentFactory:
 
     def _reassess_task_total(self, state, feature_data, old, ref, feedback):
         """Continue useful Evidence cycles under the same reserved task ledger."""
+        from src.mod_agent.model_call_budget import is_meter_only
+
         cycle, history = 0, []
         while True:
             before = self.budget_snapshot()
@@ -535,13 +538,13 @@ class RequirementCoverageReassessmentFactory:
             current = self._reassess(state, feature_data, old, feedback, initial_lineage={
                 "prior_evidence_ref": asdict(ref),
                 "projection_identity": deepcopy(old.requirement_coverage["projection_identity"]),
-                "max_cycles": None, "cycle": cycle, "model_call_budget_policy": "task_total_only"})
+                "max_cycles": None, "cycle": cycle, "model_call_budget_policy": before["policy"]})
             after = self.budget_snapshot()
             if after["consumed"] < before["consumed"] + 2:
                 raise ValueError("INITIAL_FINDINGS_MODEL_ACCOUNTING_NOT_ADVANCED")
             no_new = not _reassessment_has_new_information(current)
             stop = None
-            if not current.can_generate_patch and (no_new or after["remaining"] < 2):
+            if not current.can_generate_patch and (no_new or not is_meter_only(after) and after["remaining"] < 2):
                 stop = {"code": "INITIAL_FINDINGS_NO_NEW_INFORMATION_STOP" if no_new else "PRODUCT_MODEL_CALL_BUDGET_EXHAUSTED",
                         "cycle": cycle, "remaining_model_calls": after["remaining"], "next_cycle_requires": 2}
             current = replace(current, budget_summary={**current.budget_summary,
@@ -580,10 +583,7 @@ class RequirementCoverageReassessmentFactory:
             if key in upstream:
                 ref = upstream[key]
                 recommendation[key] = {"sha256": ref["sha256"]} if ref is not None else None
-        observations = deepcopy(repair["failure_findings"])
-        for observation in observations:
-            if isinstance(observation.get("result_ref"), dict):
-                observation["result_ref"] = {"sha256": observation["result_ref"]["sha256"]}
+        observations = project_execution_reference_paths(repair["failure_findings"])
         feedback = {"recommendation": recommendation, "observed_failure": observations,
             "interpretation_is_not_observation": True}
         return self._reassess(state, feature_data, old, feedback)

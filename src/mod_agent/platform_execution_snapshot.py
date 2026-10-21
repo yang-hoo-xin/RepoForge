@@ -301,6 +301,10 @@ class FrozenExecution:
         self.verify_loaded_modules()
         _ACTIVE = self
         sys.addaudithook(self.audit)
+        # 为什么要有它：可信父进程给出的共享构建额度须在正常CLI启动编译器前生效，不改编译器或验收语义。
+        if os.environ.get("REPOFORGE_BUILD_BUDGET_REF"):
+            from src.mod_agent.build.execution_budget import install_build_budget_from_environment
+            install_build_budget_from_environment()
 
     def check(self):
         try:

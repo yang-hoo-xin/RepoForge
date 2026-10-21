@@ -1,6 +1,7 @@
 """Real Redis integration checks; never substitute an in-memory fake service."""
 from __future__ import annotations
 
+import json
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -65,11 +66,39 @@ def test_json_empty_types_unicode_and_attempt_history_survive_lua(store):
     assert active["id"] == job["id"] and active["attempt"] == 1
     result = {"answer": "完成", "citations": [], "metadata": {}}
     assert store.finish(job["id"], active["lease_token"], "completed", result=result)
+    raw = json.loads(store.client.get(store.key_prefix + "job:" + job["id"]))
+    assert json.loads(raw["result_json"]) == result
+    assert "result_json" not in raw["attempts_history"][-1]
+    assert raw["attempts_history"][-1]["_result_from_job"] == {"version": 1, "attempt": 1}
     terminal = store.get(job["id"])
     assert terminal["payload"] == payload and terminal["result"] == result
     assert terminal["attempts_history"][0]["result"] == result
     assert terminal["lease_token"] is None
     assert all(type(terminal[name]) is float for name in ("created_at", "started_at", "finished_at"))
+
+
+@pytest.mark.parametrize("state,result,compact", [
+    ("completed", None, False), ("completed", False, True), ("completed", 0, True),
+    ("completed", [], True), ("completed", {}, True),
+    ("failed", {"preserved": []}, False), ("timed_out", {"preserved": []}, False),
+    ("indeterminate", {"preserved": []}, False), ("cancelled", {"preserved": []}, False),
+])
+def test_lua_compacts_only_completed_nonnull_results_and_keeps_idempotent_reads(store, state, result, compact):
+    job, _ = submit(store)
+    active = store.claim("worker", 10)
+    error = None if state == "completed" else {"code": "retained error", "details": []}
+    assert store.finish(job["id"], active["lease_token"], state, result=result, error=error)
+    raw = json.loads(store.client.get(store.key_prefix + "job:" + job["id"]))
+    last = raw["attempts_history"][-1]
+    assert ("_result_from_job" in last) is compact
+    assert ("result_json" not in last) is compact
+    terminal = store.get(job["id"])
+    repeated, created = submit(store)
+    assert not created and repeated == terminal
+    assert terminal["result"] == terminal["attempts_history"][-1]["result"] == result
+    assert terminal["error"] == terminal["attempts_history"][-1]["error"] == error
+    assert not store.finish(job["id"], active["lease_token"], "failed", error="late")
+    assert store.get(job["id"]) == terminal and store.metrics()["pending"] == 0
 
 
 def test_claim_race_leases_only_one_worker_and_fences_wrong_tokens(store):
@@ -208,6 +237,12 @@ def test_idempotency_covers_execution_parameters_and_terminal_state(store, chang
 
 
 def test_expired_recovery_is_bounded_and_preserves_remaining_work(store):
+    # Scope: this 101-job recovery fixture only, before its namespace is initialized.
+    # 为什么要有它：每任务生命周期预留后默认64MiB会先拒绝准备；显式测试额度不改变生产默认，也不绕过配额或原100+1恢复断言。
+    store = RedisJobStore(store.client, namespace=store.namespace,
+        retention_seconds=store.retention_seconds, max_pending=store.max_pending,
+        capacity_bytes=2*1024**3, cache_capacity_bytes=store.cache_capacity_bytes,
+        cache_ttl_seconds=store.cache_ttl_seconds)
     for index in range(101):
         submit(store, f"recovery-{index}", attempts=1)
     for index in range(101):

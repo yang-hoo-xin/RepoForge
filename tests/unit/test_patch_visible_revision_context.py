@@ -52,6 +52,7 @@ def test_recovery_uses_same_code_refs_when_source_read_cache_is_disabled(monkeyp
     adapter.patch_agent_loop_policy = PatchAgentLoopPolicy(reuse_covered_source_observations=False)
     adapter._repair_input_projection = None
     adapter._worker_response_admission = None
+    adapter._tool_argument_correction_used = False
     adapter._prior_worker_budget = {"consumed_observation_bytes": 0, "consumed_model_turns": 0, "consumed_tool_rounds": 0}
     adapter._receipt = {"model_call_count": 1, "patch_agent_loop": {}}
     adapter._recovery_observation_bytes = 0
@@ -63,6 +64,7 @@ def test_recovery_uses_same_code_refs_when_source_read_cache_is_disabled(monkeyp
         captured.update(kwargs)
         return SimpleNamespace(completed=False, final_content=None, model_turns_used=0,
             final_request=kwargs["resume_request"], termination={"code": "FIXTURE_STOP_BEFORE_PROVIDER"},
+                tool_argument_correction_used=False,
             to_dict=lambda: {"usage_by_turn": []})
     monkeypatch.setattr(owner, "run_patch_agent_loop", loop)
     feedback = {"observations": [{"expected": [], "observed": ["unexpected"]}]}

@@ -20,6 +20,7 @@ from contextlib import AsyncExitStack
 from typing import Any, Dict, List, Optional, Sequence
 
 from src.libs.evaluator.base_evaluator import BaseEvaluator
+from .ragas_observation import capture, client_options, metric_started, within_budget
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +149,10 @@ class RagasEvaluator(BaseEvaluator):
         contexts = self._extract_texts(retrieved_chunks)
 
         try:
-            result = self._run_ragas(query, contexts, generated_answer)
+            with capture(kwargs.get('observation_sink'), self.settings, self._metric_names,
+                         limit=kwargs.get('maximum_evaluation_calls', 8),
+                         timeout=kwargs.get('evaluation_request_timeout_seconds', 180)):
+                result = self._run_ragas(query, contexts, generated_answer)
         except Exception as exc:
             logger.error("Ragas evaluation failed: %s", exc, exc_info=True)
             raise RuntimeError(f"Ragas evaluation failed: {exc}") from exc
@@ -164,7 +168,7 @@ class RagasEvaluator(BaseEvaluator):
         answer: str,
     ) -> Dict[str, float]:
         """Run every metric and close its HTTP clients in one event loop."""
-        return asyncio.run(self._arun_ragas(query, contexts, answer))
+        return asyncio.run(within_budget(self._arun_ragas(query, contexts, answer)))
 
     async def _arun_ragas(
         self, query: str, contexts: list[str], answer: str,
@@ -186,6 +190,7 @@ class RagasEvaluator(BaseEvaluator):
             scores: dict[str, float] = {}
 
             for metric_name in self._metric_names:
+                metric_started(metric_name)
                 if not contexts and metric_name in {FAITHFULNESS, CONTEXT_PRECISION}:
                     continue
                 if metric_name == FAITHFULNESS:
@@ -250,12 +255,14 @@ class RagasEvaluator(BaseEvaluator):
                 azure_endpoint=llm_azure_endpoint or llm_cfg.azure_endpoint,
                 api_version=getattr(llm_cfg, "api_version", None) or "2024-02-15-preview",
                 max_retries=0,
+                **client_options(),
             )
         elif provider == "openai":
             llm_client = AsyncOpenAI(
                 api_key=llm_cfg.api_key,
                 base_url=llm_cfg.base_url,
                 max_retries=0,
+                **client_options(),
             )
         else:
             raise ValueError(
@@ -291,12 +298,14 @@ class RagasEvaluator(BaseEvaluator):
                 azure_endpoint=emb_azure_endpoint or emb_cfg.azure_endpoint,
                 api_version=getattr(emb_cfg, "api_version", None) or "2024-02-15-preview",
                 max_retries=0,
+                **client_options(),
             )
         elif emb_provider == "openai":
             emb_client = AsyncOpenAI(
                 api_key=emb_cfg.api_key,
                 base_url=emb_cfg.base_url,
                 max_retries=0,
+                **client_options(),
             )
         else:
             raise ValueError(

@@ -56,14 +56,20 @@ def test_repeated_submission_reuses_existing_artifact_identity(configuration):
     assert {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in hashes} == hashes
 
 
-@pytest.mark.parametrize("description", ["help", "Change enemy damage through a gameplay hook."])
-def test_ambiguity_and_evidence_gaps_remain_original_owner_results(configuration, description):
+@pytest.mark.parametrize(("description", "must_have_gap"), [
+    ("help", True),
+    ("Change enemy damage through a gameplay hook.", False),
+])
+def test_ambiguity_and_evidence_gaps_remain_original_owner_results(
+    configuration, description, must_have_gap,
+):
     result = prepare_request(description=description, **configuration)
     expected = plan_request(description, target_mod=configuration["target_mod"])
     assert result["status"] == expected.status
     assert result["mod_planning_brief"]["blockers"] == expected.mod_planning_brief["blockers"]
     assert result["request_planning_report"]["uncertainties"] == expected.request_planning_report["uncertainties"]
-    assert result["mod_planning_brief"]["blockers"] or result["request_planning_report"]["uncertainties"]
+    has_gap = bool(result["mod_planning_brief"]["blockers"] or result["request_planning_report"]["uncertainties"])
+    assert has_gap is must_have_gap
 
 
 @pytest.mark.parametrize("description", ["", "\0", "x" * 32769], ids=["empty", "nul", "oversized"])

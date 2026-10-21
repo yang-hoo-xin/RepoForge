@@ -137,6 +137,12 @@ nonexistent_traces.jsonl/
 /.phase3_runtime/
 /.uv-cache/
 .codex/task-packet*.json
+/.chart-data-*/
+/.codex-finalizer/
+
+# Local document-rendering and finalizer outputs are disposable previews, not
+# product source or revision-bound release evidence.
+# 为什么要有它：候选PPT和检查转储由本机工具生成，提交它们会扩大版本体积并混淆源码与发布证据。
 
 # Credential variants; share only explicit configuration examples.
 # 为什么要有它：实际凭据可能存为不同env文件名，公开时仅保留可以安全复制的示例模板。

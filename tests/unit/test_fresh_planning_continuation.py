@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -39,8 +40,8 @@ from src.mod_agent.local_entry import (
     LocalEntryError,
     LocalOllamaInitialPatchAdapter,
     LocalOllamaInitialPatchProfileV1,
-    _patch_agent_initial_messages,
     _local_patch_response_sidecar_path,
+    _patch_agent_initial_messages,
     _write_local_patch_response_sidecar,
     make_exact_no_write_dry_run_factory,
 )
@@ -1162,7 +1163,7 @@ def test_exact_plan_runs_one_local_patch_review_and_no_write_dry_run(
     response_contract = receipt["factory_receipt"]["patch_response_contract"]
     assert response_contract == {
         "contract_id": "patch_generation",
-        "contract_version": "2",
+            "contract_version": "3",
         "schema_sha256": receipt["factory_receipt"]["provider_request"][
             "response_format_sha256"
         ],
@@ -1499,6 +1500,39 @@ def test_patch_response_sidecar_different_bytes_rejects_without_overwrite(
         _write_local_patch_response_sidecar(destination, "different response\r\n")
 
     assert destination.read_bytes() == original
+    assert list(destination.parent.glob("*.tmp")) == []
+
+
+def test_patch_response_sidecar_write_failure_retains_safe_stage_diagnostics(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    destination = _local_patch_response_sidecar_path(
+        tmp_path,
+        run_id="patch_continuation_write_failure",
+    )
+
+    failure = PermissionError(13, "controlled failure")
+    failure.winerror = 5
+    monkeypatch.setattr(os, "link", lambda *_args: (_ for _ in ()).throw(failure))
+
+    with pytest.raises(
+        LocalEntryError,
+        match="LOCAL_PATCH_RESPONSE_SIDECAR_WRITE_FAILED",
+    ) as captured:
+        _write_local_patch_response_sidecar(destination, "response")
+
+    assert captured.value.diagnostics == {
+        "failure_boundary": "local_patch_response_sidecar_write",
+        "operation": "install_hardlink",
+        "os_error_type": "PermissionError",
+        "errno": 13,
+        "winerror": 5,
+        "destination_path_length": len(str(destination)),
+        "temporary_path_length": captured.value.diagnostics["temporary_path_length"],
+    }
+    assert captured.value.diagnostics["temporary_path_length"] > len(str(destination.parent))
+    assert not destination.exists()
     assert list(destination.parent.glob("*.tmp")) == []
 
 

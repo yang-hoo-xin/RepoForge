@@ -110,23 +110,86 @@ class DashboardProjectionBuilder:
             for artifact_type in EXPECTED_ARTIFACT_TYPES
             if artifact_type not in artifact_by_type
         ]
-        blockers = self._collect_blockers(envelopes)
+        workflow = self._workflow_summary(artifact_by_type)
+        evaluation = self._evaluation_summary(artifact_by_type)
+        active, historical, terminal_blockers = self._resolve_current_terminal(
+            envelopes, artifact_by_type, artifact_summaries, workflow, evaluation)
+        blockers = self._collect_blockers(active) + terminal_blockers
         return {
             "feature_id": feature_id,
             "status": "blocked" if blockers else "available",
-            "workflow": self._workflow_summary(artifact_by_type),
+            "workflow": workflow,
             "evidence": self._evidence_summary(artifact_by_type),
             "proposal": self._proposal_summary(artifact_by_type),
             "build": self._build_summary(artifact_by_type),
             "runtime": self._runtime_summary(artifact_by_type),
             "repair": self._repair_summary(artifact_by_type),
-            "evaluation": self._evaluation_summary(artifact_by_type),
+            "evaluation": evaluation,
             "git": self._git_summary(artifact_by_type),
             "artifacts": artifact_summaries,
             "artifact_dag": self._artifact_dag(envelopes),
             "missing_artifacts": missing,
             "blockers": blockers,
+            "historical_blockers": self._collect_blockers(historical),
         }
+
+    def _resolve_current_terminal(self, envelopes, by_type, summaries, workflow, evaluation):
+        """Keep historical failures visible without overriding a valid current result."""
+        freshness = {item["artifact_type"]: item["freshness"] for item in summaries}
+        summary = by_type.get("workflow_summary")
+        report = by_type.get("eval_report")
+        summary_data, report_data = _data(summary), _data(report)
+        summary_fresh = freshness.get("workflow_summary", {}).get("status") == "fresh"
+        report_fresh = freshness.get("eval_report", {}).get("status") == "fresh"
+        summary_eval_inputs = [item for item in (summary or {}).get("inputs", {}).get("upstream_artifacts", [])
+                               if isinstance(item, dict) and item.get("artifact_type") == "eval_report"]
+        current_accepted = bool(summary and report and summary_fresh and report_fresh
+            and summary.get("status") == report.get("status") == "success"
+            and summary_data.get("final_status") == "accepted" and summary_data.get("claims_real_mod_success") is True
+            and report_data.get("verdict") == "accepted" and report_data.get("claims_real_success") is True
+            and (report_data.get("evaluation_gate") or {}).get("status") == "passed"
+            and len(summary_eval_inputs) == 1
+            and summary_eval_inputs[0].get("artifact_hash") == report.get("artifact_hash"))
+        terminal_blockers = []
+        if report:
+            evaluation["freshness"] = freshness.get("eval_report")
+            if not report_fresh:
+                evaluation.update(status="stale", claims_real_success=False)
+        if summary:
+            workflow["freshness"] = freshness.get("workflow_summary")
+            claims_accepted = summary_data.get("final_status") == "accepted" or summary_data.get("claims_real_mod_success") is True
+            if claims_accepted and not current_accepted:
+                stale = not summary_fresh or not report_fresh
+                workflow.update(status="stale" if stale else "blocked",
+                    recorded_final_status=summary_data.get("final_status"),
+                    final_status="stale" if stale else "unverified", claims_real_mod_success=False)
+                terminal_blockers.append({"artifact_type": "workflow_summary", "stage": "dashboard",
+                    "code": "CURRENT_TERMINAL_STALE" if stale else "CURRENT_TERMINAL_LINEAGE_INVALID",
+                    "message": "Stored success no longer has fresh inputs." if stale
+                    else "Stored success does not reference the current accepted evaluation."})
+        if report_fresh and report_data.get("verdict") == "blocked":
+            workflow.update(status="blocked", final_status="blocked", claims_real_mod_success=False,
+                workflow_completion_status=report_data.get("workflow_completion_status"),
+                requested_behavior_status=report_data.get("requested_behavior_status"),
+                terminal_authority="eval_report")
+            if not (report.get("blockers") or report_data.get("blockers")):
+                terminal_blockers.append({"artifact_type": "eval_report", "stage": "evaluation",
+                    "code": "CURRENT_EVALUATION_BLOCKED", "message": "The current evaluation is blocked."})
+        active, historical = [], []
+        for envelope in envelopes:
+            inputs = envelope.get("inputs", {}).get("upstream_artifacts", [])
+            old_evals = [item for item in inputs if isinstance(item, dict) and item.get("artifact_type") == "eval_report"]
+            # Scope: display only; never edit or delete historical business artifacts.
+            # 为什么要有它：只有新且有效的最终验收可替代旧失败显示，当前失败、无效引用或输入变化不能被隐藏。
+            superseded = (current_accepted and envelope.get("artifact_type") == "blocked_report"
+                and freshness.get("blocked_report", {}).get("status") == "stale"
+                and len(old_evals) == 1 and old_evals[0].get("artifact_hash") != report.get("artifact_hash"))
+            (historical if superseded else active).append(envelope)
+        if any(item.get("artifact_type") == "blocked_report" and
+               (item.get("blockers") or _data(item).get("blockers")) for item in active):
+            workflow.update(status="blocked", recorded_final_status=summary_data.get("final_status"),
+                            final_status="blocked", claims_real_mod_success=False, terminal_authority="blocked_report")
+        return active, historical, terminal_blockers
 
     def _read_envelopes(self, refs: list[ArtifactRef]) -> list[dict[str, Any]]:
         envelopes = []

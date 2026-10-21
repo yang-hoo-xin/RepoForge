@@ -12,9 +12,18 @@ from uuid import uuid4
 from src.core.trace.execution_trace import ExecutionTrace
 from src.libs.llm.ollama_llm import OllamaLLM
 from src.mod_agent.local_entry import _read_ollama_model_identity
+from src.mod_agent.planning.clarification_state import (
+    ClarificationState,
+    read_reference,
+    reference,
+    transcript,
+)
+from src.mod_agent.planning.clarified_request import (
+    ANCHOR_PROTOCOL,
+    UNIT_ROLE_PROTOCOL,
+    product_description,
+)
 from src.mod_agent.planning.task_intent import select_task_intent
-from src.mod_agent.planning.clarification_state import ClarificationState, read_reference, reference, transcript
-from src.mod_agent.planning.clarified_request import ANCHOR_PROTOCOL, UNIT_ROLE_PROTOCOL, product_description
 from src.mod_agent.upstream_model_trace import _usage
 
 
@@ -34,6 +43,8 @@ def routing_context(*, execution_config, active_run_id=None, parent_execution_co
         bindings["dependency_api"] = bridge.dependency_api_binding(options)
     if options.get("--knowledge-evidence-config"):
         bindings["knowledge_evidence"] = bridge.knowledge_evidence_binding(options)
+    if options.get("--repository-profile"):
+        bindings["repository_profile"] = bridge.repository_profile_binding(options)
     if parent_execution_config is not None and active_run_id is None:
         raise ValueError("TASK_INTENT_PARENT_REQUIRES_ACTIVE_TASK")
     if active_run_id is not None:
@@ -51,9 +62,11 @@ def routing_context(*, execution_config, active_run_id=None, parent_execution_co
             _, prepared_options = bridge._configuration_arguments(selected)
             # 为什么要有它：初始化或派生完成后进程中断，继续命令应识别已绑定原需求，不再分配工程或预算。
             manifest = {"request": request["description"], "target_project": prepared_options["--target-project"]}
+            meter_only = prepared_options.get("--model-call-budget-policy") == "meter_only"
+            maximum = None if meter_only else int(prepared_options["--task-model-call-limit"])
             result = {"status": "prepared_not_started", "model_call_budget": {
-                "maximum": int(prepared_options["--task-model-call-limit"]), "consumed": 0,
-                "remaining": int(prepared_options["--task-model-call-limit"])}}
+                "maximum": maximum, "consumed": 0, "remaining": maximum,
+                **({"policy": "meter_only"} if meter_only else {})}}
             bindings["prepared_request_ref"] = binding["request_ref"]
         context["tasks"].append({"id": active_run_id, "original_request": manifest["request"],
             "status": result.get("status"), "remaining_model_budget": result.get("model_call_budget")})
@@ -96,7 +109,7 @@ def routing_context(*, execution_config, active_run_id=None, parent_execution_co
 def run_natural_request(*, execution_config, description, active_run_id=None,
                         allocation_config=None, delivery_root=None, parent_execution_config=None,
                         preview_only=False, llm=None, identity_reader=None,
-                        conversation_id=None, clarification_for=None, turn_id=None, product_executor=None):
+                        conversation_id=None, clarification_for=None, turn_id=None, product_executor=None, unified_evaluation=None):
     """Route once, then call the existing owner with unchanged literal request/permissions.
 
     为什么要有它：自然语言路由不另造执行循环；其一次调用独立记账，同任务续接不获得新预算。
@@ -156,11 +169,16 @@ def run_natural_request(*, execution_config, description, active_run_id=None,
     route_id = "route_" + uuid4().hex
     root = bridge._contained_record_path(workspace / ".dsh-routing" / route_id, workspace)
     root.mkdir(parents=True, exist_ok=False)
-    budget = {"routing_model_call_limit": 1, "product_new_task_call_limit": parsed.task_model_call_limit,
-        "new_task_combined_maximum": 1 + parsed.task_model_call_limit,
+    meter_only = parsed.model_call_budget_policy == "meter_only"
+    budget = {"routing_model_call_limit": None if meter_only else 1,
+        "product_new_task_call_limit": None if meter_only else parsed.task_model_call_limit,
+        "new_task_combined_maximum": None if meter_only else 1 + parsed.task_model_call_limit,
         "new_task_combined_maximum_scope": "current routing turn plus a new product task only; prior routing costs are additional",
         "resume_product_budget": "unchanged inherited task budget",
         "scope": "routing cost is additional and separate from product task budget"}
+    if meter_only:
+        budget.update(policy="meter_only",
+            new_task_combined_maximum_scope="No count ceiling; routing and product usage are retained separately.")
     if state is not None:
         state.claim(root, preview_only)
     _save(root / "request.json", {"description": description, "effective_description": effective_description,
@@ -282,7 +300,13 @@ def run_natural_request(*, execution_config, description, active_run_id=None,
             if state is not None:
                 result.update(state.totals(result))
                 result["budget"]["conversation_reserved_routing_plus_new_product_maximum"] = (
-                    result["cumulative_routing_calls"] + parsed.task_model_call_limit)
+                    None if parsed.model_call_budget_policy == "meter_only"
+                    else result["cumulative_routing_calls"] + parsed.task_model_call_limit)
+            if unified_evaluation is not None:
+                try:
+                    result["unified_evaluation"] = unified_evaluation(result, routing_root=root)
+                except Exception as error:
+                    result["unified_evaluation"] = {"status": "evaluation_error", "error_type": type(error).__name__}
             _save(root / "result.json", result)
             if state is not None:
                 state.finish(root)

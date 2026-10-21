@@ -15,7 +15,14 @@ from prometheus_client import CollectorRegistry, Counter, Histogram, generate_la
 from src.service_layer.config import ServiceConfig
 from src.service_layer.http_limits import BodyLimitMiddleware
 from src.service_layer.schemas import JobSubmission
-from src.service_layer.store import IdempotencyConflict, QueueFull, RedisJobStore
+from src.service_layer.store import (
+    CapacityExceeded,
+    CapacityPolicyMismatch,
+    CapacityStateError,
+    IdempotencyConflict,
+    QueueFull,
+    RedisJobStore,
+)
 
 
 def public_job(job):
@@ -34,6 +41,8 @@ def create_app(config: ServiceConfig | None = None, *, store=None):
                              socket_connect_timeout=5),
         namespace=config.namespace, retention_seconds=config.retention_seconds,
         max_pending=config.max_pending,
+        capacity_bytes=config.capacity_bytes, cache_capacity_bytes=config.cache_capacity_bytes,
+        cache_ttl_seconds=config.query_cache_ttl,
     )
     registry = CollectorRegistry()
     requests = Counter("service_http_requests_total", "HTTP responses", ["route", "method", "status"], registry=registry)
@@ -77,6 +86,12 @@ def create_app(config: ServiceConfig | None = None, *, store=None):
     def available(operation, *args, **kwargs):
         try:
             return operation(*args, **kwargs)
+        except CapacityExceeded:
+            # Scope: refusal before new work is admitted, including a new rate identity.
+            # 为什么要有它：容量不足不能返回已接单，也不能绕过限流记录占用；返回可重试的背压，不回显内部数据。
+            raise HTTPException(429, "Service capacity reached", headers={"Retry-After": "1"}) from None
+        except (CapacityPolicyMismatch, CapacityStateError):
+            raise HTTPException(503, "Job store capacity policy unavailable", headers={"Retry-After": "1"}) from None
         except redis.RedisError:
             raise HTTPException(503, "Job store unavailable", headers={"Retry-After": "1"}) from None
 
@@ -132,6 +147,7 @@ def create_app(config: ServiceConfig | None = None, *, store=None):
         if view not in {"artifacts", "status", "dashboard"}:
             raise HTTPException(404, "Unknown artifact view")
         from urllib.parse import quote
+
         from src.mod_agent.api.http_server import ModAgentHttpApi
         from src.mod_agent.artifacts import ArtifactStore
 

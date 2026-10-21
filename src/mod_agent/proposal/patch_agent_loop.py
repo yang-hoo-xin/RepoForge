@@ -8,6 +8,8 @@ import re
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field, replace
+from itertools import count
+from math import inf
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
@@ -33,6 +35,12 @@ from src.mod_agent.proposal.code_generator import (
 from src.mod_agent.proposal.noop_submission_feedback import (
     noop_code_identity,
     project_whole_noop_response,
+)
+from src.mod_agent.proposal.tool_argument_feedback import (
+    argument_feedback,
+    classify_source_arguments,
+    correction_used,
+    retained_correction_state,
 )
 from src.mod_agent.proposal.tool_batch_feedback import reject_nonread_batch
 
@@ -78,7 +86,7 @@ class PatchAgentLoopError(RuntimeError):
 class PatchAgentLoopPolicy:
     """Shared model and binding-read limits plus source-observation controls."""
 
-    max_observation_bytes: int = 32_768
+    max_observation_bytes: int | None = 32_768
     context_radius_lines: int = 64
     finalize_after_first_observation: bool = True
     enable_supporting_reads: bool = False
@@ -89,8 +97,8 @@ class PatchAgentLoopPolicy:
     reuse_covered_source_observations: bool = False
     diagnose_behavior_failures: bool = False
     # One dispatched binding read consumes one unit, including in a batch.
-    max_tool_rounds: int = 3
-    max_total_model_turns: int = 5
+    max_tool_rounds: int | None = 3
+    max_total_model_turns: int | None = 5
     model_call_budget_policy: str = "stage_and_total"
 
     def __post_init__(self) -> None:
@@ -105,18 +113,24 @@ class PatchAgentLoopPolicy:
                 stage="policy",
                 reason="Patch strategy switches must be boolean values.",
             )
-        if self.model_call_budget_policy not in {"stage_and_total", "task_total_only"}:
+        if self.model_call_budget_policy not in {"stage_and_total", "task_total_only", "meter_only"}:
             raise PatchAgentLoopError("PATCH_AGENT_POLICY_INVALID", stage="policy",
                 reason="Unknown model-call budget policy.")
-        if (type(self.max_total_model_turns) is not int or self.max_total_model_turns < 1
+        metered = self.model_call_budget_policy == "meter_only"
+        if metered:
+            for name in ("max_total_model_turns", "max_tool_rounds", "max_observation_bytes"):
+                object.__setattr__(self, name, None)
+        if not metered and (type(self.max_total_model_turns) is not int or self.max_total_model_turns < 1
                 or self.model_call_budget_policy == "stage_and_total" and self.max_total_model_turns > 5):
             raise PatchAgentLoopError("PATCH_AGENT_POLICY_INVALID", stage="policy",
                 reason="The selected model-turn limit must be positive; legacy workers retain their five-turn bound.")
-        if (type(self.max_tool_rounds) is not int or self.max_tool_rounds < 0
+        if not metered and (type(self.max_tool_rounds) is not int or self.max_tool_rounds < 0
                 or (self.max_tool_rounds == 0 and self.require_source_inspection)):
             raise PatchAgentLoopError("PATCH_AGENT_POLICY_INVALID", stage="policy",
                 reason="The binding-read limit must be non-negative, and positive when source inspection is required.")
         for name in ("max_observation_bytes", "context_radius_lines"):
+            if name == "max_observation_bytes" and metered:
+                continue
             value = getattr(self, name)
             minimum = 1 if name == "context_radius_lines" else 0
             if type(value) is not int or value < minimum:
@@ -409,6 +423,7 @@ class PatchAgentLoopResult:
     reused_source_observations: int = 0
     turn_progress_trace: tuple[dict[str, object], ...] = ()
     submission_trace: tuple[dict[str, object], ...] = ()
+    tool_argument_correction_used: bool = False
 
     @property
     def completed(self) -> bool:
@@ -444,6 +459,7 @@ class PatchAgentLoopResult:
             ],
             "termination": deepcopy(self.termination),
             "tool_availability_trace": [deepcopy(item) for item in self.tool_availability_trace],
+            "tool_argument_correction_used": self.tool_argument_correction_used,
             **({"submission_trace": [deepcopy(item) for item in self.submission_trace]}
                if self.submission_trace else {}),
         }
@@ -983,10 +999,14 @@ def run_patch_agent_loop(
     response_admission: Callable[[AgentTurnResponse], None] | None = None,
     request_projection: Callable[[AgentTurnRequest], AgentTurnRequest] | None = None,
     diagnosis_request: AgentTurnRequest | None = None,
+    tool_argument_correction_used: bool = False,
 ) -> PatchAgentLoopResult:
     """Run bounded source inspection turns and return final Patch content or a receipt."""
 
     selected_policy = policy or source_inspector.policy
+    metered = selected_policy.model_call_budget_policy == "meter_only"
+    argument_used = correction_used(tool_argument_correction_used)
+    argument_resume_request: AgentTurnRequest | None = None
     actual_upstream_effects = normalize_upstream_effects(upstream_effects)
     reuse_covered = selected_policy.reuse_covered_source_observations
     encode_excerpts = selected_policy.deduplicate_source_excerpts or reuse_covered
@@ -995,10 +1015,10 @@ def run_patch_agent_loop(
         if type(value) is not int or value < 0:
             raise PatchAgentLoopError("PATCH_AGENT_LOOP_BUDGET_INVALID", stage="loop_admission",
                 reason="Consumed and reserved budget counters must be non-negative integers.")
-    if consumed_model_turns > selected_policy.max_total_model_turns or consumed_tool_rounds > selected_policy.max_tool_rounds:
+    if not metered and (consumed_model_turns > selected_policy.max_total_model_turns or consumed_tool_rounds > selected_policy.max_tool_rounds):
         raise PatchAgentLoopError("PATCH_AGENT_LOOP_BUDGET_INVALID", stage="loop_admission",
             reason="Consumed counters exceed the shared policy.")
-    if (reserve_model_turns > selected_policy.max_total_model_turns
+    if not metered and (reserve_model_turns > selected_policy.max_total_model_turns
             or reserve_tool_reads > selected_policy.max_tool_rounds
             or reserve_observation_bytes > selected_policy.max_observation_bytes):
         raise PatchAgentLoopError("PATCH_AGENT_LOOP_BUDGET_INVALID", stage="loop_admission",
@@ -1047,13 +1067,17 @@ def run_patch_agent_loop(
     rejected_read_batches: set[str] = set()
     total_observation_bytes = consumed_observation_bytes
     tool_rounds_used = consumed_tool_rounds
-    allowed_model_end = selected_policy.max_total_model_turns - reserve_model_turns
-    allowed_read_end = selected_policy.max_tool_rounds - reserve_tool_reads
-    allowed_observation_end = selected_policy.max_observation_bytes - reserve_observation_bytes
+    allowed_model_end = inf if metered else selected_policy.max_total_model_turns - reserve_model_turns
+    allowed_read_end = inf if metered else selected_policy.max_tool_rounds - reserve_tool_reads
+    allowed_observation_end = inf if metered else selected_policy.max_observation_bytes - reserve_observation_bytes
     base_request = deepcopy(resume_request) if resume_request is not None else AgentTurnRequest(messages=initial_messages)
     old_states = [message.content for message in base_request.messages
         if _is_loop_state(message)]
+    retained_used, rejected_argument_ids, argument_model_floor, argument_byte_floor, retryable_argument_calls = retained_correction_state(
+        base_request, source_tool=PATCH_SOURCE_INSPECTION_TOOL_NAME)
+    argument_used = argument_used or retained_used
     for state in old_states:
+        argument_used = correction_used(state.get("tool_argument_correction_used", False)) or argument_used
         for observation in state.get("prior_observations", []):
             if isinstance(observation, Mapping):
                 observations.append(deepcopy(observation))
@@ -1099,6 +1123,8 @@ def run_patch_agent_loop(
             (state.get("budget_state", {}).get("tool_rounds_used", 0) for state in old_states), default=0))
         prior_byte_floor = max((state.get("budget_state", {}).get("observation_bytes_used", 0)
             for state in old_states), default=0)
+        prior_model_floor = max(prior_model_floor, argument_model_floor)
+        prior_byte_floor = max(prior_byte_floor, argument_byte_floor)
         if reuse_covered and any(state.get("read_execution", {}).get("accounting_version") != "new_source_window_v2"
                 for state in old_states):
             raise PatchAgentLoopError("PATCH_AGENT_LOOP_BUDGET_INVALID", stage="loop_admission",
@@ -1121,6 +1147,8 @@ def run_patch_agent_loop(
     format_correction_pending = False
 
     def result_for_segment(**kwargs: Any) -> PatchAgentLoopResult:
+        if argument_used and kwargs.get("final_request") is None and argument_resume_request is not None:
+            kwargs["final_request"] = argument_resume_request
         kwargs["model_turns_used"] -= consumed_model_turns
         kwargs["tool_rounds_used"] -= consumed_tool_rounds
         kwargs["total_observation_bytes"] -= consumed_observation_bytes
@@ -1132,7 +1160,7 @@ def run_patch_agent_loop(
             new_count = sum(item.get("read_cost", 1) for item in calls)
             progress.append({"turn_index": turn, **response_actions.get(turn, {}),
                 "dispatched_binding_reads": len(calls), "new_source_windows": new_count if reuse_covered else None,
-                "reused_source_observations": sum(item.get("read_cost") == 0 for item in calls),
+                "reused_source_observations": sum(item.get("dispatch_started") and item.get("read_cost") == 0 for item in calls),
                 "read_cost": new_count, "no_new_source_information": new_count == 0 if reuse_covered else None,
                 "observation_bytes_added": sum(item.get("encoded_payload_bytes", item["model_payload_bytes"])
                     for item in observations_in_turn) + sum(item.get("feedback_payload_bytes", 0)
@@ -1141,11 +1169,14 @@ def run_patch_agent_loop(
                 int(item.get("feedback_payload_bytes", 0)) for item in submission_trace
                 if item["turn_index"] == turn and item.get("feedback_queued"))
             progress[-1]["observation_bytes_added"] += int(usage.get("diagnosis_context_bytes", 0))
+        # Scope: aggregate only dispatched reads as reused source observations.
+        # 为什么要有它：未执行的参数反馈read_cost为0，但它不是成功读取或已验证观察的复用。
         return replace(_loop_result(**kwargs), tool_availability_trace=tuple(deepcopy(tool_availability_trace)),
             read_accounting_version="new_source_window_v2" if reuse_covered else "binding_dispatch_v1",
             dispatched_binding_reads=sum(bool(item.get("dispatch_started")) for item in tool_call_trace),
-            reused_source_observations=sum(item.get("read_cost") == 0 for item in tool_call_trace),
-            turn_progress_trace=tuple(progress), submission_trace=tuple(deepcopy(submission_trace)))
+            reused_source_observations=sum(bool(item.get("dispatch_started")) and item.get("read_cost") == 0 for item in tool_call_trace),
+            turn_progress_trace=tuple(progress), submission_trace=tuple(deepcopy(submission_trace)),
+            tool_argument_correction_used=argument_used)
     pending_response: AgentTurnResponse | None = None
     pending_observation: PatchSourceObservation | None = None
     pending_tool_results: tuple[AgentToolResult, ...] = ()
@@ -1159,7 +1190,9 @@ def run_patch_agent_loop(
             termination=_termination("PATCH_AGENT_MODEL_TURN_BUDGET_EXHAUSTED" if consumed_model_turns >= allowed_model_end
                 else "PATCH_AGENT_OBSERVATION_BUDGET_EXHAUSTED", "No shared budget remains for this segment.", consumed_model_turns))
 
-    for turn_index in range(consumed_model_turns + 1, selected_policy.max_total_model_turns + 1):
+    turn_indices = count(consumed_model_turns + 1) if metered else range(
+        consumed_model_turns + 1, selected_policy.max_total_model_turns + 1)
+    for turn_index in turn_indices:
         if turn_index > allowed_model_end:
             return result_for_segment(status="blocked", final_content=None, provider=provider, model=model,
                 model_turns_used=turn_index - 1, tool_rounds_used=tool_rounds_used,
@@ -1233,6 +1266,7 @@ def run_patch_agent_loop(
             total_observation_bytes=total_observation_bytes,
             reserve_observation_bytes=reserve_observation_bytes,
             upstream_effects=actual_upstream_effects,
+            tool_argument_correction_used=argument_used,
         )
         tool_results = pending_tool_results or (
             (
@@ -1273,6 +1307,10 @@ def run_patch_agent_loop(
         )
         diagnosing = (diagnosis_request is not None and turn_index == consumed_model_turns + 1
                       and turn_index < allowed_model_end)
+        if argument_used:
+            # Scope: retain the actual source-tool exchange even when a diagnosis has no tools.
+            # 为什么要有它：诊断请求失败不能丢掉已消耗纠错机会的原反馈和读取上下文。
+            argument_resume_request = request
         if diagnosing:
             # 为什么要有它：诊断占用同一真实调用额度且不执行工具，保留至少一次提交机会；模型猜想不成为验收门禁。
             request = replace(diagnosis_request, tools=(), tool_choice="none", response_format=None,
@@ -1301,6 +1339,11 @@ def run_patch_agent_loop(
                     total_observation_bytes=total_observation_bytes, usage_by_turn=usage_by_turn,
                     tool_call_trace=tool_call_trace, observation_trace=observation_trace,
                     termination=_termination(getattr(exc, "code", type(exc).__name__), str(exc), turn_index - 1))
+        sent_argument_ids = retained_correction_state(sent_request, source_tool=PATCH_SOURCE_INSPECTION_TOOL_NAME)[1]
+        for entry in tool_call_trace:
+            if entry.get("argument_correction") and entry["tool_call_id"] in sent_argument_ids:
+                entry.update(feedback_in_request=True, feedback_request_attempted=True,
+                             feedback_request_turn=turn_index)
         try:
             # Retain logical history for source-cache validation and same-Plan
             # continuation; the recorder/provider receives the checked view.
@@ -1355,6 +1398,10 @@ def run_patch_agent_loop(
             )
         provider = response.provider
         model = response.model
+        for entry in tool_call_trace:
+            if entry.get("argument_correction") and entry["tool_call_id"] in sent_argument_ids:
+                entry["followup_response_observed"] = True
+                entry.setdefault("consumed_in_model_turn", turn_index)
         for entry in submission_trace:
             if entry.get("feedback_queued") and entry["response_sha256"] in feedback_in_request:
                 entry["followup_response_observed"] = True
@@ -1418,6 +1465,72 @@ def run_patch_agent_loop(
                 total_observation_bytes=total_observation_bytes, usage_by_turn=usage_by_turn,
                 tool_call_trace=tool_call_trace, observation_trace=observation_trace,
                 termination=_termination(code, "Provider output is incomplete or stopped; it is not a complete submission to format-correct.", turn_index))
+
+        arguments = classify_source_arguments(response.tool_calls, source_tool=PATCH_SOURCE_INSPECTION_TOOL_NAME,
+            available_bindings=source_inspector.available_read_binding_ids, inspected_bindings=inspected_binding_ids,
+            executed_call_ids=seen_tool_call_ids, rejected_argument_call_ids=rejected_argument_ids,
+            reusable_call_bindings=seen_call_bindings if reuse_covered else None,
+            retryable_argument_calls=retryable_argument_calls,
+            tool_available=any(tool.name == PATCH_SOURCE_INSPECTION_TOOL_NAME for tool in request.tools),
+            allow_batches=selected_policy.allow_batched_reads)
+        if arguments is not None:
+            code, reason = arguments.code, arguments.reason
+            try:
+                source_inspector.validate_snapshot()
+            except PatchAgentLoopError as exc:
+                code, reason = exc.code, exc.reason
+                arguments = replace(arguments, issues=())
+            feedback = ()
+            if arguments.issues:
+                if argument_used:
+                    code, reason = "PATCH_AGENT_TOOL_ARGUMENT_CORRECTION_EXHAUSTED", "The shared argument-correction opportunity was already used."
+                elif turn_index >= allowed_model_end:
+                    code, reason = "PATCH_AGENT_MODEL_TURN_BUDGET_EXHAUSTED", "No model turn remains for argument correction."
+                elif tool_rounds_used >= allowed_read_end:
+                    code, reason = "PATCH_AGENT_TOOL_ROUND_BUDGET_EXHAUSTED", "Malformed arguments cannot establish a free cached-read identity."
+                else:
+                    schema = next(tool.parameters for tool in request.tools if tool.name == PATCH_SOURCE_INSPECTION_TOOL_NAME)
+                    feedback = argument_feedback(response.tool_calls, arguments, allowed_format=deepcopy(schema),
+                        model_turns_used=turn_index, observation_bytes_before=total_observation_bytes)
+            feedback_bytes = sum(len(_canonical_json(item.output).encode("utf-8")) for item in feedback)
+            if feedback and total_observation_bytes + feedback_bytes > allowed_observation_end:
+                code, reason = "PATCH_AGENT_OBSERVATION_BUDGET_EXHAUSTED", "The complete argument feedback does not fit the original observation budget."
+                feedback = ()
+            for index, call in enumerate(response.tool_calls):
+                entry = _tool_trace(call, turn_index=turn_index,
+                    status="rejected_not_executed" if feedback or len(response.tool_calls) > 1 else "rejected",
+                    code=code, dispatch_started=False)
+                entry.update(read_cost=0, argument_correction=bool(feedback), feedback_queued=bool(feedback),
+                    feedback_in_request=False, followup_response_observed=False,
+                    feedback_payload_bytes=len(_canonical_json(feedback[index].output).encode("utf-8")) if feedback else 0)
+                tool_call_trace.append(entry)
+            availability["selection"] = "rejected_not_executed"
+            if not feedback:
+                return result_for_segment(status="blocked", final_content=None, provider=provider, model=model,
+                    model_turns_used=turn_index, tool_rounds_used=tool_rounds_used,
+                    total_observation_bytes=total_observation_bytes, usage_by_turn=usage_by_turn,
+                    tool_call_trace=tool_call_trace, observation_trace=observation_trace,
+                    termination=_termination(code, reason, turn_index))
+            # Scope: exactly one correction in the original budgets, retained even before its follow-up succeeds.
+            # 为什么要有它：无读取就不扣read；反馈字节与模型回合仍计费，provider失败或续接不能刷新机会。
+            argument_used = True
+            rejected_argument_ids.update(call.call_id for call in response.tool_calls)
+            retryable_argument_calls.update({item.call_id: item.output["validated_retry_arguments"]["binding_id"]
+                for item in feedback if "validated_retry_arguments" in item.output})
+            total_observation_bytes += feedback_bytes
+            retained = _without_loop_states(request)
+            history = retained.historical_tool_exchanges
+            if retained.tool_results:
+                history = (*history, AgentToolExchange(retained.tool_results, retained.provider_state,
+                    retained.tool_result_insert_index if retained.tool_result_insert_index is not None else len(retained.messages)))
+            content = deepcopy(state_message.content)
+            content["tool_argument_correction_used"] = True
+            content["budget_state"]["observation_bytes_used"] = total_observation_bytes
+            argument_resume_request = replace(retained, messages=(*retained.messages, replace(state_message, content=content)),
+                tool_results=feedback, provider_state=response.provider_state,
+                tool_result_insert_index=len(retained.messages), historical_tool_exchanges=history)
+            base_request = _without_loop_states(argument_resume_request)
+            continue
 
         rejection = reject_nonread_batch(response.tool_calls,
             source_tool_name=PATCH_SOURCE_INSPECTION_TOOL_NAME,
@@ -1564,7 +1677,7 @@ def run_patch_agent_loop(
                     **({"requested_new_source_windows": requested_cost, "reused_source_observations": len(calls) - requested_cost,
                         "read_accounting_version": "new_source_window_v2"} if reuse_covered else {}),
                     "remaining_read_count": remaining_reads,
-                    "total_remaining_read_count": selected_policy.max_tool_rounds - tool_rounds_used,
+                    "total_remaining_read_count": None if metered else selected_policy.max_tool_rounds - tool_rounds_used,
                     "reserved_read_count": reserve_tool_reads,
                     "required_action": ("Select a batch whose new source windows fit the remaining read count; visible-source references cost zero."
                         if reuse_covered else "Select no more than the remaining read count, or finish from existing context."),
@@ -1945,13 +2058,13 @@ def run_patch_agent_loop(
                 # A complete, bound Patch with a repairable text defect has
                 # reached recovery. Spend its existing reserve, never new credit.
                 submission["released_recovery_reservation"] = {
-                    "model_turns": selected_policy.max_total_model_turns - allowed_model_end,
-                    "tool_reads": selected_policy.max_tool_rounds - allowed_read_end,
-                    "observation_bytes": selected_policy.max_observation_bytes - allowed_observation_end,
+                    "model_turns": 0 if metered else selected_policy.max_total_model_turns - allowed_model_end,
+                    "tool_reads": 0 if metered else selected_policy.max_tool_rounds - allowed_read_end,
+                    "observation_bytes": 0 if metered else selected_policy.max_observation_bytes - allowed_observation_end,
                 }
-                allowed_model_end = selected_policy.max_total_model_turns
-                allowed_read_end = selected_policy.max_tool_rounds
-                allowed_observation_end = selected_policy.max_observation_bytes
+                allowed_model_end = inf if metered else selected_policy.max_total_model_turns
+                allowed_read_end = inf if metered else selected_policy.max_tool_rounds
+                allowed_observation_end = inf if metered else selected_policy.max_observation_bytes
             submission["diagnostics"] = deepcopy(exc.diagnostics)
             noop_view = project_whole_noop_response(raw_content, exc.diagnostics)
             noop_identity = noop_code_identity(exc.diagnostics) if noop_view is not None else None
@@ -2145,11 +2258,13 @@ def _loop_state_message(
     total_observation_bytes: int = 0,
     reserve_observation_bytes: int = 0,
     upstream_effects: Mapping[str, str] | None = None,
+    tool_argument_correction_used: bool = False,
 ) -> AgentMessage:
     return AgentMessage(
         role="user",
         content={
             "message_type": "patch_agent_loop_state",
+            "tool_argument_correction_used": tool_argument_correction_used,
             "allowed_binding_ids": list(source_inspector.available_binding_ids),
             "allowed_read_binding_ids": list(source_inspector.available_read_binding_ids),
             "source_snapshot_sha256": source_inspector.source_snapshot_sha256,
@@ -2161,7 +2276,7 @@ def _loop_state_message(
             **({"upstream_effects": normalize_upstream_effects(upstream_effects)} if policy.allow_upstream_request else {}),
             "read_execution": {"allow_batched_reads": policy.allow_batched_reads,
                 "execution": "sequential", "count_unit": "one_new_complete_source_window" if policy.reuse_covered_source_observations else "one_dispatched_binding_read",
-                "batch_must_fit_remaining_reads": True,
+                "batch_must_fit_remaining_reads": policy.model_call_budget_policy != "meter_only",
                 **({"accounting_version": "new_source_window_v2", "visible_source_reference_read_cost": 0}
                     if policy.reuse_covered_source_observations else {})},
             "prior_observations": [
@@ -2169,18 +2284,19 @@ def _loop_state_message(
                 for observation in prior_observations
             ],
             "budget_state": {
+                "policy": policy.model_call_budget_policy,
                 "model_turns_used": model_turns_used,
-                "total_remaining_model_turns": policy.max_total_model_turns - model_turns_used,
-                "remaining_model_turns": max(0, policy.max_total_model_turns
+                "total_remaining_model_turns": None if policy.model_call_budget_policy == "meter_only" else policy.max_total_model_turns - model_turns_used,
+                "remaining_model_turns": None if policy.model_call_budget_policy == "meter_only" else max(0, policy.max_total_model_turns
                 - model_turns_used - reserve_model_turns),
                 "reserved_model_turns": reserve_model_turns,
                 "tool_rounds_used": tool_rounds_used,
-                "total_remaining_tool_rounds": policy.max_tool_rounds - tool_rounds_used,
-                "remaining_tool_rounds": max(0, policy.max_tool_rounds - tool_rounds_used - reserve_tool_reads),
+                "total_remaining_tool_rounds": None if policy.model_call_budget_policy == "meter_only" else policy.max_tool_rounds - tool_rounds_used,
+                "remaining_tool_rounds": None if policy.model_call_budget_policy == "meter_only" else max(0, policy.max_tool_rounds - tool_rounds_used - reserve_tool_reads),
                 "reserved_tool_reads": reserve_tool_reads,
                 "observation_bytes_used": total_observation_bytes,
-                "total_remaining_observation_bytes": max(0, policy.max_observation_bytes - total_observation_bytes),
-                "remaining_observation_bytes": max(0, policy.max_observation_bytes
+                "total_remaining_observation_bytes": None if policy.model_call_budget_policy == "meter_only" else max(0, policy.max_observation_bytes - total_observation_bytes),
+                "remaining_observation_bytes": None if policy.model_call_budget_policy == "meter_only" else max(0, policy.max_observation_bytes
                 - total_observation_bytes - reserve_observation_bytes),
                 "reserved_observation_bytes": reserve_observation_bytes,
             },
@@ -2318,7 +2434,7 @@ def _tool_trace(
         "tool": call.name,
         "binding_id": (
             call.arguments.get("binding_id")
-            if isinstance(call.arguments.get("binding_id"), str)
+            if isinstance(call.arguments, Mapping) and isinstance(call.arguments.get("binding_id"), str)
             else None
         ),
         "arguments_sha256": _canonical_sha256(call.arguments),

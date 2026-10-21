@@ -8,10 +8,14 @@ boundary, and the rules that prevent architectural drift. It does not replace
 
 ## 1. Product Boundary
 
-This repository is an evidence-grounded controlled code-generation Agent
-platform. Its first verified domain is local GTFO / BepInEx Mod development.
-The product is the controlled delivery chain, not a general-purpose RAG system,
-an autonomous multi-agent framework, or a benchmark platform.
+This repository is an evaluation and execution platform for local and
+heterogeneous coding models, grounding delivery in repository evidence and real
+tests. Verified cases currently include ordinary SDK-style C# repositories and
+pluggable domain-specific acceptance adapters. Individual domains are recorded
+with their evidence and limitations instead of defining the whole product or
+proving arbitrary-repository support. The product is the controlled delivery
+chain, not a general-purpose RAG system, an autonomous multi-agent framework,
+or a benchmark-only platform.
 
 ```text
 request

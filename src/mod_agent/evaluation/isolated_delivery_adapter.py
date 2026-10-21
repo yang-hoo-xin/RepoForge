@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 import time
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -169,6 +169,68 @@ def _compilation_feedback_binding(root, report, proposal, verification, store, m
         "materialized_code_identity": identity, "verification_scope": "compilation_only_gameplay_not_verified"}
 
 
+def _task_agent_verifier_binding(*, root, initial, manifest, snapshot, worker_ref, worker,
+        verification, report, proposal, execution_check_ref):
+    """Recheck the distinct native-tool origin; never manufacture a Patch worker receipt.
+
+    为什么要有它：连续执行器的候选必须绑定真实工具响应和最终计划，不能借旧worker记录格式绕过同一补丁的正式验收。
+    """
+    from src.mod_agent.cli import _task_agent_edit_paths, build_parser
+    from src.mod_agent.proposal.builder import PatchProposalBuilder
+    from src.mod_agent.proposal.patch_agent_loop import PatchAgentLoopPolicy
+    from src.mod_agent.task_agent_execution import (
+        load_task_agent_outcome,
+        validate_task_agent_handoff,
+    )
+
+    parsed = build_parser().parse_args(snapshot["business_argv"])
+    if (getattr(parsed, "technical_executor", None) != "task_agent"
+            or parsed.constraint_policy != "source_priority_v1" or not parsed.local_ollama
+            or not parsed.defer_approval or parsed.run_gtfo_runtime):
+        raise ValueError("DELIVERY_TASK_AGENT_EXECUTION_NOT_DECLARED")
+    paths = _task_agent_edit_paths(parsed.task_agent_edit_paths)
+    declaration = manifest.get("technical_execution", {})
+    if (declaration.get("technical_executor") != "task_agent"
+            or declaration.get("constraint_policy") != parsed.constraint_policy
+            or declaration.get("candidate_mode", "baseline") != parsed.task_agent_candidate_mode
+            or declaration.get("allowed_edit_paths_relative_to_project") != list(paths)):
+        raise ValueError("DELIVERY_TASK_AGENT_SCOPE_CHANGED")
+    target = _inside(root, manifest["nuget_isolated_build_profile"]["working_directory"])
+    allowed = tuple(_inside(target, path).relative_to(root).as_posix() for path in paths)
+    reference = initial.get("task_agent_execution_ref")
+    lineage = proposal.get("context_pack", {}).get("task_agent_lineage", {})
+    if (lineage.get("execution_ref") != reference or lineage.get("approval_inherited") is not False
+            or lineage.get("whole_task_delivered") is not False or initial.get("patch_execution_receipts")):
+        raise ValueError("DELIVERY_TASK_AGENT_ORIGIN_REQUIRED")
+    store = ArtifactStore(root / "a")
+    outcome = load_task_agent_outcome(reference, artifact_store_root=store.root)
+    execution = json.loads(_read_reference(reference, root=root))
+    claim = json.loads(_read_reference(outcome.claim_ref, root=root))
+    if (execution.get("run_id") != initial.get("run_id") or execution.get("request_id") != manifest.get("request_id")
+            or execution.get("policy") != asdict(PatchAgentLoopPolicy(**worker["policy"]))
+            or outcome.budget_after != initial.get("model_call_budget")
+            or initial.get("task_agent_outcome") != outcome.to_dict()
+            or lineage.get("candidate_ref") != outcome.candidate_ref
+            or lineage.get("check_ref") != outcome.check_ref
+            or claim.get("initial_context") != outcome.initial_context.to_dict()):
+        raise ValueError("DELIVERY_TASK_AGENT_EXECUTION_BINDING_CHANGED")
+    handoff = validate_task_agent_handoff(outcome, store=store, workspace_root=root,
+        expected_initial_context=outcome.initial_context, allowed_edit_paths=allowed,
+        worker_configuration_ref=worker_ref,
+        expected_verification_identity=execution["expected_verification_identity"],
+        expected_candidate_mode=parsed.task_agent_candidate_mode)
+    if (handoff.check["report"]["report_ref"] != verification
+            or [PatchProposalBuilder._change_intent(change) for change in handoff.changes] != proposal["diff_intent"]
+            or report.get("implementation_plan_ref") != handoff.final_context.to_dict()["implementation_plan_ref"]
+            or proposal["context_pack"].get("implementation_plan_hash") != handoff.final_context.implementation_plan_ref.artifact_hash):
+        raise ValueError("DELIVERY_TASK_AGENT_PROPOSAL_CHANGED")
+    return {"source": "caller_bound_factory_and_native_task_tool_execution",
+        "validator_sha256": report["verification_identity"]["validator_sha256"],
+        "factory_ref": worker["behavior_evaluator"]["factory_ref"], "worker_configuration_ref": worker_ref,
+        "execution_version_check_ref": execution_check_ref, "task_agent_execution_ref": reference,
+        "candidate_ref": outcome.candidate_ref, "check_ref": outcome.check_ref}
+
+
 def _bound_verifier(context, root, initial, manifest, verification, report, proposal, compilation_binding=None):
     pretransport = initial.get("entry") == "pretransport-patch-continuation"
     snapshot_ref = initial["execution_version_ref"] if pretransport else manifest["execution_version_ref"]
@@ -201,6 +263,14 @@ def _bound_verifier(context, root, initial, manifest, verification, report, prop
             or not any(row.get("role") == "extra_python_load" and row.get("execution_observed") is True
                 and _same_ref(factory, row) for row in check.get("external_bindings", []))):
         raise ValueError("DELIVERY_CALLER_BOUND_EXECUTED_FACTORY_REQUIRED")
+    if initial.get("task_agent_execution_ref") is not None:
+        if pretransport or compilation_binding is not None:
+            raise ValueError("DELIVERY_TASK_AGENT_MODE_UNSUPPORTED")
+        # Scope: native provenance is checked by its exact tool/candidate/report chain.
+        # 为什么要有它：共同factory校验之后必须按真实来源分派，不能要求native候选伪造旧worker的generation字段。
+        return _task_agent_verifier_binding(root=root, initial=initial, manifest=manifest,
+            snapshot=snapshot, worker_ref=worker_ref, worker=worker, verification=verification,
+            report=report, proposal=proposal, execution_check_ref=check_ref)
     expected_kwargs = hashlib.sha256(json.dumps(selected["kwargs"], sort_keys=True, ensure_ascii=False,
         separators=(",", ":"), allow_nan=False).encode()).hexdigest()
     response_hashes = {row["generation"]["model_response_sha256"] for row in proposal["diff_intent"]}
@@ -261,6 +331,14 @@ def prepare_delivery(context):
         # 为什么要有它：续接结果另存而不覆盖首次失败；交付仍须绑定原任务、原manifest和本次真实checkpoint。
         if initial.get("entry") == "pretransport-patch-continuation":
             _pretransport_delivery_binding(root, initial, initial_ref, manifest_ref)
+        elif initial.get("entry") == "retained-task-agent-handoff":
+            from src.mod_agent.retained_task_agent_handoff import validate_retained_handoff_result
+
+            # Scope: native candidate recovery has its own exact history and approval checkpoint.
+            # 为什么要有它：新连续执行器不应冒充旧worker回执；零模型恢复也必须核对真实完成、原失败和本次checkpoint。
+            recovered = validate_retained_handoff_result(run_root=root, result_ref=initial_ref)
+            if recovered != initial:
+                raise ValueError("DELIVERY_RETAINED_TASK_HANDOFF_CHANGED")
         elif (initial.get("parent_run_id") != root.name
                 or initial.get("parent_manifest_ref") != manifest_ref
                 or initial.get("parent_result_ref") != _ref(root / "run_result.json")
@@ -281,6 +359,18 @@ def prepare_delivery(context):
     _inside(root, checkpoint.path)
     store = ArtifactStore(root / "a")
     saved = store.semantic_read_immutable(checkpoint)["data"]
+    repository_binding = manifest.get("repository_profile")
+    if repository_binding is not None:
+        from src.mod_agent.domain.csharp_repository_delivery import (
+            repository_binding_from_request,
+            validate_repository_binding,
+        )
+        from src.mod_agent.product_execution import ProductExecutionRequestV1
+        original_request = ProductExecutionRequestV1.from_dict(json.loads(
+            saved["state_snapshot"]["runtime_summary"]["deferred_product_request_json"]))
+        if repository_binding_from_request(original_request) != repository_binding:
+            raise ValueError("DELIVERY_REPOSITORY_CHECKPOINT_BINDING_CHANGED")
+        validate_repository_binding(repository_binding, root)
     state = saved["state_snapshot"]
     proposal_ref = ArtifactRef(feature_id=initial["feature_id"], artifact_type="patch_proposal",
         path=state["artifacts"]["patch_proposal"], artifact_hash=state["artifact_hashes"]["patch_proposal"])
@@ -290,6 +380,13 @@ def prepare_delivery(context):
         if config.get("verification_selection") != "current_proposal":
             raise ValueError("DELIVERY_EXPLICIT_VERIFICATION_SELECTION_REQUIRED")
         selected = {}
+        lineage = proposal.get("context_pack", {}).get("task_agent_lineage")
+        if lineage is not None:
+            if not bound_verifier or lineage.get("execution_ref") != initial.get("task_agent_execution_ref"):
+                raise ValueError("DELIVERY_TASK_AGENT_ORIGIN_REQUIRED")
+            checked = json.loads(_read_reference(lineage["check_ref"], root=root))
+            ref = checked["report"]["report_ref"]
+            selected[(ref["path"], ref["sha256"])] = ref
         for change in proposal["diff_intent"]:
             generation = change["generation"]
             for observation in generation.get("patch_agent_loop", {}).get("behavior_evaluation_refs", []):
@@ -305,8 +402,13 @@ def prepare_delivery(context):
         if not bound_verifier:
             raise ValueError("DELIVERY_COMPILATION_BOUND_EXECUTION_REQUIRED")
         compilation_binding = _compilation_feedback_binding(root, report, proposal, verification, store, manifest)
-    verifier_binding = _bound_verifier(context, root, initial, manifest, verification, report, proposal,
-        compilation_binding=compilation_binding) if bound_verifier else None
+    if repository_binding is not None:
+        from src.mod_agent.domain.csharp_repository_delivery import validate_repository_candidate
+        verifier_binding = validate_repository_candidate(binding=repository_binding, workspace_root=root,
+            store=store, initial=initial, verification=verification, report=report, proposal=proposal)
+    else:
+        verifier_binding = _bound_verifier(context, root, initial, manifest, verification, report, proposal,
+            compilation_binding=compilation_binding) if bound_verifier else None
     if verifier_binding is not None:
         verifier_sha = verifier_binding["validator_sha256"]
     if (report.get("status") != "passed" or report.get("execution_origin") != "executed"
@@ -322,17 +424,20 @@ def prepare_delivery(context):
     else:
         details = json.loads(_read_reference(report["verification_ref"], root=root))
         rows = details.get("checks", [])
-        check_ids = [row.get("check_id", row.get("check")) for row in rows]
+        # 为什么要有它：参数化测试可能同名，须保留每条结果的runner身份；缺少ID的旧记录才回退到显示名。
+        check_ids = [row.get("check_id", row.get("name")) if repository_binding is not None else row.get("check_id", row.get("check"))
+            for row in rows]
         if (not check_ids or any(not isinstance(item, str) or not item for item in check_ids)
                 or len(set(check_ids)) != len(check_ids) or any(row.get("passed") is not True for row in rows)):
             raise ValueError("DELIVERY_PASSED_CHECK_IDENTITIES_REQUIRED")
     original = manifest["nuget_isolated_build_profile"]
     target = _inside(root, original["working_directory"])
-    profile = _create_nuget_isolated_build_profile(run_root=root, working_directory=target,
+    profile = (_create_nuget_isolated_build_profile(run_root=root, working_directory=target,
         config_file=_inside(root, original["config_file"]),
         bepinex_dir=_inside(root, original["bepinex_dir"]) if original.get("bepinex_dir") else None,
         game_folder_dir=_inside(root, original["game_folder_dir"]) if original.get("game_folder_dir") else None,
-        timeout_seconds=original["timeout_seconds"])
+        timeout_seconds=original["timeout_seconds"]) if repository_binding is None else
+        validate_repository_binding(repository_binding, root)[0].create_nuget_profile(root, target))
     if profile.to_dict() != original:
         raise ValueError("DELIVERY_ORIGINAL_BUILD_PROFILE_CHANGED")
     baseline = manifest["baseline_build"]
@@ -354,13 +459,20 @@ def prepare_delivery(context):
         "config": config, "model_calls_performed": 0, "approval_calls_performed": 0,
         "apply_calls_performed": 0, "build_calls_performed": 0,
         "may_initialize_run_local_build_cache": True, "verifier_identity_binding": verifier_binding,
+        "repository_build_and_test": repository_binding,
         "verification_scope": report.get("verification_scope", "recorded_behavior_checks")}
 
 
-def deliver(context, *, final_artifact_verifier=None):
+def deliver(context, *, final_artifact_verifier=None, expected_initial_result_ref=None):
     started = time.perf_counter()
     try:
         prepared = prepare_delivery(context)
+        # Scope: a caller's pre-Apply checks bind the exact input read again here.
+        # 为什么要有它：外层已核准的文件范围不能被第二次准备时换掉的run_result或checkpoint绕过；比较必须发生在授权与Apply之前。
+        if expected_initial_result_ref is not None and (
+                not _same_ref(prepared["initial_ref"], expected_initial_result_ref)
+                or _ref(expected_initial_result_ref["path"]) != expected_initial_result_ref):
+            raise ValueError("DELIVERY_PRECHECKED_INITIAL_RESULT_CHANGED")
     except (OSError, ValueError, KeyError, TypeError) as error:
         return {"status": "unknown", "source_origin": "product_model_proposal", "delivery_complete": False,
             "acceptance_passed": False, "evidence_refs": [], "execution_refs": [], "reason": str(error)}
@@ -420,7 +532,8 @@ def deliver(context, *, final_artifact_verifier=None):
                 allow_execution=True, input_execution_mode=mode)
 
         built = continue_reviewed_patch(artifact_store_root=str(store.root), checkpoint_ref=next_checkpoint,
-            resume_payload=build_resume, allow_build=True, build_result_factory=build)
+            resume_payload=build_resume, allow_build=True,
+            build_result_factory=None if prepared.get("repository_build_and_test") is not None else build)
         execution_refs.append(save("build.json", built))
         if built.get("status") != "built":
             raise ValueError("DELIVERY_BUILD_NOT_COMPLETED")

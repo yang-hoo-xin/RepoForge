@@ -153,14 +153,14 @@ def test_surface_projection_keeps_mcp_as_two_bounded_surfaces() -> None:
         "/features/{feature_id}/status",
         "/health",
     }
-    assert surfaces["product_cli"]["entry_count"] == 22
+    assert surfaces["product_cli"]["entry_count"] == 24
     assert "continue-fresh-patch" in {entry["name"] for entry in surfaces["product_cli"]["entries"]}
     assert surfaces["product_cli"]["entrypoint_alignment"] == "match"
-    assert surfaces["standard_rag_mcp"]["package_entrypoint"] == "main:main"
+    assert surfaces["standard_rag_mcp"]["package_entrypoint"] == "src.mcp_server.server:main"
     assert surfaces["standard_rag_mcp"]["implementation_entrypoint"] == (
         "src.mcp_server.server:main"
     )
-    assert surfaces["standard_rag_mcp"]["entrypoint_alignment"] == "mismatch"
+    assert surfaces["standard_rag_mcp"]["entrypoint_alignment"] == "match"
     assert surfaces["standard_rag_mcp"]["installed_entry_health"] == "not_inferred"
     assert surfaces["dashboard_pages"]["entry_count"] == 7
 

@@ -51,3 +51,12 @@ they do not freeze an old architecture or override platform permissions.
    experimental protocols and skill schemas only for their selected purpose.
    Every added rule includes its scope and “为什么要有它”.
    为什么要有它：真实开发积累可复查成果，重复报告和补写成功叙述不会补齐待测数据。
+
+9. In user-facing progress, work-in-progress summaries, and project documentation,
+   prefer standard engineering terms and plain language. Explain the task, concrete
+   problem, technical mechanism and trade-off, verified result, and remaining work.
+   Introduce a necessary project-specific name with its general concept and purpose;
+   do not use internal field/state names or management shorthand as the result.
+   Keep executable identifiers, schemas, paths, hashes, and historical run evidence
+   unchanged when improving prose. Clearly separate current progress from history.
+   为什么要有它：用户需要能理解、检索和解释技术成果，而不是先学习项目自创词汇；改善表达也不能破坏程序接口或历史证据。

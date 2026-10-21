@@ -264,6 +264,52 @@ def test_build_change_record_binds_workflow_artifacts_to_commit(tmp_path: Path) 
         pytest.skip("git executable is not available on PATH")
     repo = _repo_with_commit(tmp_path)
     store = ArtifactStore(tmp_path / "artifacts")
+    feature = store.write(
+        feature_id="feature_001",
+        artifact_type="feature_spec",
+        payload={
+            "node_name": "draft_feature_spec",
+            "stage": "feature_spec",
+            "message": "stub",
+            "feature_id": "feature_001",
+            "user_request": "change plugin",
+            "target_behavior": "change plugin",
+            "non_goals": [],
+            "target_mod": "Plugin",
+            "risk_level": "low",
+            "acceptance_criteria": [],
+            "evidence_requirements": [],
+            "runtime_verification_plan": [],
+            "blocked": False,
+            "blockers": [],
+        },
+    )
+    evidence = store.write(
+        feature_id="feature_001",
+        artifact_type="evidence_pack",
+        payload={
+            "node_name": "retrieve_evidence",
+            "stage": "evidence_retrieval",
+            "message": "stub",
+            "query": "plugin",
+            "readiness": "sufficient",
+            "can_generate_patch": True,
+            "authority": "test_fixture",
+            "authoritative_for_patch": True,
+            "identity_schema_version": None,
+            "identity_field_mapping": {},
+            "items": [],
+            "gaps": [],
+            "excluded": [],
+            "blockers": [],
+            "retrieval_methods_used": [],
+            "missing_evidence": [],
+            "disabled_modes": [],
+            "timing": {},
+            "trace_refs": [],
+        },
+        upstream_refs=[feature],
+    )
     decision = store.write(
         feature_id="feature_001",
         artifact_type="implementation_plan",
@@ -271,7 +317,35 @@ def test_build_change_record_binds_workflow_artifacts_to_commit(tmp_path: Path) 
             "node_name": "create_implementation_plan",
             "stage": "implementation_plan",
             "message": "stub",
+            "feature_id": "feature_001",
+            "target_files": ["plugin.cs"],
+            "target_symbols": [],
+            "evidence_refs": [],
+            "evidence_source_paths": [],
+            "binding_registry": {
+                "schema_version": "binding_registry_v1",
+                "owner_artifact_type": "implementation_plan",
+                "edit_bindings": [{
+                    "binding_id": "edit_binding_001",
+                    "canonical_target_path": "plugin.cs",
+                    "source_hash": "a" * 64,
+                    "evidence_id": "evidence_001",
+                }],
+                "supporting_bindings": [],
+            },
+            "proposed_changes": [{
+                "change_id": "change_001",
+                "edit_binding_id": "edit_binding_001",
+                "operation": "minimal_evidence_bound_change",
+            }],
+            "test_plan": [],
+            "rollback_plan": [],
+            "side_effect_boundaries": [],
+            "open_questions": [],
+            "blocking": False,
+            "blockers": [],
         },
+        upstream_refs=[feature, evidence],
     )
     patch = store.write(
         feature_id="feature_001",
@@ -304,7 +378,7 @@ def test_build_change_record_binds_workflow_artifacts_to_commit(tmp_path: Path) 
             "blocked": False,
             "blockers": [],
         },
-        upstream_refs=[decision],
+        upstream_refs=[decision, evidence],
     )
 
     record = GitRepository(repo).build_change_record(

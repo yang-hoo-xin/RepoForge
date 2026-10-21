@@ -5,14 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "repoforge"
 version = "0.1.0"
-description = "RepoForge: evidence-grounded Coding Agent with verifiable code changes"
+description = "RepoForge: evaluation and execution for evidence-grounded coding agents"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
     { name = "yang-hoo-xin" }
 ]
-keywords = ["repoforge", "agent", "code-generation", "langgraph", "modding", "evidence-rag"]
+keywords = ["repoforge", "coding-agent", "evaluation", "local-llm", "langgraph", "csharp", "evidence-rag"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",

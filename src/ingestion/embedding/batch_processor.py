@@ -135,7 +135,10 @@ class BatchProcessor:
         if not chunks:
             raise ValueError("Cannot process empty chunks list")
         
-        start_time = time.time()
+        # 为什么要有它：Windows wall clock resolution can report zero for a
+        # completed fast batch; a monotonic high-resolution clock records the
+        # real elapsed interval without fabricating a minimum duration.
+        start_time = time.perf_counter()
         
         # Create batches
         batches = self._create_batches(chunks)
@@ -148,7 +151,7 @@ class BatchProcessor:
         failed_chunks = 0
         
         for batch_idx, batch in enumerate(batches):
-            batch_start = time.time()
+            batch_start = time.perf_counter()
             
             try:
                 # Dense encoding
@@ -170,7 +173,7 @@ class BatchProcessor:
                         {"error": str(e), "batch_size": len(batch)}
                     )
             
-            batch_duration = time.time() - batch_start
+            batch_duration = time.perf_counter() - batch_start
             
             # Record batch timing if trace available
             if trace:
@@ -183,7 +186,7 @@ class BatchProcessor:
                     }
                 )
         
-        total_time = time.time() - start_time
+        total_time = time.perf_counter() - start_time
         
         # Record overall processing statistics
         if trace:

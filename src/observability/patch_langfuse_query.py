@@ -238,16 +238,32 @@ class CloudExecutionReader:
             seen.add(cursor)
         _fail("LANGFUSE_QUERY_PAGE_BUDGET_EXHAUSTED")
 
-    def read(self, trace_id):
+    def read(self, trace_id, *, from_start_time=None, to_start_time=None):
         if not isinstance(trace_id, str) or not re.fullmatch(r"[a-f0-9]{32}", trace_id):
             _fail("LANGFUSE_TRACE_ID_INVALID")
+        # Scope: use recorded observation times, never an arbitrary all-history search.
+        # 为什么要有它：云查询现在要求有限时间窗，缺少时间不能伪装为已查到全部轨迹。
+        window = {}
+        if from_start_time is not None or to_start_time is not None:
+            try:
+                start, end = (datetime.fromisoformat(value.replace("Z", "+00:00"))
+                              for value in (from_start_time, to_start_time))
+                if (start.utcoffset() is None or end.utcoffset() is None
+                        or not 0 < (end - start).total_seconds() <= 336 * 3600):
+                    raise ValueError("invalid window")
+            except (AttributeError, TypeError, ValueError):
+                _fail("LANGFUSE_QUERY_TIME_RANGE_INVALID")
+            window = {"fromStartTime": from_start_time, "toStartTime": to_start_time}
         schema = self._call("getObservationFieldSchema", {})
         if not isinstance(schema.get("fields"), dict) or not set(_FIELDS) <= schema["fields"].keys():
             _fail("LANGFUSE_QUERY_FIELDS_CHANGED")
         observations = self._pages("listObservations", {"traceId": trace_id, "limit": 100,
-            "fields": list(_FIELDS), "expandMetadataKeys": list(_EXPAND)})
+            "fields": list(_FIELDS), "expandMetadataKeys": list(_EXPAND), **window})
         scores = self._pages("listScores", {"traceId": [trace_id], "limit": 100})
-        return summarize_execution(trace_id, observations, scores)
+        result = summarize_execution(trace_id, observations, scores)
+        if window:
+            result["query_window"] = window
+        return result
 
 
 def _milliseconds(start, end):
@@ -491,6 +507,9 @@ def join_local_journal(result, journal_path, journal_sha256, *, artifact_roots=(
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Read one Langfuse execution and its recorded diagnostic bindings.")
     parser.add_argument("--trace-id", required=True)
+    # 为什么要有它：公共CLI不能接受缺少当前云接口必填时间窗的旧用法，再把失败留到远端。
+    parser.add_argument("--from-start-time", required=True, help="Recorded inclusive observation start-time lower bound")
+    parser.add_argument("--to-start-time", required=True, help="Exclusive upper bound; at most 336 hours after lower bound")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--local-journal", type=Path)
     parser.add_argument("--local-journal-sha256")
@@ -498,7 +517,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if bool(args.local_journal) != bool(args.local_journal_sha256) or args.local_artifact_root and not args.local_journal:
         parser.error("--local-journal and --local-journal-sha256 are required together; local roots require a journal.")
-    result = CloudExecutionReader(LangfuseHttpTransport.from_environment()).read(args.trace_id)
+    result = CloudExecutionReader(LangfuseHttpTransport.from_environment()).read(args.trace_id,
+        from_start_time=args.from_start_time, to_start_time=args.to_start_time)
     if args.local_journal:
         result = join_local_journal(result, args.local_journal, args.local_journal_sha256,
                                     artifact_roots=args.local_artifact_root)

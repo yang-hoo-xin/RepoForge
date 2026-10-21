@@ -131,7 +131,7 @@ def trace_upstream_model_call(*, role, provider, model, input_payload, request_d
                 call.update(local_detail_refs=dict(refs))
         except Exception:
             call.update(local_body_status="request_write_failed")
-        with observe_transport(call.transport_started, call.update,
+        with observe_transport(call.transport_started, call.update, call.update,
                                local_request_body_callback=record_local_provider_body):
             try:
                 response = (invoke() if invoke is not None

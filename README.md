@@ -1,7 +1,7 @@
 <div align="center">
   <img src="docs/assets/repoforge-mark.svg" alt="RepoForge — From repository evidence to verified changes" width="840">
-  <p><strong>以源码证据驱动、以真实验收交付的 Coding Agent 平台</strong></p>
-  <p>A coding agent platform that turns repository evidence into verified, controlled changes.</p>
+  <p><strong>面向本地和异构模型、以源码证据和真实测试约束交付的 Coding Agent 评测与执行平台</strong></p>
+  <p>An evaluation and execution platform for local and heterogeneous coding models, grounding delivery in repository evidence and real tests.</p>
   <p>
     <a href="https://github.com/yang-hoo-xin/RepoForge/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/yang-hoo-xin/RepoForge/actions/workflows/ci.yml/badge.svg?branch=main"></a>
     <img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square">
@@ -21,13 +21,13 @@
 
 ---
 
-RepoForge 面向新建、修改和修复代码库的自然语言任务，将**源码调查 → 补丁生成 → 编译与行为验收 → 授权交付**连接为可追溯工作流。首个验证领域是 C# / Unity / BepInEx / IL2CPP / Harmony 风格的 GTFO Mod，领域验收与共享 Agent 执行链分离，便于扩展其他工程场景。
+RepoForge 面向本地和异构模型，将自然语言代码任务的**源码调查 → 补丁生成 → 编译与行为验收 → 授权交付**连接为可追溯工作流。当前已验证案例覆盖普通 SDK-style C# 仓库和可插拔领域验收；具体案例与适用边界在实测结果中单独说明，不把单一领域冒充通用能力。
 
 ## 核心能力
 
 - **从当前源码找到依据**：默认使用 ripgrep 活源检索，结合依赖 API、文档 RAG 与引用，为需求调查、规划和代码修改提供上下文。
 - **让验收反馈驱动修订**：LangGraph 编排任务阶段，共享 Patch worker 接入真实编译与领域行为验收；失败反馈进入后续修订，候选可保存、复验和续接。
-- **让修改和结果可复查**：精确 diff、源码身份、授权和适用验收绑定；ArtifactStore 保存产物与谱系，Trace 关联模型调用、工具观察和用量。
+- **让修改和结果可复查**：检查具体补丁、源码版本、授权和测试结果是否对应；产物存储组件（ArtifactStore）保存文件版本及来源关系，运行追踪（Trace）记录模型调用、工具结果和用量。
 - **把 Agent 接入服务**：FastAPI 与独立 Worker 复用正常业务入口；Redis 提供队列、租约、幂等、限流和缓存，配合超时处理、Prometheus 与 Docker Compose。
 
 ## 工作流
@@ -44,7 +44,7 @@ flowchart LR
     G --> H[隔离 Apply / Build / 复验]
 ```
 
-**LangGraph** 负责业务编排，**RAG / 活源检索**提供调查依据，**ArtifactStore**保存产物谱系，**领域验收器**连接具体工程的编译和行为检查。模型服务支持本地 Ollama 与配置的外部提供方；执行范围见[产品契约](docs/ACTIVE_PRODUCT_CONTRACT.md)。
+**LangGraph** 负责工作流编排，**RAG / 当前源码检索**提供调查依据，**ArtifactStore**保存产物版本及来源关系，**任务专用测试程序**检查具体工程的编译和行为。模型服务支持本地 Ollama 与配置的外部提供方；执行范围见[产品目标与执行约束](docs/ACTIVE_PRODUCT_CONTRACT.md)，正在进行的工作见[项目进度](docs/PROJECT_STATE.md)。
 
 ## 核心模块与工程取舍
 
@@ -53,12 +53,12 @@ RepoForge 按“编排—证据—检索—生成—执行—验收—服务化�
 | 模块 | 职责与关键设计 | 代码 / 证据入口 |
 | --- | --- | --- |
 | **任务编排与状态机** | 将自然语言请求路由为新建、修改、续接或澄清任务；LangGraph 通过显式状态转移串联调查、计划、补丁、验收与失败修订，并支持 checkpoint、interrupt / resume。 | [请求路由](scripts/dsh_request_routing.py) · [工作流](src/mod_agent/workflow/graph.py) · [规划](src/mod_agent/planning/) |
-| **源码证据与上下文** | 默认从当前工作区执行 `rg` 活源检索与有界源码读取，校验证据身份、freshness、需求覆盖和可编辑范围；历史记忆与文档证据只作辅助，不能替代当前源码。 | [Evidence](src/mod_agent/evidence/) · [活源检索](src/mod_agent/evidence/rg_live.py) · [上下文策略](src/mod_agent/evidence/small_project_context.py) |
+| **源码检索与上下文管理** | 默认用 `rg` 检索当前工作区，并限制读取范围；检查源码版本是否最新、是否覆盖需求、是否在允许修改的目录中。历史记忆和文档只作辅助，不能替代当前源码。 | [源码调查模块](src/mod_agent/evidence/) · [源码检索](src/mod_agent/evidence/rg_live.py) · [上下文策略](src/mod_agent/evidence/small_project_context.py) |
 | **RAG 知识检索** | 摄取链覆盖解析、切分、Embedding、BM25 与向量入库；查询层提供 Sparse / Dense / Hybrid、融合、重排和引用。Dense、RRF 与模型重排保持可选或实验定位，不冒充 Agent 默认取证路径。 | [Ingestion](src/ingestion/) · [Query Engine](src/core/query_engine/) · [检索决策](docs/RETRIEVAL_ARCHITECTURE_DECISIONS.md) |
 | **补丁生成与受控执行** | Patch worker 在计划绑定的源码范围内生成最小变更；Review、Dry-run、源码 preimage、允许路径和授权共同约束副作用，再进入隔离 Apply / Build，行为失败可返回 Repair。 | [Patch loop](src/mod_agent/proposal/patch_agent_loop.py) · [受控执行](src/mod_agent/execution/) · [产品执行](src/mod_agent/product_execution.py) |
 | **领域验收与评测驱动** | 共享执行链接入编译检查和领域行为裁判，保留首个失败并把可操作反馈送回修订；结果区分 `code_ready`、`awaiting_approval` 与 `delivered`，不以局部通过替代交付。 | [领域验收](src/mod_agent/domain/) · [评测](src/mod_agent/evaluation/) · [EDD 口径](docs/EVALUATION_DRIVEN_DEVELOPMENT.md) |
 | **模型接入与训练实验** | 统一 LLM 抽象接入 Ollama、OpenAI、Azure 与 DeepSeek；Agent-turn 另提供 Ollama Chat、Qwen Chat 与 OpenAI Responses 适配器。QLoRA Patch SFT 与 Self-RAG 作为实验链保留，未因脚本存在而进入默认产品路径。 | [模型适配](src/libs/llm/) · [QLoRA SFT](scripts/run_patch_sft_training.py) · [Self-RAG](scripts/run_self_rag_training.py) |
-| **产物谱系、追踪与恢复** | ArtifactStore 保存 revision、哈希与 lineage；Trace 关联模型请求、工具观察、Token、验收和失败反馈，支持候选保存、复验与有界续接。外部可观测投影不替代业务事实。 | [ArtifactStore](src/mod_agent/artifacts/) · [Trace](src/core/trace/) · [Observability](src/observability/) |
+| **产物版本管理、运行追踪与任务恢复** | ArtifactStore 保存文件版本、哈希和来源关系；Trace 记录模型请求、工具结果、Token、测试及失败反馈。任务可以使用已保存补丁继续验证，并沿用原预算恢复；监控界面不能替代原始执行结果。 | [产物存储](src/mod_agent/artifacts/) · [运行追踪](src/core/trace/) · [可观测性](src/observability/) |
 | **服务化与协议接入** | FastAPI、独立 Worker 与 Redis 实现异步队列、租约、幂等、限流、缓存和超时；Prometheus、Docker Compose 与 MCP 复用同一业务模块，而不是另写展示逻辑。 | [服务层](src/service_layer/) · [MCP](src/mcp_server/) · [部署指南](deployment/service/README.md) |
 
 ## 精简 Trace 示例
@@ -114,6 +114,20 @@ uv run --frozen pytest tests/unit/test_mod_agent_cli.py -q
 
 完整 Coding Agent 运行通过任务 profile 配置目标工程、模型服务、适用的 .NET / 领域依赖，以及写入和 Build 范围，参见[Agent 注册](deployment/service/README.md#agent-注册)。
 
+### v0.1 正常入口演示
+
+安装 .NET 8 SDK 后，下面的确定性演示通过真实公共 CLI 执行源码调查、首次错误候选、真实失败测试、当前代码读取与修订、精确 Apply、Build 和最终复验：
+
+```powershell
+uv run --frozen python -m scripts.run_v0_1_demo --output artifacts/v0_1_demo
+```
+
+演示使用脚本模型与脚本审批，不需要模型凭据，也不作为自主模型修复成绩；其中源码副本、`.NET` 编译、失败/通过行为测试、Apply/Build 恢复和最终结果读取均走产品正常入口。正式发布检查会在干净提交上追加 `--require-clean`。Windows工作区路径较长时，可用`--workspace-parent <已有短路径目录>`指定临时构建父目录。为什么要有它：外部用户需要可复现完整接线，同时必须知道哪些部分是真实执行、哪些部分只是确定性替身。
+
+已有 SDK-style C# 仓库也可从同一入口使用 `mod-agent run-request --repository-profile <配置文件>`，并沿用目标工程、模型和隔离执行选项。配置明确 SDK、项目或 solution、允许修改的源码、测试项目、测试命令／报告和预期工件；格式与完整使用流程见[真实双项目 CLI 验收](tests/unit/test_csharp_repository_product_entry.py)及其[配置示例](tests/unit/test_csharp_repository_backend.py)。当前支持 TRX 或明确的 JSON 断言报告，不自动替任意仓库推断构建方式。
+
+候选和正式交付使用同一套构建／测试；`apply-patch --resume-approval` 后，`apply-patch --continue-build --allow-build` 从原检查点恢复配置，无需另写较弱的 BuildProfile。该通路已用真实 SDK 验证失败、修订、复验及恢复交付；验收中的模型与审批为测试脚本，不作为模型自主修复成绩。原工程不被修改，构建在本地工作副本内执行，并非操作系统安全沙箱。
+
 ### Docker 服务演示
 
 环境：Docker Engine / Docker Desktop 与 Compose。将 [`.env.example`](deployment/service/.env.example) 复制为 `deployment/service/.env`，设置两个不同的随机值：`SERVICE_API_TOKEN` 和 `SERVICE_REDIS_PASSWORD`；保留已有配置，凭据不提交 Git。为什么要有它：接口和队列使用独立凭据，公开仓库只保存可共享的模板。
@@ -133,6 +147,7 @@ Compose 自动初始化真实仓库源码的 BM25 / Chroma 示例语料，默认
 | [架构说明](docs/ARCHITECTURE_OVERVIEW.md) · [产品契约](docs/ACTIVE_PRODUCT_CONTRACT.md) | 模块职责、执行流程与权限边界。 |
 | [部署指南](deployment/service/README.md) · [压测说明](scripts/service_load/README.md) | API / Worker / Redis / Prometheus 部署与测量口径。 |
 | [测试](tests/) · [评测定义](docs/EVALUATION_DRIVEN_DEVELOPMENT.md) · [历史成果](docs/PROJECT_OUTCOMES.md) | 回归检查、评测方法与完整演进记录。 |
+| [v0.1.0 发布目标](docs/V0_1_RELEASE_GOAL.md) · [候选版本说明](docs/releases/v0.1.0.md) · [Changelog](CHANGELOG.md) | 首版范围、发布门禁、已知限制与版本变化。 |
 
 ## 持续迭代
 

@@ -42,6 +42,8 @@ _VALUES = frozenset({
     "--ollama-context-window", "--source-retrieval", "--task-model-call-limit",
     "--stage-model-call-limits", "--model-call-budget-policy", "--trace-environment", "--patch-worker-config",
     "--run-id", "--request-id", "--dependency-api-config", "--knowledge-evidence-config",
+    "--technical-executor", "--constraint-policy", "--task-agent-edit-paths", "--task-agent-candidate-mode",
+    "--repository-profile",
 })
 _REQUIRED = {
     "--local-ollama", "--defer-approval", "--allow-build", "--confirm-isolated-write",
@@ -52,6 +54,7 @@ _PATHS = frozenset({
     "--target-project", "--workspace-root", "--settings",
     "--game-folder-build-binding", "--stage-model-call-limits", "--patch-worker-config",
     "--dependency-api-config", "--knowledge-evidence-config",
+    "--repository-profile",
 })
 _STAGES = frozenset({
     "requirement_projection", "requirement_findings", "planning", "initial_patch", "repair",
@@ -64,7 +67,7 @@ def _configuration_arguments(execution_config: str) -> tuple[list[str], dict[str
     if not selected.is_absolute():
         raise ValueError("DSH_RUN_CONFIGURATION_PATH_MUST_BE_ABSOLUTE")
     document = read_json_object(selected)
-    if (not {"arguments"}.issubset(document) or set(document) - {"arguments", "worker_path_bindings", "new_project_binding", "followup_binding", "dependency_api_binding", "knowledge_evidence_binding"}
+    if (not {"arguments"}.issubset(document) or set(document) - {"arguments", "worker_path_bindings", "new_project_binding", "followup_binding", "dependency_api_binding", "knowledge_evidence_binding", "repository_profile_binding"}
             or not isinstance(document["arguments"], list)):
         raise ValueError("DSH_RUN_CONFIGURATION_SHAPE_INVALID")
     arguments = document["arguments"]
@@ -99,6 +102,8 @@ def _configuration_arguments(execution_config: str) -> tuple[list[str], dict[str
             raise ValueError("DSH_DEPENDENCY_API_BINDING_CHANGED")
     if "knowledge_evidence_binding" in document and document["knowledge_evidence_binding"] != knowledge_evidence_binding(seen):
         raise ValueError("DSH_KNOWLEDGE_EVIDENCE_BINDING_CHANGED")
+    if "repository_profile_binding" in document and document["repository_profile_binding"] != repository_profile_binding(seen):
+        raise ValueError("DSH_REPOSITORY_PROFILE_BINDING_CHANGED")
     return arguments, seen
 
 
@@ -122,6 +127,19 @@ def knowledge_evidence_binding(options):
     return configuration.boundary()
 
 
+def repository_profile_binding(options):
+    """Keep the selected public repository checks fixed across routing and dispatch.
+
+    为什么要有它：普通入口不能在选路后悄悄换构建或测试合同；这不是新增资源审批。
+    """
+    if not options.get("--repository-profile"):
+        return None
+    from src.mod_agent.domain.csharp_repository_backend import CSharpRepositoryProfile
+
+    profile = CSharpRepositoryProfile.load(options["--repository-profile"])
+    return {"configuration_ref": profile.reference, "dotnet_ref": profile.data["dotnet_ref"]}
+
+
 def prepare_new_task(*, execution_config: str, description: str, project_name: str | None = None,
                      parent_run_id: str | None = None, delivery_root: str | None = None,
                      parent_execution_config: str | None = None) -> str:
@@ -134,6 +152,9 @@ def prepare_new_task(*, execution_config: str, description: str, project_name: s
     document = read_json_object(execution_config)
     api_binding = dependency_api_binding(seen)
     knowledge_binding = knowledge_evidence_binding(seen)
+    repository_binding = repository_profile_binding(seen)
+    if repository_binding is not None and project_name is not None:
+        raise ValueError("DSH_REPOSITORY_PROFILE_REQUIRES_EXISTING_REPOSITORY")
     if parent_run_id is not None and project_name is not None:
         raise ValueError("DSH_FOLLOWUP_CANNOT_INITIALIZE_PROJECT")
     if parent_execution_config is not None and parent_run_id is None:
@@ -247,6 +268,7 @@ def prepare_new_task(*, execution_config: str, description: str, project_name: s
     selected.write_text(json.dumps({"arguments": arguments,
         **({"dependency_api_binding": api_binding} if api_binding is not None else {}),
         **({"knowledge_evidence_binding": knowledge_binding} if knowledge_binding is not None else {}),
+        **({"repository_profile_binding": repository_binding} if repository_binding is not None else {}),
         **({"new_project_binding": project_binding} if project_binding is not None else {}),
         **({"followup_binding": followup_binding} if followup_binding is not None else {})},
         ensure_ascii=False, indent=2), encoding="utf-8")
@@ -569,8 +591,14 @@ def validate_product_profile(*, execution_config: str, description: str):
             or len(description.encode("utf-8")) > MAX_REQUEST_BYTES):
         raise ValueError("DSH_RUN_REQUEST_INVALID")
     arguments, seen = _configuration_arguments(execution_config)
-    required = (_REQUIRED - {"--stage-model-call-limits"}
-                if seen.get("--model-call-budget-policy", "task_total_only") == "task_total_only" else _REQUIRED)
+    policy = seen.get("--model-call-budget-policy", "task_total_only")
+    required = _REQUIRED
+    if policy in {"task_total_only", "meter_only"}:
+        required = required - {"--stage-model-call-limits"}
+    if policy == "meter_only":
+        # Scope: numeric experiment quotas are optional in the user's count-only mode.
+        # 为什么要有它：计量入口不能为了满足旧配置形状要求填写虚构上限；权限和模型实际能力检查仍保留。
+        required = required - {"--task-model-call-limit"}
     if not required.issubset(seen):
         raise ValueError("DSH_RUN_CONFIGURATION_REQUIRED_OPTIONS_MISSING: "
                          + ", ".join(sorted(required - set(seen))))
@@ -581,6 +609,7 @@ def validate_product_profile(*, execution_config: str, description: str):
         raise ValueError("DSH_RUN_CONFIGURATION_WORKER_FILE_MISSING")
     dependency_api_binding(seen)
     knowledge_evidence_binding(seen)
+    repository_profile_binding(seen)
 
     # Use the real parser for option types/choices; '--' keeps all description
     # bytes literal even when they start with a CLI option or shell expression.
@@ -589,7 +618,9 @@ def validate_product_profile(*, execution_config: str, description: str):
     except SystemExit as exc:
         raise ValueError("DSH_RUN_CONFIGURATION_PARSER_REJECTED") from exc
     validate_loopback_http_base_url(parsed.ollama_base_url)
-    if (parsed.task_model_call_limit < 1 or parsed.ollama_context_window < 1
+    cli._task_agent_edit_paths(parsed.task_agent_edit_paths)
+    if ((policy != "meter_only" and (parsed.task_model_call_limit is None or parsed.task_model_call_limit < 1))
+            or parsed.ollama_context_window < 1
             or parsed.ollama_max_output_tokens < 1
             or parsed.ollama_max_output_tokens >= parsed.ollama_context_window
             or not parsed.ollama_model.strip()):
@@ -724,6 +755,9 @@ def advance_task(*, execution_config: str, run_id: str, allocation_config: str |
         with redirect_stdout(output):
             cli.main(build_product_argv(execution_config=selected, description=description))
         return json.loads(output.getvalue())
+    # 为什么要有它：已到待审批且无需解释修订的任务先返回既有结果，不读取无关续接配置或重复派发。
+    if record["result"] is not None and record["result"].get("status") == "awaiting_approval" and not record["result"].get("request_interpretation_revision"):
+        return record["result"]
     if record["manifest"] is not None and allocation_config is not None:
         allocation = read_json_object(allocation_config)
         if allocation.get("pretransport_patch") is not None:
@@ -739,8 +773,6 @@ def advance_task(*, execution_config: str, run_id: str, allocation_config: str |
     if record["manifest"] is None or record["result"] is None:
         return {**record, "status": "task_incomplete_inspect_before_retry",
                 "reason": "DSH_TASK_PROGRESS_INCOMPLETE", "automatic_execution_started": False}
-    if record["result"].get("status") == "awaiting_approval" and not record["result"].get("request_interpretation_revision"):
-        return record["result"]
     if allocation_config is None:
         return record["result"]
     allocation = read_json_object(allocation_config)
