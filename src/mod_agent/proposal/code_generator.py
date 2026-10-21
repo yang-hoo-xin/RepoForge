@@ -2885,6 +2885,8 @@ def _validate_bound_member_shadowing(
     context: Mapping[str, Any],
     index: int,
 ) -> None:
+    after = re.sub(r"(?m)^[ \t]*#[^\r\n]*$", "", after)
+    # 为什么要有它：预处理指令不是C#类型声明；否则`#endif`后的字段实参会被误判为`endif Field`局部变量影子。
     csharp_type_token = (
         r"[A-Za-z_]"
         r"(?:[A-Za-z0-9_.<>,?\[\]]*[A-Za-z0-9_>?\]])?"

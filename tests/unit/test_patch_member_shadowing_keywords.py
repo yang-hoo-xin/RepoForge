@@ -12,6 +12,7 @@ def _validate(after):
 @pytest.mark.parametrize("after", [
     "return Pending;", "return Pending.ToArray();", "if (selected) removed++; else Pending.Enqueue(item);",
     "throw Pending;", "Use(out Pending);", "Use(ref Pending);", "new Pending();",
+    "#if FEATURE\nUse(Pending);\n#endif\nPending.Enqueue(item);",
 ])
 def test_non_type_statement_keywords_do_not_shadow(after):
     _validate(after)
