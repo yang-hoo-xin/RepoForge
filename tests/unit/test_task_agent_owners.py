@@ -64,9 +64,12 @@ def assembled(setup, monkeypatch):
                     result["findings"][0].update(relationship="missing", edit_target_evidence_ids=[],
                                                 unresolved_gaps=["Controlled missing API fact"])
                 if mode["search_edit_target"] is not None:
+                    retained_evidence = result["findings"][0]["evidence_ids"]
+                    retained_targets = result["findings"][0]["edit_target_evidence_ids"]
                     result["findings"][0].update(relationship="support",
-                        evidence_ids=[mode["search_edit_target"]],
-                        edit_target_evidence_ids=[mode["search_edit_target"]], unresolved_gaps=[])
+                        evidence_ids=list(dict.fromkeys((*retained_evidence, mode["search_edit_target"]))),
+                        edit_target_evidence_ids=list(dict.fromkeys((*retained_targets, mode["search_edit_target"]))),
+                        unresolved_gaps=[])
             else:
                 pytest.fail("Unexpected semantic call: " + name)
             return AgentTurnResponse(self.provider, self.model, json.dumps(result))
@@ -138,6 +141,44 @@ def current_owners(assembled):
     owners.validate_context_transfer = session.validate_context_transfer
     candidate_id = tool_fixtures.submit(session, correct=False)
     return inputs, session, owners, candidate_id
+
+
+def test_current_candidate_search_evidence_adds_binding_without_losing_existing_changes(assembled):
+    inputs, session, _owners, requests, roles, _events, mode = assembled
+    configuration = "generated_mods/SyntheticMod/Configuration.cs"
+    session.allowed_edit_paths = frozenset((*session.allowed_edit_paths, configuration))
+    session.edit_baselines[configuration] = hashlib.sha256(
+        (inputs.workspace / configuration).read_bytes()).hexdigest()
+    _inputs, _session, _owners, candidate_id = current_owners(assembled)
+    search = tool_fixtures.action(session, "source_search")
+    search_args = {"query": "ConfigKey", "context_id": session.context_id}
+    session.response_admission(response(call("source_search", search_args, "search-current-config")))
+    observed = search.execute(search.prepare(search_args).value)
+    selected = next(row for row in observed["items"] if row["source_path"].endswith("Configuration.cs"))
+    mode["search_edit_target"] = selected["evidence_id"]
+    arguments = {"context_id": session.context_id, "request": {
+        "required_owner": "evidence", "reason": "Add the searched configuration source while retaining current changes",
+        "source_refs": [selected["reassessment_ref"]]}}
+    session.response_admission(response(call("upstream", arguments, "upstream-current-search-config")))
+    upstream = tool_fixtures.action(session, "upstream")
+    result = upstream.execute(upstream.prepare(arguments).value)
+    assert result["upstream_outcome"] == "replanned", result
+    assert result["current_candidate_id"] == session.current_candidate
+    assert result["current_candidate_id"] != candidate_id
+    assert result["current_code_preserved"] is True
+    assert roles == ["evidence_query", "evidence_findings", "planning"]
+    findings_payload = requests[1].messages[1].content
+    assert any(row["evidence_id"] == selected["evidence_id"]
+               for row in findings_payload["source_observations"])
+    feedback_observations = findings_payload["semantic_feedback"]["current_source_observations"]
+    selected_feedback = next(row for row in feedback_observations
+                             if row.get("evidence_id") == selected["evidence_id"])
+    assert selected_feedback["source_path"] == configuration
+    assert "source_ref" not in selected_feedback
+    planned_paths = {row["canonical_target_path"]
+                     for row in session.documents.implementation_plan["binding_registry"]["edit_bindings"]}
+    assert any(path.endswith("Behavior.cs") for path in planned_paths)
+    assert any(path.endswith("Configuration.cs") for path in planned_paths)
 
 
 def test_current_candidate_search_observes_changed_bytes_with_real_scoped_refs(assembled):

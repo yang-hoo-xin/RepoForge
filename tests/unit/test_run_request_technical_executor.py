@@ -89,15 +89,81 @@ def test_normal_cli_source_priority_reaches_plan_and_approval(execution_config, 
     assert roles and builds and result["patch_execution_receipts"]
 
 
-@pytest.mark.parametrize("candidate_mode,replan,runner_selection,malformed_first,meter_only", [
-    ("baseline", False, False, False, False), ("current", False, False, False, False),
-    ("current", True, False, False, False), ("current", True, True, False, False),
-    ("current", True, True, True, False), ("current", True, True, True, True)],
+@pytest.mark.parametrize("candidate_mode,replan,runner_selection,malformed_first,meter_only,search_replan", [
+    ("baseline", False, False, False, False, False), ("current", False, False, False, False, False),
+    ("current", True, False, False, False, False), ("current", True, True, False, False, False),
+    ("current", True, True, True, False, False), ("current", True, True, True, True, False),
+    ("current", True, False, False, False, True)],
     ids=["baseline", "current", "current-replan", "development-runner-current-replan",
-         "malformed-first-then-current-repair", "meter-only-normal-repair"])
+         "malformed-first-then-current-repair", "meter-only-normal-repair",
+         "search-evidence-replan"])
 def test_normal_cli_task_agent_uses_actual_task_loop_and_defers_apply(
-        execution_config, monkeypatch, capsys, candidate_mode, replan, runner_selection, malformed_first, meter_only):
+        execution_config, monkeypatch, capsys, candidate_mode, replan, runner_selection, malformed_first, meter_only,
+        search_replan):
     target, roles, builds = _install_execution_boundaries(execution_config.parent, monkeypatch)
+    if search_replan:
+        # Scope: a second authorized source file that is absent from the initial Load plan.
+        # 为什么要有它：正常入口必须证明搜索证据能经Evidence和Planning产生新绑定，不能只复用初始绑定假装已接通。
+        (target / "Configuration.cs").write_text(
+            'namespace Example; public static class Configuration { public const string ConfigKey = "marker"; }\n',
+            encoding="utf-8")
+        import httpx
+
+        fixture_transport = httpx.HTTPTransport.handle_request
+
+        def search_reassessment_transport(transport, request):
+            if request.method == "POST" and request.url.path == "/api/chat":
+                payload = json.loads(request.content)
+                contexts = []
+                for message in payload.get("messages", []):
+                    if message.get("role") != "user":
+                        continue
+                    try:
+                        context = json.loads(message["content"])
+                        if "patch_agent_context_encoding" in context:
+                            context = local_entry._restore_patch_agent_context(context)
+                        contexts.append(context)
+                    except (TypeError, ValueError):
+                        continue
+                query_context = next((row for row in contexts
+                    if row.get("message_type") == "patch_upstream_evidence_queries"), None)
+                content = None
+                if query_context is not None:
+                    query = {"query": "ConfigKey",
+                        "requirement_id": query_context["requirements"][0]["requirement_id"]}
+                    if query_context.get("query_contract_version") in {
+                            "requirement_queries_v2", "requirement_queries_v3"}:
+                        query.update(gap_ids=[], current_fact_needed="Existing configuration source ownership.",
+                            modification_impact="Planning needs the exact current configuration edit location.",
+                            authorized_source="target_source", metadata_queries=[])
+                    content = {"queries": [query]}
+                findings = next((row for row in contexts
+                    if row.get("message_type") == "product_requirement_findings"
+                    and row.get("semantic_feedback", {}).get("current_source_observations")), None)
+                if findings is not None:
+                    evidence_ids = [row["evidence_id"] for row in findings["source_observations"]
+                                    if row["source_type"] == "target_source"]
+                    config_id = next(row["evidence_id"] for row in findings["source_observations"]
+                                     if "ConfigKey" in row.get("excerpt", ""))
+                    evidence_ids = [config_id, *(value for value in evidence_ids if value != config_id)]
+                    if findings.get("native_findings_contract") == "planning_readiness_v1":
+                        content = {"findings": [{"relation_index": relation["relation_index"],
+                            "planning_readiness": "ready", "current_evidence_ids": evidence_ids,
+                            "current_basis": "Fixture source identifies both the retained and new edit locations.",
+                            "requested_behavior_status": "not_yet_implemented", "blocking_current_facts": [],
+                            "edit_target_evidence_ids": evidence_ids} for relation in findings["relations"]]}
+                    else:
+                        content = {"findings": [{"relation_index": relation["relation_index"],
+                            "relationship": "support", "evidence_ids": evidence_ids,
+                            "edit_target_evidence_ids": evidence_ids, "unresolved_gaps": []}
+                            for relation in findings["relations"]]}
+                if content is not None:
+                    return httpx.Response(200, request=request, json={"model": payload["model"],
+                        "message": {"role": "assistant", "content": json.dumps(content)},
+                        "done": True, "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
+            return fixture_transport(transport, request)
+
+        monkeypatch.setattr(httpx.HTTPTransport, "handle_request", search_reassessment_transport)
     derived_hint = "Preserve all existing Load behavior even when the requested marker changes."
     if malformed_first:
         from tests.unit import test_dsh_run_request as entry_fixture
@@ -143,8 +209,9 @@ def test_normal_cli_task_agent_uses_actual_task_loop_and_defers_apply(
             model_call_budget_policy="meter_only" if meter_only else "task_total_only")),
         "behavior_evaluator": {"factory_name": "make", "factory_ref": {"path": str(factory),
             "sha256": hashlib.sha256(factory.read_bytes()).hexdigest()}, "kwargs": {"root": "allocated"}}}), encoding="utf-8")
+    edit_paths = '["Plugin.cs", "Configuration.cs"]' if search_replan else '["Plugin.cs"]'
     selected_options = ["--constraint-policy", "source_priority_v1", "--technical-executor", "task_agent",
-        "--task-agent-candidate-mode", candidate_mode, "--task-agent-edit-paths", '["Plugin.cs"]']
+        "--task-agent-candidate-mode", candidate_mode, "--task-agent-edit-paths", edit_paths]
     if runner_selection:
         # Scope: use the experiment's real selection builder, replacing only this test's source scope.
         # 为什么要有它：手工传current的入口测试无法发现runner漏参；外部模型和编译仍由已有脚本夹具替代。
@@ -257,6 +324,12 @@ def test_normal_cli_task_agent_uses_actual_task_loop_and_defers_apply(
             if replan and turn == 3:
                 assert observed["status"] == "behavior_failed"
                 assert observed["observations"][0]["observed"] == expected_failure_observation
+                if search_replan:
+                    name, args = "source_search", {"context_id": revision_state["context_id"],
+                        "query": "ConfigKey"}
+                    return {"model": payload["model"], "message": {"role": "assistant", "content": "", "tool_calls": [
+                        {"id": "entry-task-" + str(len(task_turns)), "type": "function", "function": {"name": name, "arguments": args}}]},
+                        "done": True, "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20}
                 context = next(json.loads(row["content"]) for row in payload["messages"]
                     if row["role"] == "user" and row["content"].startswith("{")
                     and "allowed_read_binding_ids" in row["content"])
@@ -266,14 +339,33 @@ def test_normal_cli_task_agent_uses_actual_task_loop_and_defers_apply(
                 return {"model": payload["model"], "message": {"role": "assistant", "content": "", "tool_calls": [
                     {"id": "entry-task-" + str(len(task_turns)), "type": "function", "function": {"name": name, "arguments": args}}]},
                     "done": True, "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20}
-            if replan and turn > 3:
-                if turn == 4:
+            if search_replan and turn == 4:
+                selected = next(row for row in observed["items"]
+                                if row["source_path"].endswith("Configuration.cs"))
+                revision_state["search_evidence_id"] = selected["evidence_id"]
+                name, args = "upstream", {"context_id": revision_state["context_id"], "request": {
+                    "required_owner": "evidence", "reason": "Admit the searched configuration source before replanning",
+                    "source_refs": [selected["reassessment_ref"]]}}
+                return {"model": payload["model"], "message": {"role": "assistant", "content": "", "tool_calls": [
+                    {"id": "entry-task-" + str(len(task_turns)), "type": "function", "function": {"name": name, "arguments": args}}]},
+                    "done": True, "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20}
+            upstream_turn = 5 if search_replan else 4
+            if replan and turn >= upstream_turn:
+                if turn == upstream_turn:
                     assert observed["upstream_outcome"] == "replanned"
                     assert observed["current_code_preserved"] and observed["new_check_required"]
+                    binding_id = observed["allowed_edit_binding_ids"][0]
+                    if search_replan:
+                        contracts = [json.loads(row["content"])
+                                     for row in observed["candidate_submission_contract_messages"]
+                                     if row["role"] == "user"]
+                        contract = next(row for row in contracts if "required_change_units" in row)
+                        binding_id = next(unit["edit_binding_id"] for unit in contract["required_change_units"]
+                            if "ConfigKey" in contract["edit_binding_contexts"][unit["edit_binding_id"]]["source_excerpt"])
                     revision_state.update(context_id=observed["context_id"],
-                        binding_id=observed["allowed_edit_binding_ids"][0],
+                        binding_id=binding_id,
                         transferred_candidate_id=observed["current_candidate_id"])
-                turn -= 1
+                turn -= 2 if search_replan else 1
             if turn == 2:
                 if candidate_mode == "current":
                     submit_schema = next(tool["function"]["parameters"] for tool in payload["tools"]
@@ -292,14 +384,17 @@ def test_normal_cli_task_agent_uses_actual_task_loop_and_defers_apply(
                     assert observed["observations"][0]["observed"] == expected_failure_observation
                 name, args = "candidate_read", {"context_id": revision_state["context_id"],
                     "version": revision_state.get("transferred_candidate_id", revision_state["first_candidate_id"]),
-                    "path": "generated_mods/Example/Plugin.cs",
+                    "path": "generated_mods/Example/Configuration.cs" if search_replan
+                            else "generated_mods/Example/Plugin.cs",
                     "compare_to": "baseline"}
             elif candidate_mode == "current" and turn == 4:
-                assert "RecordWrongMarker();" in observed["text"]
+                expected_before = "ConfigKey" if search_replan else "RecordWrongMarker();"
+                expected_after = "ConfigKey /* RecordRuntimeMarker(); */" if search_replan else "RecordRuntimeMarker();"
+                assert expected_before in observed["text"]
                 name, args = "candidate_submit", {"context_id": revision_state["context_id"],
                     "parent_candidate_id": observed["version"], "parent_code_sha256": observed["code_sha256"],
-                    "edits": [{"edit_binding_id": revision_state["binding_id"], "before_text": "RecordWrongMarker();",
-                        "after_text": "RecordRuntimeMarker();", "rationale": "Correct the actual marker failure"}]}
+                    "edits": [{"edit_binding_id": revision_state["binding_id"], "before_text": expected_before,
+                        "after_text": expected_after, "rationale": "Correct the actual marker failure"}]}
             else:
                 name = "candidate_check" if candidate_mode == "current" and turn == 5 else "finish"
                 args = {"candidate_id": observed["candidate_id"]}
@@ -329,7 +424,8 @@ def test_normal_cli_task_agent_uses_actual_task_loop_and_defers_apply(
     assert manifest["technical_execution"].get("candidate_mode", "baseline") == candidate_mode
     assert result["patch_execution_receipts"] == []
     assert result["task_agent_execution_ref"] and len(task_turns) == (
-        ((7 if replan else 6) if candidate_mode == "current" else 3) + int(malformed_first))
+        ((8 if search_replan else 7 if replan else 6) if candidate_mode == "current" else 3)
+        + int(malformed_first))
     if malformed_first:
         loop = json.loads(Path(execution["loop_result_ref"]["path"]).read_bytes())
         assert loop["tool_argument_correction_used"] is True
@@ -348,6 +444,9 @@ def test_normal_cli_task_agent_uses_actual_task_loop_and_defers_apply(
         assert transferred["model_origin"]["kind"] == "derived_from_context_transition"
         assert transferred["model_origin"]["parent_candidate_ref"] == checks[0]["candidate_ref"]
         assert "RecordWrongMarker" in json.dumps(revision_state["planning_request"], ensure_ascii=False)
+        if search_replan:
+            assert revision_state["search_evidence_id"] in json.dumps(
+                revision_state["planning_request"], ensure_ascii=False)
         if malformed_first:
             planning = next(json.loads(row["content"]) for row in revision_state["planning_request"]["messages"]
                 if row["role"] == "user" and row["content"].startswith("{")

@@ -82,6 +82,21 @@ def _search_evidence_item(row):
     )
 
 
+def _model_search_observation(row):
+    """Project a cited search result without local filesystem references.
+
+    为什么要有它：Evidence与Planning只需要逻辑源码身份；本机绝对路径留在本地原件，不能进入模型输入。
+    """
+    return {key: deepcopy(value) for key, value in {
+        "evidence_id": row.get("evidence_id"), "source_type": row.get("source_type"),
+        "source_path": row.get("logical_source_path", row.get("source_path")),
+        "source_hash": row.get("source_hash"), "excerpt": row.get("excerpt"),
+        "span": row.get("span"), "retrieval_method": row.get("retrieval_method"),
+        "score": row.get("score"), "claim_supported": row.get("claim_supported"),
+        "reassessment_ref": row.get("reassessment_ref"),
+    }.items() if value is not None}
+
+
 class TaskAgentOwners:
     def __init__(self, *, store: ArtifactStore, workspace_root, configuration: PatchUpstreamConfiguration | None = None,
                  initial_context: TaskAgentContext, failure_context_provider, reserve_model_call,
@@ -220,6 +235,9 @@ class TaskAgentOwners:
         original = self.source_provider
         query_selector, semantic = factory.query_selector, factory.semantic_provider
         current_view = self._model_code_view(view)
+        selected_search_observations = deepcopy(observations)
+        observations[:] = [_model_search_observation(row) for row in selected_search_observations]
+        changed_paths = {row["path"] for row in view["files"]}
 
         class SourceProvider:
             def collect_query_set(self, **kwargs):
@@ -232,7 +250,27 @@ class TaskAgentOwners:
                         for item in observed["items"]],
                     "execution": deepcopy(observed.get("budget_summary", {})),
                     "scope": "current_candidate_observation_not_original_edit_binding"})
-                return original.collect_query_set(**kwargs)
+                pack = original.collect_query_set(**kwargs)
+                items = list(pack.items)
+                known = {item.evidence_id for item in items}
+                admitted = []
+                for observation in selected_search_observations:
+                    logical = observation.get("logical_source_path", observation.get("source_path"))
+                    if logical in changed_paths or observation["evidence_id"] in known:
+                        continue
+                    items.append(_search_evidence_item(observation))
+                    known.add(observation["evidence_id"])
+                    admitted.append(observation["evidence_id"])
+                return replace(pack, items=tuple(items),
+                    retrieval_methods_used=tuple(dict.fromkeys((*pack.retrieval_methods_used,
+                        *(("task_agent_source_search_reassessment",) if admitted else ())))),
+                    budget_summary={**pack.budget_summary, "task_agent_search_reassessment": {
+                        "observation_count": len(selected_search_observations),
+                        "admitted_original_source_evidence_ids": admitted,
+                        "changed_candidate_observations_remain_diagnostic": [
+                            row["evidence_id"] for row in selected_search_observations
+                            if row.get("logical_source_path", row.get("source_path")) in changed_paths],
+                        "authority_expanded": False}})
 
         class SemanticProvider:
             def __getattr__(self, name):
@@ -261,7 +299,7 @@ class TaskAgentOwners:
         original = self.source_provider
 
         class SourceProvider:
-            def collect_query_set(_self, **kwargs):
+            def collect_query_set(self, **kwargs):
                 pack = original.collect_query_set(**kwargs)
                 items = list(pack.items)
                 known = {item.evidence_id for item in items}

@@ -1167,7 +1167,12 @@ class TaskAgentSession:
         self._save("upstream-context", {"previous": previous.to_dict(), "current": self.context.to_dict(),
             "assessment_ref": result.assessment_ref, "context_id": self.context_id, "old_candidates_deliverable": False,
             "current_candidate_ref": deepcopy(self.candidates[self.current_candidate]["ref"]) if self.current_candidate else None})
-        return {**self.model_context(), "old_candidate_invalidated": self.candidate_mode != "current",
+        # Scope: return the newly admitted Patch contract in the same upstream observation.
+        # 为什么要有它：连续会话保留旧历史；模型必须同时看到新binding的源码前像，才能按新Plan合法修订而不是猜测ID或路径。
+        contract_messages = [{"role": message.role, "content": deepcopy(message.content)}
+                             for message in self.contract.messages]
+        return {**self.model_context(), "candidate_submission_contract_messages": contract_messages,
+                "old_candidate_invalidated": self.candidate_mode != "current",
                 "current_code_preserved": self.current_candidate is not None, "new_check_required": True,
                 "assessment_sha256": result.assessment_ref["sha256"], "upstream_outcome": outcome,
                 "model_feedback": deepcopy(dict(feedback)), "candidate_submission_allowed": not self._upstream_blocked}
