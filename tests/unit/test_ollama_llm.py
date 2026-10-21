@@ -1024,6 +1024,76 @@ class TestOllamaChat:
         assert recorded == []
         mock_client.assert_not_called()
 
+    def test_completed_structured_request_calibrates_later_same_model_gate(self):
+        settings = MockSettings()
+        llm = OllamaLLM(settings, context_window=1024)
+        schema = {"type": "object"}
+        first = llm.prepare_structured_chat(
+            [Message(role="user", content="short request")],
+            max_tokens=64,
+            response_format=schema,
+            provider_request_recorder=lambda _: None,
+        )
+        with patch("httpx.Client") as mock_client:
+            mock_client.return_value.__enter__.return_value.post.return_value = (
+                make_ollama_response(
+                    content='{"changes":[]}',
+                    prompt_eval_count=25,
+                )
+            )
+            llm.resume_structured_chat(first, expected_output_budget=64)
+
+        recorded = {}
+        second = llm.prepare_structured_chat(
+            [Message(role="user", content="x" * 1400)],
+            max_tokens=64,
+            response_format=schema,
+            provider_request_recorder=recorded.update,
+        )
+
+        admission = second["context_admission"]
+        assert admission["mode"] == (
+            "same_model_observed_prompt_ratio_upper_bound_v1"
+        )
+        assert admission["observed_calibration_count"] == 1
+        assert admission["conservative_fallback_required_context"] > 1024
+        assert admission["estimated_required_context"] <= 1024
+        assert admission["admitted"] is True
+        assert recorded == second
+
+    def test_structured_calibration_is_not_reused_for_another_model(self):
+        settings = MockSettings()
+        llm = OllamaLLM(settings, context_window=1024)
+        first = llm.prepare_structured_chat(
+            [Message(role="user", content="short request")],
+            max_tokens=64,
+            response_format={"type": "object"},
+            provider_request_recorder=lambda _: None,
+        )
+        with patch("httpx.Client") as mock_client:
+            mock_client.return_value.__enter__.return_value.post.return_value = (
+                make_ollama_response(
+                    content='{"changes":[]}',
+                    prompt_eval_count=25,
+                )
+            )
+            llm.resume_structured_chat(first, expected_output_budget=64)
+
+        with patch("httpx.Client") as mock_client:
+            with pytest.raises(OllamaLLMError) as exc_info:
+                llm.chat(
+                    [Message(role="user", content="x" * 1400)],
+                    model="another-model",
+                    max_tokens=64,
+                    response_format={"type": "object"},
+                    provider_request_recorder=lambda _: None,
+                )
+
+        assert exc_info.value.diagnostics["failure_classification"] == (
+            "provider_request_context_budget_exceeded"
+        )
+        mock_client.assert_not_called()
+
     def test_bound_observed_prompt_tokens_allow_exact_smaller_context(self):
         settings = MockSettings()
         schema = {"type": "object"}

@@ -303,6 +303,7 @@ class OllamaLLM(BaseLLM):
         self.observed_prompt_tokens = observed_prompt_tokens
         self.observed_prompt_identity_sha256 = observed_prompt_identity_sha256
         self.observed_prompt_token_source = observed_prompt_token_source
+        self._structured_prompt_calibrations: list[tuple[str, int, int]] = []
         
         # 为什么要有它：工厂调用必须使用配置的endpoint，不能让重排等调用绕开配置的代理、权限或预算记录。
         configured_base_url = getattr(settings.llm, "base_url", None)
@@ -515,6 +516,10 @@ class OllamaLLM(BaseLLM):
         content, usage = self._admit_chat_response(
             response_data,
             expected_model=str(request["model"]),
+        )
+        self._record_structured_prompt_calibration(
+            response_data=response_data,
+            request=request,
         )
         return ChatResponse(
             content=content,
@@ -729,6 +734,59 @@ class OllamaLLM(BaseLLM):
                 configured_num_ctx=context_window,
                 num_predict=max_tokens,
             )
+            if context_admission["admitted"] is not True:
+                model = str(payload.get("model") or "")
+                observations = [
+                    (body_bytes, prompt_tokens)
+                    for observed_model, body_bytes, prompt_tokens
+                    in self._structured_prompt_calibrations
+                    if observed_model == model and body_bytes > 0
+                ]
+                if observations:
+                    provider_body_bytes = int(
+                        context_admission["provider_body_utf8_bytes"]
+                    )
+                    observed_upper_ratio = max(
+                        prompt_tokens / body_bytes
+                        for body_bytes, prompt_tokens in observations
+                    )
+                    estimated_prompt_tokens = max(
+                        math.ceil(
+                            provider_body_bytes
+                            * observed_upper_ratio
+                            * 2.0
+                        ),
+                        math.ceil(provider_body_bytes / 2),
+                    )
+                    estimated_required_context = (
+                        estimated_prompt_tokens + max_tokens
+                    )
+                    context_admission = {
+                        "mode": (
+                            "same_model_observed_prompt_ratio_upper_bound_v1"
+                        ),
+                        "exact_prompt_tokens_available_pre_call": False,
+                        "provider_body_utf8_bytes": provider_body_bytes,
+                        "configured_num_ctx": context_window,
+                        "num_predict": max_tokens,
+                        "observed_calibration_count": len(observations),
+                        "observed_max_prompt_tokens_per_body_byte": (
+                            observed_upper_ratio
+                        ),
+                        "safety_multiplier": 2.0,
+                        "estimated_prompt_tokens": estimated_prompt_tokens,
+                        "estimated_required_context": (
+                            estimated_required_context
+                        ),
+                        "conservative_fallback_required_context": (
+                            context_admission[
+                                "conservative_required_context"
+                            ]
+                        ),
+                        "admitted": (
+                            estimated_required_context <= context_window
+                        ),
+                    }
         else:
             observed_identity = _context_request_identity_sha256(payload)
             if observed_identity != self.observed_prompt_identity_sha256:
@@ -772,6 +830,33 @@ class OllamaLLM(BaseLLM):
                 },
             )
         return context_admission
+
+    def _record_structured_prompt_calibration(
+        self,
+        *,
+        response_data: Mapping[str, Any],
+        request: Mapping[str, Any],
+    ) -> None:
+        admission = request.get("context_admission")
+        prompt_tokens = response_data.get("prompt_eval_count")
+        model = response_data.get("model")
+        if (
+            response_data.get("done") is not True
+            or not isinstance(admission, Mapping)
+            or type(prompt_tokens) is not int
+            or prompt_tokens <= 0
+            or not isinstance(model, str)
+            or model != request.get("model")
+        ):
+            return
+        body_bytes = admission.get("provider_body_utf8_bytes")
+        if type(body_bytes) is not int or body_bytes <= 0:
+            return
+        # 为什么要有它：后续结构化阶段可复用同模型真实分词比例，避免把UTF-8字节数永久当成Token数；有限历史防止长任务无界增长。
+        self._structured_prompt_calibrations.append(
+            (model, body_bytes, prompt_tokens)
+        )
+        del self._structured_prompt_calibrations[:-64]
 
     def _revalidate_frozen_structured_request(
         self,
