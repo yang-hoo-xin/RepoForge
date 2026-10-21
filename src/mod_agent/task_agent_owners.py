@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from src.core.trace.execution_trace import trace_operation
 from src.mod_agent.artifacts import ArtifactStore
-from src.mod_agent.evidence import RgLiveEvidenceProvider
+from src.mod_agent.evidence import EvidenceItem, RgLiveEvidenceProvider
 from src.mod_agent.evidence.compilation_candidate import compilation_candidate_scope
 from src.mod_agent.evidence.reassessment import (
     RequirementCoverageReassessmentFactory,
@@ -56,6 +56,30 @@ def _read(reference):
     if not isinstance(reference, dict) or set(reference) != {"path", "sha256"} or _ref(reference["path"]) != reference:
         raise ValueError("TASK_UPSTREAM_FILE_CHANGED")
     return json.loads(Path(reference["path"]).read_text(encoding="utf-8-sig"))
+
+
+def _search_evidence_item(row):
+    source_ref = row.get("source_ref")
+    if isinstance(source_ref, dict):
+        source_ref = source_ref.get("path")
+    return EvidenceItem(
+        evidence_id=row["evidence_id"], source_type=row["source_type"],
+        source_path=row.get("logical_source_path", row["source_path"]), symbol=row.get("symbol"),
+        span=deepcopy(row.get("span")), retrieval_method=row["retrieval_method"], score=row["score"],
+        claim_supported=row["claim_supported"], excerpt=row["excerpt"], chunk_id=row.get("chunk_id"),
+        document_id=row.get("document_id"), source_ref=source_ref, source_hash=row.get("source_hash"),
+        file_hash=row.get("file_hash"), doc_hash=row.get("doc_hash"), usage=row.get("usage"),
+        declaring_type=row.get("declaring_type"), method_name=row.get("method_name"),
+        parameter_types=tuple(row["parameter_types"]) if isinstance(row.get("parameter_types"), list) else None,
+        return_type=row.get("return_type"), method_kind=row.get("method_kind"),
+        declared_member_types=deepcopy(row.get("declared_member_types")),
+        declaring_type_full_name=row.get("declaring_type_full_name"),
+        declared_members=deepcopy(row.get("declared_members")),
+        verified_member_accesses=tuple(deepcopy(row.get("verified_member_accesses") or [])),
+        authority=row.get("authority", "mod_agent_deterministic"),
+        source_authority=row.get("source_authority"), risk_notes=tuple(row.get("risk_notes") or []),
+        document_provenance=deepcopy(row.get("document_provenance")),
+    )
 
 
 class TaskAgentOwners:
@@ -228,6 +252,34 @@ class TaskAgentOwners:
         factory.semantic_provider = SemanticProvider()
         return factory
 
+    def _initial_reassessment(self, observations):
+        """Add explicitly cited search observations before semantic Findings and Planning.
+
+        为什么要有它：初始源码搜索命中必须重新进入Evidence合同才能产生新edit binding，不能由搜索工具直接授予修改权限。
+        """
+        factory = copy(self.evidence_factory)
+        original = self.source_provider
+
+        class SourceProvider:
+            def collect_query_set(_self, **kwargs):
+                pack = original.collect_query_set(**kwargs)
+                items = list(pack.items)
+                known = {item.evidence_id for item in items}
+                for observation in observations:
+                    if observation["evidence_id"] not in known:
+                        items.append(_search_evidence_item(observation))
+                        known.add(observation["evidence_id"])
+                return replace(pack, items=tuple(items),
+                    retrieval_methods_used=tuple(dict.fromkeys((*pack.retrieval_methods_used,
+                        "task_agent_source_search_reassessment"))),
+                    budget_summary={**pack.budget_summary, "task_agent_search_reassessment": {
+                        "observation_count": len(observations),
+                        "evidence_ids": [row["evidence_id"] for row in observations],
+                        "authority_expanded": False}})
+
+        factory.source_provider = SourceProvider()
+        return factory
+
     def _record(self, event):
         self.events.append(deepcopy(event))
         if self.record is not None:
@@ -290,20 +342,44 @@ class TaskAgentOwners:
             "semantic_evidence_or_plan_updated": False})
         return SourceSearchResult(query, payload, refs, reference)
 
-    def upstream(self, *, request, context):
+    def upstream(self, *, request, context, source_observations=()):
         source_before = self._context(context)
         current_view = self._code_view(context)
-        current_observations = []
+        if not isinstance(source_observations, (tuple, list)) or any(
+                not isinstance(row, dict) for row in source_observations):
+            raise ValueError("TASK_UPSTREAM_SEARCH_OBSERVATIONS_INVALID")
+        current_observations = deepcopy(list(source_observations))
+        search_refs = {row.get("reassessment_ref") for row in current_observations}
+        if (None in search_refs or len(search_refs) != len(current_observations)
+                or search_refs != {ref for ref in request.get("source_refs", [])
+                                   if isinstance(ref, str) and ref.startswith("search://")}):
+            raise ValueError("TASK_UPSTREAM_SEARCH_OBSERVATIONS_NOT_BOUND")
+        current_files = {row["path"]: row for row in (current_view or {}).get("files", [])}
+        for row in current_observations:
+            logical = row.get("logical_source_path", row.get("source_path"))
+            relative = PurePosixPath(logical) if isinstance(logical, str) else None
+            source_ref = row.get("source_ref")
+            expected = current_files.get(logical, {}).get("source_hash")
+            if expected is None and relative is not None and not relative.is_absolute() and ".." not in relative.parts:
+                selected = (self.workspace / relative.as_posix()).resolve(strict=True)
+                if selected.is_relative_to(self.source_root):
+                    expected = _ref(selected)["sha256"]
+            if (relative is None or relative.is_absolute() or ".." in relative.parts or "\\" in str(relative)
+                    or not isinstance(source_ref, dict) or _ref(source_ref.get("path")) != source_ref
+                    or row.get("source_hash") != expected or source_ref.get("sha256") != expected):
+                raise ValueError("TASK_UPSTREAM_SEARCH_OBSERVATION_CHANGED")
         budget_before = validate_budget(self.budget_snapshot())
         failure_context = deepcopy(self.failure_context_provider())
         selected = {name: asdict(getattr(context.context, name + "_ref")) for name in
                     ("feature_spec", "evidence_pack", "implementation_plan")}
         actual = failure_context.get("actual_upstream_arguments", {})
+        allowed_source_refs = set(failure_context.get("allowed_source_refs", [])) | search_refs
         if (set(request) != {"required_owner", "reason", "source_refs"}
                 or request["required_owner"] not in {"evidence", "planning"}
+                or search_refs and request["required_owner"] != "evidence"
                 or type(request["reason"]) is not str or not 0 < len(request["reason"].strip()) <= 2000
                 or not isinstance(request["source_refs"], list) or not request["source_refs"]
-                or any(type(ref) is not str or ref not in failure_context.get("allowed_source_refs", []) for ref in request["source_refs"])
+                or any(type(ref) is not str or ref not in allowed_source_refs for ref in request["source_refs"])
                 or len(set(request["source_refs"])) != len(request["source_refs"])
                 or actual.get("request") != request or failure_context.get("selected_artifacts") != selected
                 or failure_context.get("implementation_plan") != context.implementation_plan):
@@ -350,11 +426,13 @@ class TaskAgentOwners:
         outcome, feedback = "retained_context", {}
         if request["required_owner"] == "evidence":
             factory = (self._current_reassessment(current_view, source_before, current_observations, failure_version)
-                       if current_view is not None else self.evidence_factory)
+                       if current_view is not None else self._initial_reassessment(current_observations)
+                       if current_observations else self.evidence_factory)
             pack = factory(state, deepcopy(context.feature_spec))
-            if current_view is not None:
+            if current_observations:
                 owner_refs.append(self._save("current-source-observations", {
-                    "current_code_view": self._model_code_view(current_view), "observations": current_observations}))
+                    "current_code_view": self._model_code_view(current_view), "observations": current_observations,
+                    "scope": "explicit_task_agent_search_reassessment"}))
             owner_refs.append(self._save("evidence-owner-result", pack.to_artifact_payload()))
             reuse = validate_unchanged_source_reassessment(pack, state=state, artifact_store=self.store,
                 workspace_root=self.workspace, feature_data=context.feature_spec)

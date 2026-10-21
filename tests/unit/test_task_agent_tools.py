@@ -104,7 +104,7 @@ def setup(short_workspace):
         ref = save(inputs.store.root / "search", {"query": query, "payload": payload, "source_refs": list(refs)})
         return SourceSearchResult(query, payload, refs, ref)
 
-    def upstream(*, request, context):
+    def upstream(*, request, context, source_observations=()):
         before = budget.snapshot()
         budget.reserve()  # Controlled nested provider cost, not a real provider invocation.
         plan = deepcopy(context.implementation_plan)
@@ -113,7 +113,8 @@ def setup(short_workspace):
             payload=plan, upstream_refs=[context.context.feature_spec_ref, context.context.evidence_pack_ref])
         selected = replace(context.context, implementation_plan_ref=plan_ref)
         owner_result = save(inputs.store.root / "upstream", {"controlled_owner": "test_python_assessment",
-            "plan": asdict(plan_ref), "model_execution": "synthetic_budget_only"})
+            "plan": asdict(plan_ref), "model_execution": "synthetic_budget_only",
+            "source_observations": list(source_observations)})
         assessment = save(inputs.store.root / "upstream", {"input_context": context.context.to_dict(),
             "output_context": selected.to_dict(), "request_sha256": digest(request),
             "budget_before": before, "budget_after": budget.snapshot(), "owner_result_refs": [owner_result]})
@@ -199,6 +200,42 @@ def test_real_tool_owners_keep_model_provenance_and_source_bytes_through_replann
         assert raw_args["patch_json"].encode() == Path(origin["derived_content_ref"]["path"]).read_bytes()
     assert all(set(next(tool.parameters for tool in request.tools if tool.name == "candidate_submit")["properties"])
         == {"context_id", "patch_json"} for request in history)
+
+
+def test_search_result_requires_explicit_evidence_upstream_before_replanning(setup):
+    inputs, session, _evaluator, _budget = setup
+    configuration = "generated_mods/SyntheticMod/Configuration.cs"
+    session.allowed_edit_paths = frozenset((*session.allowed_edit_paths, configuration))
+    session.edit_baselines[configuration] = hashlib.sha256(
+        (inputs.workspace / configuration).read_bytes()).hexdigest()
+    search = action(session, "source_search")
+    search_args = {"query": "ConfigKey", "context_id": session.context_id}
+    session.response_admission(response(call("source_search", search_args, "search-config")))
+    observed = search.execute(search.prepare(search_args).value)
+    selected = next(row for row in observed["items"] if row["source_path"].endswith("Configuration.cs"))
+    reference = selected["reassessment_ref"]
+    upstream = action(session, "upstream")
+    planning = {"context_id": session.context_id, "request": {
+        "required_owner": "planning", "reason": "Select the searched configuration source",
+        "source_refs": [reference]}}
+    session.response_admission(response(call("upstream", planning, "planning-search-ref")))
+    with pytest.raises(ValueError, match="REQUEST_NOT_AUTHORIZED"):
+        upstream.prepare(planning)
+
+    captured = {}
+    original = session.upstream_owner
+    def owner(*, request, context, source_observations=()):
+        captured["observations"] = deepcopy(source_observations)
+        return original(request=request, context=context, source_observations=source_observations)
+    session.upstream_owner = owner
+    evidence = {"context_id": session.context_id, "request": {
+        "required_owner": "evidence", "reason": "Admit the searched configuration source before replanning",
+        "source_refs": [reference]}}
+    session.response_admission(response(call("upstream", evidence, "evidence-search-ref")))
+    result = upstream.execute(upstream.prepare(evidence).value)
+    assert result["upstream_outcome"] == "replanned"
+    assert captured["observations"] == [selected]
+    assert result["old_candidate_invalidated"] is True
 
 
 def test_initial_task_instructions_and_tool_descriptions_disclose_batch_policy(setup):

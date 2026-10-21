@@ -202,6 +202,7 @@ class TaskAgentSession:
         self._failure_counts: dict[str, int] = {}
         self._source_facts: set[str] = set()
         self._pending_source_observations: list[dict[str, Any]] = []
+        self._search_reassessment_observations: dict[str, dict[str, Any]] = {}
         self._known_stop = None
         self._upstream_blocked = False
 
@@ -758,9 +759,24 @@ class TaskAgentSession:
             if sources.get(str(selected)) != item.get("source_hash"):
                 raise ValueError("TASK_TOOL_SEARCH_ITEM_NOT_SOURCE_BOUND")
         self.inspector.validate_snapshot()
-        self._pending_source_observations.extend(deepcopy(result.payload.get("items", [])))
+        items = deepcopy(result.payload.get("items", []))
+        for item in items:
+            logical_path = item.get("logical_source_path", item.get("source_path"))
+            evidence_id = item.get("evidence_id")
+            if (type(evidence_id) is not str or not evidence_id
+                    or type(logical_path) is not str or logical_path not in self.allowed_edit_paths
+                    or item.get("source_type") != "target_source"):
+                continue
+            reference = "search://" + evidence_id
+            item["reassessment_ref"] = reference
+            self._search_reassessment_observations[reference] = {
+                "context_id": self.context_id,
+                "source_result_sha256": result.sidecar_ref["sha256"],
+                "item": deepcopy(item),
+            }
+        self._pending_source_observations.extend(deepcopy(items))
         self._save("source-search", {"context": self.context.to_dict(), "owner_result_ref": result.sidecar_ref, "read_cost": 1})
-        return {"query": query, "items": deepcopy(result.payload.get("items", [])),
+        return {"query": query, "items": items,
                 "context_id": self.context_id, "plan_updated": False,
                 "source_view": "current_candidate_overlay" if proof else "initial_source",
                 "current_code_view": deepcopy(proof),
@@ -1071,8 +1087,13 @@ class TaskAgentSession:
         self._context_precondition(arguments, required=True)
         request = arguments["request"]
         allowed = {"binding://" + value for value in self.inspector.available_read_binding_ids}
+        allowed.update(reference for reference, observation in self._search_reassessment_observations.items()
+                       if observation["context_id"] == self.context_id)
+        search_refs = [value for value in request.get("source_refs", [])
+                       if isinstance(value, str) and value.startswith("search://")]
         if (set(request) != {"required_owner", "reason", "source_refs"}
                 or request["required_owner"] not in {"evidence", "planning"}
+                or search_refs and request["required_owner"] != "evidence"
                 or type(request["reason"]) is not str or not 0 < len(request["reason"].strip()) <= 2000
                 or not isinstance(request["source_refs"], list) or not request["source_refs"]
                 or any(type(value) is not str or value not in allowed for value in request["source_refs"])
@@ -1082,7 +1103,10 @@ class TaskAgentSession:
 
     def _upstream(self, request):
         before = validate_budget(self.budget_snapshot())
-        result = self.upstream_owner(request=deepcopy(request), context=deepcopy(self.documents))
+        observations = [deepcopy(self._search_reassessment_observations[reference]["item"])
+                        for reference in request["source_refs"] if reference.startswith("search://")]
+        result = self.upstream_owner(request=deepcopy(request), context=deepcopy(self.documents),
+            **({"source_observations": observations} if observations else {}))
         after = validate_budget(self.budget_snapshot())
         if not isinstance(result, TaskUpstreamAssessment):
             raise ValueError("TASK_TOOL_UPSTREAM_CONTEXT_REQUIRED")
@@ -1213,6 +1237,8 @@ class TaskAgentSession:
                 "Search authorized source with the current candidate overlay when configured; returned version proof identifies candidate versus unchanged source. "
                 "Use candidate_read with an explicit candidate_id for complete current code and differences. "
                 "Results do not revise the Plan or grant new edit permission. "
+                "An authorized target_source item can include reassessment_ref; pass that exact ref to an Evidence upstream.source_refs "
+                "request when it should be considered for a new edit binding. "
                 "为什么要有它：搜索和读取必须明确对应当前代码，同时观察不能授予新的修改权限。")
 
         def definition(name, properties, required):

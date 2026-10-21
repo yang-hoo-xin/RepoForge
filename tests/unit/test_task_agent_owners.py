@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from copy import deepcopy
 from pathlib import Path
@@ -34,7 +35,8 @@ def assembled(setup, monkeypatch):
         "capabilities": ["completion", "tools"], "base_url": settings["base_url"]}
     monkeypatch.setattr(upstream_module, "read_ollama_model_identity", lambda *_: deepcopy(identity))
     requests, roles, events = [], [], []
-    mode = {"planning": "select_targets", "invalid_selection": False, "findings_missing": False}
+    mode = {"planning": "select_targets", "invalid_selection": False, "findings_missing": False,
+            "search_edit_target": None}
 
     class Scripted:
         provider, model = "ollama_chat_local", "controlled"
@@ -61,6 +63,10 @@ def assembled(setup, monkeypatch):
                 if mode["findings_missing"]:
                     result["findings"][0].update(relationship="missing", edit_target_evidence_ids=[],
                                                 unresolved_gaps=["Controlled missing API fact"])
+                if mode["search_edit_target"] is not None:
+                    result["findings"][0].update(relationship="support",
+                        evidence_ids=[mode["search_edit_target"]],
+                        edit_target_evidence_ids=[mode["search_edit_target"]], unresolved_gaps=[])
             else:
                 pytest.fail("Unexpected semantic call: " + name)
             return AgentTurnResponse(self.provider, self.model, json.dumps(result))
@@ -94,6 +100,35 @@ def test_factory_uses_real_source_provider_and_zero_model_search(assembled):
     assert all(Path(row["path"]).is_file() for row in result.source_refs)
     assert json.loads(Path(result.sidecar_ref["path"]).read_text())["semantic_evidence_or_plan_updated"] is False
     assert not requests and not roles
+
+
+def test_search_evidence_ref_enters_real_findings_and_planning_before_new_binding(assembled):
+    inputs, session, _owners, requests, roles, _events, mode = assembled
+    configuration = "generated_mods/SyntheticMod/Configuration.cs"
+    session.allowed_edit_paths = frozenset((*session.allowed_edit_paths, configuration))
+    session.edit_baselines[configuration] = hashlib.sha256(
+        (inputs.workspace / configuration).read_bytes()).hexdigest()
+    search = tool_fixtures.action(session, "source_search")
+    search_args = {"query": "ConfigKey", "context_id": session.context_id}
+    session.response_admission(response(call("source_search", search_args, "search-config")))
+    observed = search.execute(search.prepare(search_args).value)
+    selected = next(row for row in observed["items"] if row["source_path"].endswith("Configuration.cs"))
+    mode["search_edit_target"] = selected["evidence_id"]
+    arguments = {"context_id": session.context_id, "request": {
+        "required_owner": "evidence", "reason": "Replan using the searched configuration implementation",
+        "source_refs": [selected["reassessment_ref"]]}}
+    session.response_admission(response(call("upstream", arguments, "upstream-search-config")))
+    upstream = tool_fixtures.action(session, "upstream")
+    result = upstream.execute(upstream.prepare(arguments).value)
+    assert result["upstream_outcome"] == "replanned", result
+    assert roles == ["evidence_query", "evidence_findings", "planning"]
+    findings_payload = requests[1].messages[1].content
+    assert any(row["evidence_id"] == selected["evidence_id"]
+               for row in findings_payload["source_observations"])
+    planning_payload = requests[2].messages[1].content
+    assert selected["evidence_id"] in planning_payload["allowed_edit_evidence_ids"]
+    assert any(row["canonical_target_path"].endswith("Configuration.cs")
+               for row in session.documents.implementation_plan["binding_registry"]["edit_bindings"])
 
 
 def current_owners(assembled):
