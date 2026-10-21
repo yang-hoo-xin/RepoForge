@@ -174,6 +174,24 @@ def test_shared_build_and_test_result_is_real_object_and_reference_bound(tmp_pat
     assert _backend(tmp_path, profile, source).verification_identity() == identity
 
 
+def test_verifier_identity_survives_exact_source_relocation_but_not_drift(tmp_path, monkeypatch):
+    profile, source = _profile(tmp_path)
+    backend = _backend(tmp_path, profile, source)
+    identity = backend.verification_identity()
+    copied_owner = tmp_path / "snapshot/csharp_repository_backend.py"
+    copied_build_owner = tmp_path / "snapshot/nuget.py"
+    copied_owner.parent.mkdir(parents=True)
+    copied_owner.write_bytes(Path(owner.__file__).read_bytes())
+    copied_build_owner.write_bytes(Path(owner.nuget.__file__).read_bytes())
+
+    monkeypatch.setattr(owner, "__file__", str(copied_owner))
+    monkeypatch.setattr(owner.nuget, "__file__", str(copied_build_owner))
+    assert backend.verification_identity() == identity
+
+    copied_build_owner.write_bytes(copied_build_owner.read_bytes() + b"\n# drift")
+    assert backend.verification_identity() != identity
+
+
 def test_baseline_candidate_and_formal_profiles_share_only_task_local_cache(tmp_path, monkeypatch):
     profile, source = _profile(tmp_path)
     baseline = profile.create_nuget_profile(tmp_path, source)

@@ -306,7 +306,10 @@ class CSharpRepositoryBackend:
 
     def verification_identity(self):
         self.profile.verify_fixed_inputs(self.source_root, self.fixed_inputs)
-        return {"validator_sha256": canonical_hash({"owner": _ref(__file__), "build_owner": _ref(nuget.__file__)}),
+        return {"validator_sha256": canonical_hash({
+                    "owner_sha256": _ref(__file__)["sha256"],
+                    "build_owner_sha256": _ref(nuget.__file__)["sha256"],
+                }),
                 "inputs_sha256": canonical_hash({"profile": self.profile.reference, "fixed_inputs": self.fixed_inputs}),
                 "environment_sha256": canonical_hash(self.profile.data["dotnet_ref"]),
                 "deterministic_reuse_allowed": False}
