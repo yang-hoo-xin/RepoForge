@@ -234,8 +234,34 @@ def test_search_result_requires_explicit_evidence_upstream_before_replanning(set
     session.response_admission(response(call("upstream", evidence, "evidence-search-ref")))
     result = upstream.execute(upstream.prepare(evidence).value)
     assert result["upstream_outcome"] == "replanned"
-    assert captured["observations"] == [selected]
+    assert len(captured["observations"]) == 1
+    captured_observation = captured["observations"][0]
+    assert {key: captured_observation.get(key) for key in selected} == selected
+    assert "file_hash" in captured_observation and "file_hash" not in selected
     assert result["old_candidate_invalidated"] is True
+
+
+def test_search_model_projection_preserves_full_observation_outside_conversation(setup):
+    _inputs_value, session, _evaluator, _budget = setup
+    selected = action(session, "source_search")
+    arguments = {"query": "ChangeMarker", "context_id": session.context_id}
+    session.response_admission(response(call("source_search", arguments, "search-projection")))
+
+    observed = selected.execute(selected.prepare(arguments).value)
+
+    assert observed["model_projection"] == {
+        "schema_version": "task_agent_search_projection_v1",
+        "full_observation_count": len(observed["items"]),
+        "full_result_retained": True,
+    }
+    assert observed["items"]
+    forbidden = {"source_ref", "file_hash", "doc_hash", "document_id", "declared_members", "usage"}
+    assert all(not forbidden.intersection(item) for item in observed["items"])
+    reference = observed["items"][0]["reassessment_ref"]
+    full = session._search_reassessment_observations[reference]["item"]
+    assert full["evidence_id"] == observed["items"][0]["evidence_id"]
+    assert full["excerpt"] == observed["items"][0]["excerpt"]
+    assert "file_hash" in full
 
 
 def test_initial_task_instructions_and_tool_descriptions_disclose_batch_policy(setup):

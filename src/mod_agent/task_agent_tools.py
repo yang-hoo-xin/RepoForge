@@ -137,6 +137,28 @@ class SourceSearchResult:
     sidecar_ref: dict[str, str]
 
 
+def _model_search_item(item: Mapping[str, Any]) -> dict[str, Any]:
+    """Project one verified search item into the technical model conversation.
+
+    为什么要有它：完整检索原件需要保留以便归因和重规划，但重复的本机路径、索引元数据和声明清单不应挤掉模型继续决策所需的上下文。
+    """
+    values = {
+        "evidence_id": item.get("evidence_id"),
+        "source_type": item.get("source_type"),
+        "source_path": item.get("logical_source_path", item.get("source_path")),
+        "source_hash": item.get("source_hash"),
+        "symbol": item.get("symbol"),
+        "span": item.get("span"),
+        "excerpt": item.get("excerpt"),
+        "truncated": item.get("truncated"),
+        "retrieval_method": item.get("retrieval_method"),
+        "score": item.get("score"),
+        "claim_supported": item.get("claim_supported"),
+        "reassessment_ref": item.get("reassessment_ref"),
+    }
+    return {key: deepcopy(value) for key, value in values.items() if value is not None}
+
+
 @dataclass(frozen=True)
 class TaskUpstreamAssessment:
     context: TaskAgentContext
@@ -776,11 +798,15 @@ class TaskAgentSession:
             }
         self._pending_source_observations.extend(deepcopy(items))
         self._save("source-search", {"context": self.context.to_dict(), "owner_result_ref": result.sidecar_ref, "read_cost": 1})
-        return {"query": query, "items": items,
+        model_items = [_model_search_item(item) for item in items]
+        return {"query": query, "items": model_items,
                 "context_id": self.context_id, "plan_updated": False,
                 "source_view": "current_candidate_overlay" if proof else "initial_source",
                 "current_code_view": deepcopy(proof),
-                "source_result_sha256": result.sidecar_ref["sha256"], **self._read_budget_model_view()}
+                "source_result_sha256": result.sidecar_ref["sha256"],
+                "model_projection": {"schema_version": "task_agent_search_projection_v1",
+                    "full_observation_count": len(items), "full_result_retained": True},
+                **self._read_budget_model_view()}
 
     def _prepare_submit(self, arguments):
         if self._upstream_blocked:
