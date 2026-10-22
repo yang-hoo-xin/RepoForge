@@ -425,6 +425,7 @@ class TaskAgentV2Experience:
                 result["unknown_usage_calls"] = result["model_calls"] - len(result["known_usage"])
         result["budget_after"] = validate_budget(owner.budget_snapshot())
         result["original_execution_ref"] = deepcopy(owner.execution_receipt().execution_ref) if owner.execution_receipt() else None
+        result["task_timing_ref"] = owner.observe_task_boundary("terminal_learning_return", status=result["status"])
         reference = owner._save("terminal-learning-receipt-" + uuid4().hex + ".json", result)
         self._terminal_receipt = {**result, "receipt_ref": reference}
         return deepcopy(self._terminal_receipt)

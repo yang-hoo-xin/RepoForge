@@ -7023,6 +7023,12 @@ def run_local_request(
     request_id: str | None = None,
 ) -> dict[str, Any]:
     """Run one request through the existing graph against an isolated target copy."""
+    entry_clock = None
+    if task_agent_protocol == "v2":
+        entry_clock = {"received_at": datetime.now(timezone.utc).isoformat(),
+            "monotonic": time.monotonic(), "process_id": os.getpid()}
+        from src.mod_agent.task_agent_v2_execution import capture_clock
+        entry_clock["process_instance"] = capture_clock()["process_instance"]
     from src.mod_agent.evidence.optimization_policy import optimization_policy
     from src.mod_agent.model_call_budget import (
         METER_ONLY,
@@ -7452,6 +7458,13 @@ def run_local_request(
             )
         base.mkdir(parents=True, exist_ok=True)
         run_root.mkdir(parents=True)
+        if entry_clock is not None:
+            # 为什么要有它：入口前段的准入和构建等待也须进入同一时间起点，恢复不能重新开始计时。
+            with (run_root / "entry-timing.json").open("x", encoding="utf-8") as stream:
+                json.dump({"schema": "task-agent-entry-timing.v2", "run_id": run_id,
+                    "request_id": request_id, "entry_clock": entry_clock}, stream, ensure_ascii=False, sort_keys=True)
+                stream.flush()
+                os.fsync(stream.fileno())
         from .proposal.dependency_documentation import documentation_policy
 
         initial_manifest = {
@@ -8946,6 +8959,8 @@ def run_local_request(
             summary["strategy_learning"] = task_agent_execution.complete_terminal_learning()
             summary["model_call_count"] = model_call_count
             summary["model_call_budget"] = model_budget_snapshot()
+            summary["task_timing_ref"] = task_agent_execution.observe_task_boundary(
+                "product_return", status=summary.get("status") or product_result.execution_disposition)
         try:
             _persist_graph_terminal_result(
                 run_root=run_root,

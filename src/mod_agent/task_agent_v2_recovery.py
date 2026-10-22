@@ -109,6 +109,7 @@ class TaskAgentRecoveryJournal:
                 "logical_session_key": self.lock_key,
                 "candidate_mode": owner.candidate_mode, "deadline_utc": deadline,
                 "experience_configuration_ref": owner._experience.configuration_ref if owner._experience is not None else None,
+                "task_timing_origin_ref": deepcopy(getattr(owner, "_task_timing_origin_ref", None)),
                 "initial_request_ref": owner._save("recovery-initial-request.json", asdict(session.initial_request())),
                 "owner_refs": [_ref(module.__file__) for module in (
                     task_agent_execution, task_agent_loop, task_agent_v2_execution, task_agent_v2_tools,
@@ -124,6 +125,7 @@ class TaskAgentRecoveryJournal:
         self.latest_loop_state = None
 
     def save(self, loop_state):
+        from src.mod_agent.task_agent_v2_execution import task_timing_snapshot
         owner = self.owner
         payload = {"schema": "task-agent-session-checkpoint.v2", "host_config_ref": self.host_config_ref,
             "task_contract_ref": self.state.contract_ref, "task_head": self.state.head,
@@ -132,6 +134,8 @@ class TaskAgentRecoveryJournal:
                 "turn_count": getattr(owner, "_v2_turn_count", 0), "tool_charge_count": getattr(owner, "_v2_tool_charge_count", 0),
                 "reservation": deepcopy(getattr(owner, "_v2_reservation", None))},
             "terminal_learning_receipt": deepcopy(owner._experience._terminal_receipt) if owner._experience is not None else None,
+            "task_timing_observation": task_timing_snapshot(getattr(owner, "_task_timing_origin_ref", None),
+                "checkpoint_observed", loop_state["phase"]),
             "previous_checkpoint_ref": self.latest_ref}
         ref = self.state.save("session-checkpoint", payload)
         self.latest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -312,6 +316,10 @@ def _validate_host_binding(state, checkpoint, host):
     expected = {str((target / path).resolve()) for path in state.contract["allowed_edit_paths"]}
     reads = {str(Path(state.load(ref)["source_root"]).resolve()) for ref in state.contract["read_roots"].values()}
     graph = host["graph_state"]
+    if host.get("task_timing_origin_ref") is not None:
+        timing = read_bound_json(host["task_timing_origin_ref"])
+        _require(timing.get("schema") == "task-agent-entry-timing.v2" and timing["run_id"] == graph["run_id"]
+            and timing["request_id"] == graph["request_id"], "TIMING_ORIGIN_CHANGED")
     feature = state.contract["feature_spec_ref"]
     _require(target.is_relative_to(workspace)
         and host["logical_session_key"] == "logical-task:" + graph["run_id"] + ":" + graph["request_id"]
@@ -622,8 +630,10 @@ def resume_v2_task_agent(*, artifact_store_root, checkpoint_ref):
             result = {"status": outcome.status, "run_id": host["graph_state"]["run_id"],
                 "request_id": host["graph_state"]["request_id"], "outcome": outcome.to_dict()}
         learning = owner.complete_terminal_learning()
+        timing_ref = owner.observe_task_boundary("resumed_product_return", status=result["status"])
         return {**result, "v2_checkpoint_ref": owner.v2_checkpoint_ref,
             **({"resumed_from_rebase_ref": rebase_ref} if rebase_ref else {}),
             "resumed_from_checkpoint_ref": loaded["checkpoint_ref"], "new_task_created": False,
             "strategy_learning": learning,
+            "task_timing_ref": timing_ref,
             "cumulative_resources": loaded["state"].head["resources"]}

@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from pathlib import Path
 
@@ -102,6 +103,72 @@ def _actual_conditions(state, native, host, original_request, baseline):
         "feedback": {"public_acceptance": state.load(state.contract["public_acceptance_ref"])["conditions"]}}
 
 
+def _timing(request, native, host, candidate_source_id):
+    from src.mod_agent.task_agent_v2_execution import task_timing_snapshot
+
+    origin_ref = (host or {}).get("task_timing_origin_ref")
+    reference = request.get("timing_observation_ref")
+    observation = read_bound_json(reference) if reference is not None else None
+    scope = "native_boundary"
+    if request.get("delivery_receipt_ref") is not None:
+        delivered, _verification = _delivery(request, candidate_source_id)
+        if delivered.get("task_timing_observation") is not None:
+            observation = delivered["task_timing_observation"]
+            scope = "verified_delivery_boundary"
+    if origin_ref is None or observation is None:
+        return {"status": "unknown", "duration_ms": None, "reason": "no_bound_entry_origin_or_observation"}
+    _require(observation.get("origin_ref") == origin_ref
+        and observation.get("native_execution_ref") in (None, request["native_execution_ref"]), "TIMING_TASK_CHANGED")
+    if scope == "verified_delivery_boundary" and observation.get("status") == "unknown" and not observation.get("observed_clock"):
+        return {"status": "unknown", "duration_ms": None, "origin_ref": origin_ref,
+            "reason": "delivery_timing_observation_unavailable", "source": scope}
+    if observation.get("native_execution_ref") is None and scope == "native_boundary":
+        _require(reference == native.get("timing_observation_ref"), "TIMING_NATIVE_ANCHOR_REQUIRED")
+    expected = task_timing_snapshot(origin_ref, observation["event"], observation["status"],
+        observation.get("native_execution_ref"), observed_clock=observation["observed_clock"])
+    _require(all(observation.get(key) == value for key, value in expected.items()), "TIMING_OBSERVATION_CHANGED")
+    returned = observation["event"] in {"product_return", "resumed_product_return", "product_build_return"}
+    current = scope == "verified_delivery_boundary" or observation.get("resource_event_ref") == request["resource_event_ref"]
+    return {"status": observation["timing_status"] if returned and current else "observed_lower_bound_not_current_return",
+        "duration_ms": observation["duration_ms"] if returned and current else None,
+        "known_observed_elapsed_ms": observation["duration_ms"],
+        "origin_ref": origin_ref, "observation_ref": reference, "boundary": observation["event"],
+        "clock_basis": observation["clock_basis"], "scope": observation["scope"], "source": scope,
+        "whole_task_finished": False}
+
+
+def _technical_inputs(native, root):
+    from src.mod_agent.task_agent_v2_execution import classify_v2_technical_inputs
+
+    assessments, prior_responses = [], []
+    complete = True
+    for event in native["provider_turns"]:
+        if event.get("technical_input_audit_ref") is None:
+            complete = False
+        else:
+            audit = _read(event["technical_input_audit_ref"], root)
+            host = TaskAgentV2State(root, native["task_contract_ref"]).load(audit["host_config_ref"])
+            _require(audit.get("schema") == "task-agent-technical-input-audit.v2"
+                and audit["actual_request_ref"] == event["request_ref"]
+                and host["graph_state"]["run_id"] == native["run_id"]
+                and host["graph_state"]["request_id"] == native["request_id"], "TECHNICAL_INPUT_ORIGIN_CHANGED")
+            recorded_prior = [_read(ref, root) for ref in audit["prior_response_refs"]]
+            _require(recorded_prior == prior_responses, "TECHNICAL_MODEL_HISTORY_CHANGED")
+            assessment = classify_v2_technical_inputs(_read(audit["loop_request_ref"], root),
+                _read(event["request_ref"], root), _read(host["initial_request_ref"], root),
+                host.get("source_context_messages", []), recorded_prior)
+            _require(assessment == audit["assessment"], "TECHNICAL_INPUT_ASSESSMENT_CHANGED")
+            assessments.append({"audit_ref": event["technical_input_audit_ref"], "assessment": assessment})
+        if event.get("response_ref"):
+            prior_responses.append(_read(event["response_ref"], root))
+    closed = complete and bool(assessments) and all(row["assessment"]["closed_loop_human_technical_interventions"] == 0 for row in assessments)
+    return {"status": "closed_input_scope_verified" if closed else "input_scope_incomplete_or_unknown",
+        "scope": "v2_model_decision_inputs_after_initial_contract", "closed_loop_human_technical_interventions": 0 if closed else None,
+        "outside_scope_human_technical_interventions": None, "audit_refs": [row["audit_ref"] for row in assessments],
+        "excluded_from_technical_interventions": ["initial_requirements", "permission_approval"],
+        "outside_scope": ["external_requirement_or_test_authoring", "strategy_experience_authorship", "out_of_band_assistance"]}
+
+
 def _project(request):
     from src.mod_agent.evaluation.strategy_adoption import _planned_pairs
 
@@ -166,7 +233,7 @@ def _project(request):
         provider_request = _read(event["request_ref"], root)
         _require(dispatch["request_ref"] == event["request_ref"] and dispatch["reservation_id"] == reservation
             and dispatch["status"] == "requested", "PROVIDER_DISPATCH_CHANGED")
-        outcome_path = Path(native_ref["path"]).parent / ("provider-outcome-" + reservation + ".json")
+        outcome_path = Path(event["request_ref"]["path"]).parent / ("provider-outcome-" + reservation + ".json")
         _require(_read(_ref(outcome_path), root) == event, "PROVIDER_OUTCOME_CHANGED")
         if event.get("response_ref"):
             provider_response = _read(event["response_ref"], root)
@@ -206,9 +273,11 @@ def _project(request):
     unknown_calls = total_calls - len(known_usage)
     _require(unknown_calls >= unknown_learning >= 0, "NATIVE_RESOURCE_ACCOUNTING_CHANGED")
     known_sums = {key: sum(row[key] for row in known_usage) for key in ("input_tokens", "output_tokens")}
-    # 为什么要有它：native原件没有总墙钟和人工技术帮助账本，缺失必须保留unknown，不能用文件时间或0伪造完整成本。
+    timing = _timing(request, native, host, candidate_id)
+    human_inputs = _technical_inputs(native, root)
+    # 为什么要有它：时间从原入口量到已观察边界；封闭循环之外的人工帮助仍unknown，不能用局部0冒充全局无人帮助。
     costs = {"model_calls": total_calls, "input_tokens": known_sums["input_tokens"] if not unknown_calls else None,
-        "output_tokens": known_sums["output_tokens"] if not unknown_calls else None, "duration_ms": None}
+        "output_tokens": known_sums["output_tokens"] if not unknown_calls else None, "duration_ms": timing["duration_ms"]}
     data = {"schema_version": "strategy_execution_receipt_v1", "task_id": request["task_id"],
         "attempt": request["attempt"], "arm": request["arm"], "source_ref": selected["source_ref"],
         "exposure_ref": selected["exposure_ref"], "conditions_sha256": protocol["invariants_sha256"],
@@ -222,8 +291,8 @@ def _project(request):
             "resource_event_ref": resource_ref, "ledger_model_calls": total_calls,
             "unreconciled_calls_after_native_and_learning": total_calls - reported_budget_calls,
             "learning_receipt_ref": request.get("learning_receipt_ref"), "native_provider_turn_count": len(native["provider_turns"]),
-            "count_basis": final_budget.get("count_basis"), "duration_source": "not_recorded_by_native_owner",
-            "human_intervention_source": "not_recorded_by_native_owner"},
+            "count_basis": final_budget.get("count_basis"), "duration_source": timing,
+            "human_intervention_source": human_inputs},
         "experience_delivery_ref": delivery_ref,
         "freeze_binding": freeze, "actual_common_conditions": actual_conditions,
         "actual_common_conditions_sha256": canonical_hash(actual_conditions),
@@ -254,7 +323,16 @@ def export_strategy_execution(*, native_execution_ref, call_id, output_root, art
                               protocol_ref=None, task_id=None, arm=None, attempt=None, learning_receipt_ref=None,
                               delivery_receipt_ref=None):
     """Export actual facts; callers choose an existing call, never its contents."""
-    artifact_store_root = Path(artifact_store_root).resolve() if artifact_store_root else Path(native_execution_ref["path"]).parent.parent.resolve()
+    if artifact_store_root is None:
+        header = read_bound_json(native_execution_ref)
+        _require(header.get("schema_version") == "task-agent-product-execution.v2", "NATIVE_EXECUTION_REQUIRED")
+        contract_ref = header.get("task_contract_ref", "")
+        _require(isinstance(contract_ref, str) and re.fullmatch(r"v2/contract/[0-9a-f]{64}\.json", contract_ref), "NATIVE_CONTRACT_REQUIRED")
+        roots = [parent for parent in Path(native_execution_ref["path"]).resolve().parents if (parent / contract_ref).is_file()]
+        _require(len(roots) == 1, "NATIVE_STORE_LOCATION_REQUIRED")
+        artifact_store_root = roots[0]
+    else:
+        artifact_store_root = Path(artifact_store_root).resolve()
     native = _read(native_execution_ref, artifact_store_root)
     _require(native.get("schema_version") == "task-agent-product-execution.v2", "NATIVE_EXECUTION_REQUIRED")
     state = TaskAgentV2State(artifact_store_root, native["task_contract_ref"])
@@ -278,6 +356,10 @@ def export_strategy_execution(*, native_execution_ref, call_id, output_root, art
         **arguments,
         "call_id": call_id, "learning_receipt_ref": learning_receipt_ref, "resource_event_ref": state.head["event_ref"],
         "delivery_receipt_ref": delivery_receipt_ref}
+    observations = [(_ref(path), read_bound_json(_ref(path))) for path in Path(native_execution_ref["path"]).parent.glob("task-observation-*.json")]
+    observations = [(ref, value) for ref, value in observations if value.get("native_execution_ref") == native_execution_ref]
+    request["timing_observation_ref"] = (max(observations, key=lambda row: row[1]["observation_sequence"])[0]
+        if observations else native.get("timing_observation_ref"))
     execution, action, output = _project(request)
     delivered, verification = _delivery(request, execution["candidate_source_id"])
     root = Path(output_root).resolve()

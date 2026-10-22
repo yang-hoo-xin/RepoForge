@@ -62,7 +62,10 @@ def test_normal_cli_exports_actual_input_action_cost_and_preregistered_binding(r
     assert exported["arm"] == arm and exported["native_call_id"] == call_id
     assert exported["known_cost"]["model_calls"] == native["budget_after"]["consumed"]
     assert exported["known_cost"]["input_tokens"] == sum(row["usage"]["input_tokens"] for row in native["provider_turns"])
-    assert exported["known_cost"]["duration_ms"] is None and exported["human_technical_interventions"] is None
+    assert exported["known_cost"]["duration_ms"] >= 0 and exported["human_technical_interventions"] is None
+    assert exported["resource_evidence"]["duration_source"]["boundary"] == "product_return"
+    assert exported["resource_evidence"]["human_intervention_source"]["closed_loop_human_technical_interventions"] == 0
+    assert exported["resource_evidence"]["human_intervention_source"]["outside_scope_human_technical_interventions"] is None
     action = read_bound_json(exported["action_ref"])
     response = read_bound_json(action["response_ref"])
     assert action["action"] == {key: next(row for row in response["tool_calls"] if row["call_id"] == call_id)[key]
@@ -81,6 +84,8 @@ def test_normal_cli_exports_actual_input_action_cost_and_preregistered_binding(r
     tail = read_bound_json(tail_ref)
     assert tail["known_cost"]["model_calls"] == native["budget_after"]["consumed"] + 1
     assert tail["known_cost"]["input_tokens"] is None
+    assert tail["known_cost"]["duration_ms"] is None
+    assert tail["resource_evidence"]["duration_source"]["known_observed_elapsed_ms"] == exported["known_cost"]["duration_ms"]
     assert tail["resource_evidence"]["unknown_usage_calls"] == 1
     assert tail["resource_evidence"]["unreconciled_calls_after_native_and_learning"] == 1
     assert tail["resource_evidence"]["budget_after"] == native["budget_after"]

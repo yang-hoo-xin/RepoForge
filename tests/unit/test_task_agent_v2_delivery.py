@@ -133,6 +133,10 @@ def _export_completed_delivery(store, checkpoint, built, capsys):
             "current_context": {}}]})
     native_ref = checkpoint["handoff"]["execution_ref"]
     native = read_bound_json(native_ref)
+    timing = built["task_timing_observation"]
+    assert timing["origin_ref"] == native["task_timing_origin_ref"]
+    assert timing["event"] == "product_build_return" and timing["status"] == "built"
+    assert timing["timing_status"] == "observed" and timing["duration_ms"] >= 0
     call_id = next(row["call_id"] for row in native["completed_tool_records"] if row["name"] == "finish")
     code = cli.main(["export-strategy-execution", "--execution-record", native_ref["path"], "--call-id", call_id,
         "--output-root", str(store.parent / "strategy-delivery-export"), "--protocol-record", protocol["path"],
@@ -143,6 +147,8 @@ def _export_completed_delivery(store, checkpoint, built, capsys):
     delivery = read_bound_json(exported["delivery_ref"])
     assert delivery["status"] == "delivered" and delivery["candidate_source_id"] == built["candidate_source_id"]
     assert read_bound_json(delivery["verification_ref"])["native_verification_ref"] == built["verification_ref"]
+    assert delivery["task_timing_observation"] == timing
+    assert exported["known_cost"]["duration_ms"] == timing["duration_ms"]
     assert exported["freeze_binding"]["status"] == "freeze_binding_unproven"
 
 

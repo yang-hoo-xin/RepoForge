@@ -387,6 +387,7 @@ def build_v2_delivery(*, artifact_store_root, apply_ref, operation_id, allow_bui
     """Run the frozen repository Build/test contract on the actual applied copy."""
     store = ArtifactStore(artifact_store_root)
     applied, checkpoint, handoff, destination = _validate_applied_receipt(store, apply_ref)
+    original_execution = read_bound_json(handoff.execution_ref)
     if task_delegation_ref is not None:
         delegated = load_v2_artifact(store.root, task_delegation_ref)
         _require(applied["approval"].get("delegation_ref") == task_delegation_ref and delegated["allow_build"] is True,
@@ -421,7 +422,7 @@ def build_v2_delivery(*, artifact_store_root, apply_ref, operation_id, allow_bui
             CSharpRepositoryProfile,
         )
         profile = CSharpRepositoryProfile(task.contract["execution_profile_ref"])
-        worker = read_bound_json(read_bound_json(handoff.execution_ref)["worker_binding"]["configuration_ref"])
+        worker = read_bound_json(original_execution["worker_binding"]["configuration_ref"])
         fixed = worker["behavior_evaluator"]["kwargs"]["expected_fixed_inputs"]
         backend = CSharpRepositoryBackend(profile_ref=profile.reference, source_root=destination,
             workspace_root=destination.parent, output_root=output_root, expected_fixed_inputs=fixed)
@@ -454,6 +455,17 @@ def build_v2_delivery(*, artifact_store_root, apply_ref, operation_id, allow_bui
             "verification_ref": payload.get("verification_ref"), "observations": payload.get("observations", []),
             "execution_status": payload["status"], "retry_allowed": False,
             "authority_inherited": False, "approval_inherited": False})
+    timing_origin = original_execution.get("task_timing_origin_ref")
+    if timing_origin is not None:
+        from src.mod_agent.task_agent_v2_execution import task_timing_snapshot
+        try:
+            # 为什么要有它：交付等待须从原任务入口延续；时间记录失败不能抹去已经执行的Build与工件收据。
+            payload["task_timing_observation"] = task_timing_snapshot(timing_origin,
+                "product_build_return", payload["status"], native_execution_ref=handoff.execution_ref)
+        except (OSError, ValueError, TypeError, KeyError) as error:
+            payload["task_timing_observation"] = {"status": "unknown", "origin_ref": timing_origin,
+                "event": "product_build_return", "native_execution_ref": handoff.execution_ref,
+                "reason": str(error)}
     return _finish(store.root, result_file, payload)
 
 
@@ -518,6 +530,7 @@ def read_completed_v2_delivery(*, artifact_store_root, receipt_ref, native_execu
         "candidate_ref": receipt["candidate_ref"], "native_execution_ref": native_execution_ref,
         "delivery_receipt_ref": receipt_ref, "resource_record": context["resource_record"],
         "delivery_scope": receipt["delivery_scope"], "delivered_artifact_refs": receipt["delivered_artifact_refs"],
+        "task_timing_observation": deepcopy(receipt.get("task_timing_observation")),
         "verification": {"passed": True, "candidate_source_id": receipt["candidate_source_id"],
             "native_verification_ref": receipt["verification_ref"], "delivery_receipt_ref": receipt_ref}}
 

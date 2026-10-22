@@ -5,6 +5,7 @@
 import hashlib
 import json
 import os
+import time
 from pathlib import Path
 
 import httpx
@@ -62,6 +63,14 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         monkeypatch.setattr(backend.nuget, "_run_nuget_isolated_verification_command", verify)
     memory = {}
     requests = []
+    admission_clocks = []
+    original_selection = local_entry._request_technical_execution_selection
+
+    def select_execution(**kwargs):
+        admission_clocks.append(time.monotonic())
+        return original_selection(**kwargs)
+
+    monkeypatch.setattr(local_entry, "_request_technical_execution_selection", select_execution)
     model = "qwen3:4b-instruct"
 
     def transport(_transport, request):
@@ -202,6 +211,14 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         assert pending["model_call_budget"]["consumed"] == 15
     assert {p.name: p.read_bytes() for p in (source / "Library").glob("*.cs")} == baseline
     root = Path(pending["run_root"])
+    timing_origin = json.loads((root / "entry-timing.json").read_text(encoding="utf-8"))
+    assert timing_origin["entry_clock"]["monotonic"] <= admission_clocks[0]
+    timing = json.loads(Path(pending["task_timing_ref"]["path"]).read_text(encoding="utf-8"))
+    assert timing["event"] == "product_return" and timing["status"] == "awaiting_delivery"
+    assert Path(timing["origin_ref"]["path"]) == root / "entry-timing.json"
+    assert timing["clock_basis"] == "same_process_monotonic" and timing["timing_status"] == "observed"
+    assert timing["duration_ms"] == int((timing["observed_clock"]["monotonic"] - timing_origin["entry_clock"]["monotonic"]) * 1000)
+    assert timing["whole_task_finished"] is False
     assert not (root / "a/features" / pending["feature_id"] / "implementation_plan.json").exists()
     proposal = json.loads(Path(pending["artifacts"]["patch_proposal"]).read_text())["data"]
     assert "Unused.cs" not in json.dumps(proposal["diff_intent"])

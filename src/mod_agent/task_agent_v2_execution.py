@@ -4,10 +4,12 @@
 """
 from __future__ import annotations
 
+import os
 import time
 from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import asdict, replace
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -28,6 +30,74 @@ from src.mod_agent.task_agent_v2_handoff import (
 from src.mod_agent.task_agent_v2_state import TaskAgentV2State, save_v2_artifact
 from src.mod_agent.task_agent_v2_tools import TaskAgentSessionV2
 
+_PROCESS_INSTANCE = uuid4().hex
+
+
+def capture_clock():
+    return {"received_at": datetime.now(timezone.utc).isoformat(), "monotonic": time.monotonic(),
+        "process_id": os.getpid(), "process_instance": _PROCESS_INSTANCE}
+
+
+def task_timing_snapshot(origin_ref, event, status, native_execution_ref=None, *, observed_clock=None):
+    """Measure to an observed boundary, never infer the end of an unknown task.
+
+    为什么要有它：恢复继承原起点并包含中断等待；没有结束原件的中断不能被补写为完成。
+    """
+    clock = deepcopy(observed_clock) if observed_clock is not None else capture_clock()
+    value = {"schema": "task-agent-time-observation.v2", "origin_ref": origin_ref,
+        "event": event, "status": status, "observed_clock": clock, "native_execution_ref": native_execution_ref,
+        "scope": "entry_received_to_observed_boundary_including_recovery_wait", "whole_task_finished": False,
+        "duration_ms": None, "clock_basis": None, "timing_status": "origin_unavailable"}
+    if origin_ref is None:
+        return value
+    origin = read_bound_json(origin_ref)
+    _require(origin.get("schema") == "task-agent-entry-timing.v2", "TIMING_ORIGIN_INVALID")
+    started = origin["entry_clock"]
+    if (started.get("process_instance") and started["process_instance"] == clock.get("process_instance")
+            and started.get("process_id") == clock.get("process_id")):
+        elapsed = clock["monotonic"] - started["monotonic"]
+        basis = "same_process_monotonic"
+    else:
+        begin, observed = datetime.fromisoformat(started["received_at"]), datetime.fromisoformat(clock["received_at"])
+        _require(begin.tzinfo is not None and observed.tzinfo is not None, "TIMING_TIMEZONE_REQUIRED")
+        elapsed, basis = (observed - begin).total_seconds(), "cross_process_utc_wall_clock"
+    value.update(timing_status="observed" if elapsed >= 0 else "clock_regressed",
+        duration_ms=max(0, int(elapsed * 1000)) if elapsed >= 0 else None, clock_basis=basis)
+    return value
+
+
+def classify_v2_technical_inputs(loop_request, prepared_request, initial_request, source_context_messages, prior_responses):
+    """Audit closed-loop input channels; external preparation remains unknown."""
+    initial, messages = list(initial_request["messages"]), list(loop_request["messages"])
+    unknown = []
+    if messages[:len(initial)] != initial:
+        unknown.append("initial_contract_prefix_changed")
+    for index, message in enumerate(messages[len(initial):], len(initial)):
+        content = message.get("content")
+        if message.get("role") == "assistant" and any(response.get("content") == content for response in prior_responses):
+            continue
+        if message in source_context_messages:
+            continue
+        if (message.get("role") == "user" and isinstance(content, dict)
+                and content.get("message_type") == "task_agent_output_correction"
+                and content.get("origin") == "execution_host" and index > 0
+                and content.get("assistant_message_sha256") == canonical_hash(messages[index - 1])):
+            continue
+        unknown.append("unclassified_message:" + str(index))
+    prepared_messages = list(prepared_request["messages"])
+    if prepared_messages[:len(messages)] != messages:
+        unknown.append("prepared_history_changed")
+    for index, message in enumerate(prepared_messages[len(messages):], len(messages)):
+        content = message.get("content")
+        if (message.get("role") != "user" or not isinstance(content, dict)
+                or set(content) not in ({"current_task_state"}, {"strategy_experience"})):
+            unknown.append("unclassified_host_input:" + str(index))
+    return {"policy": "closed_v2_technical_input_channels_v1", "scope": "v2_model_decision_inputs_after_initial_contract",
+        "closed_loop_human_technical_interventions": 0 if not unknown else None,
+        "unknown_input_sources": unknown, "outside_scope_human_technical_interventions": None,
+        "excluded_from_technical_interventions": ["initial_requirements", "permission_approval"],
+        "outside_scope": ["external_requirement_or_test_authoring", "strategy_experience_authorship", "out_of_band_assistance"]}
+
 
 class TaskAgentExecutionV2(TaskAgentExecution):
     protocol = "v2"
@@ -42,6 +112,16 @@ class TaskAgentExecutionV2(TaskAgentExecution):
     def check_experience_boundary(self):
         if getattr(self, "_experience", None) is not None:
             self._experience.check_boundary()
+
+    def observe_task_boundary(self, event, *, status):
+        receipt = self.execution_receipt()
+        native_ref = receipt.execution_ref if receipt is not None else None
+        value = task_timing_snapshot(getattr(self, "_task_timing_origin_ref", None), event, status, native_ref)
+        self._task_boundary_sequence = getattr(self, "_task_boundary_sequence", 0) + 1
+        value["observation_sequence"] = self._task_boundary_sequence
+        if getattr(self, "_v2_state", None) is not None:
+            value["resource_event_ref"] = self._v2_state.head["event_ref"]
+        return self._save("task-observation-" + uuid4().hex + ".json", value)
 
     def prepare_decision_request(self, request, session):
         state = session.state
@@ -167,6 +247,17 @@ class TaskAgentExecutionV2(TaskAgentExecution):
             path=state["artifacts"]["feature_spec"], artifact_hash=state["artifact_hashes"]["feature_spec"])
         initial = {"feature_spec_ref": asdict(feature_ref)}
         resumed = getattr(self, "_resume_v2", None)
+        origin_path = self.workspace_root / "entry-timing.json"
+        if resumed is not None:
+            self._task_timing_origin_ref = deepcopy(resumed["host"].get("task_timing_origin_ref"))
+        elif origin_path.is_file():
+            from src.mod_agent.domain.full_project_compilation import _ref
+            self._task_timing_origin_ref = _ref(origin_path)
+        else:
+            self._task_timing_origin_ref = None
+        if self._task_timing_origin_ref is not None:
+            origin = read_bound_json(self._task_timing_origin_ref)
+            _require(origin["run_id"] == state["run_id"] and origin["request_id"] == state["request_id"], "TIMING_TASK_CHANGED")
         before = (deepcopy(resumed["host"]["original_budget_before"]) if resumed is not None
             else validate_budget(self.budget_snapshot()))
         details = {"run_id": state["run_id"], "request_id": state["request_id"], "workspace_root": str(self.workspace_root),
@@ -178,6 +269,7 @@ class TaskAgentExecutionV2(TaskAgentExecution):
             self._reads, self._observation_bytes = counters["reads"], counters["observation_bytes"]
             self._v2_turn_count, self._v2_tool_charge_count = counters["turn_count"], counters["tool_charge_count"]
             self._v2_reservation = deepcopy(counters["reservation"])
+        details["task_timing_origin_ref"] = deepcopy(self._task_timing_origin_ref)
         task = session = loop = None
         loop_ref = finish_ref = None
         try:
@@ -260,6 +352,7 @@ class TaskAgentExecutionV2(TaskAgentExecution):
             def complete(request):
                 if resumed is not None and self._experience is not None:
                     self._experience._terminal_receipt = None
+                loop_request = asdict(request)
                 request = self.prepare_decision_request(request, session)
                 observed = identity()
                 bind = getattr(client, "bind_context_identity", None)
@@ -270,6 +363,14 @@ class TaskAgentExecutionV2(TaskAgentExecution):
                 _require(reservation["turn"] == index, "V2_RESERVATION_TURN_CHANGED")
                 event = {**deepcopy(reservation), "status": "requested", "request_ref": self._save(
                     f"request-{index:03d}.json", asdict(request)), "budget": validate_budget(self.budget_snapshot())}
+                host = task.load(journal.host_config_ref)
+                prior_refs = [row["response_ref"] for row in details["provider_turns"] if row.get("response_ref")]
+                input_audit = classify_v2_technical_inputs(loop_request, asdict(request), read_bound_json(host["initial_request_ref"]),
+                    host.get("source_context_messages", []), [read_bound_json(ref) for ref in prior_refs])
+                event["technical_input_audit_ref"] = self._save("technical-input-audit-" + uuid4().hex + ".json", {
+                    "schema": "task-agent-technical-input-audit.v2", "host_config_ref": journal.host_config_ref,
+                    "loop_request_ref": self._save("loop-request-" + uuid4().hex + ".json", loop_request),
+                    "actual_request_ref": event["request_ref"], "prior_response_refs": prior_refs, "assessment": input_audit})
                 reservation["request_ref"] = event["request_ref"]
                 event["dispatch_ref"] = self._save("provider-dispatch-" + reservation["reservation_id"] + ".json", event)
                 details["provider_turns"].append(event)
@@ -341,6 +442,7 @@ class TaskAgentExecutionV2(TaskAgentExecution):
             candidate_ref=candidate_ref, check_ref=session.current_check if session else None,
             execution_ref=None, loop_result_ref=loop_ref, finish_response_ref=finish_ref,
             budget_before=before, budget_after=validate_budget(self.budget_snapshot()), unknown_effects=status == "unknown")
+        details["timing_observation_ref"] = self.observe_task_boundary("native_execution_return", status=status)
         ref = self._save("execution.json", {**outcome.to_dict(), **details})
         self._receipt = replace(outcome, execution_ref=ref)
         return self.execution_receipt()
