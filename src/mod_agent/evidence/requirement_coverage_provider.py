@@ -2389,8 +2389,9 @@ def _projection_correction_instruction(
             "change the containing requirement role to one of that obligation's "
             "allowed_roles. A requirement role must be allowed by every obligation "
             "index it references; split the requirement when those obligations have "
-            "no shared allowed role. Preserve the original obligation indexes and "
-            "semantics."
+            "no shared allowed role. Also account for every item in "
+            "unaccounted_input_obligations when that field is present. Preserve the "
+            "original obligation indexes and semantics."
         )
     return instruction
 
@@ -2453,6 +2454,11 @@ def _projection_correction_rules(
                     "Split a requirement when its referenced obligations do not "
                     "share one allowed role; retain every original obligation index "
                     "exactly once or in another explicitly legal accounting location."
+                ),
+                (
+                    "When unaccounted_input_obligations is present, account for every "
+                    "listed input in the same complete correction using its allowed "
+                    "roles or dispositions; do not stop after fixing only the role conflict."
                 ),
             ]
         )

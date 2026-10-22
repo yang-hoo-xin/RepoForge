@@ -3094,6 +3094,39 @@ def test_projection_correction_receives_precise_requirement_role_diagnostic() ->
     assert "split the requirement" in correction_payloads[0]["instruction"]
 
 
+def test_role_correction_also_receives_independently_missing_obligations() -> None:
+    feature = _feature_data()
+    invalid = _model_projection()
+    invalid["requirements"] = [
+        invalid["requirements"][0],
+        {
+            **invalid["requirements"][0],
+            "role": "preservation",
+            "text": "Preserve behavior while changing the marker.",
+        },
+        invalid["requirements"][3],
+    ]
+    correction_payloads = []
+
+    def complete_json(role, payload, _schema):
+        if role == "requirement_projection":
+            return deepcopy(invalid)
+        correction_payloads.append(deepcopy(payload))
+        return _model_projection()
+
+    provider = StructuredModelRequirementCoverageProvider(complete_json)
+    assert provider.project(feature_data=feature, request=str(feature["user_request"]))
+
+    correction = correction_payloads[0]
+    assert correction["rejection_diagnostic"]["failure_category"] == (
+        "requirement_role_not_allowed"
+    )
+    assert correction["rejection_diagnostic"]["missing_input_obligation_indexes"] == [3, 4]
+    assert [row["input"]["input_obligation_index"]
+            for row in correction["unaccounted_input_obligations"]] == [3, 4]
+    assert "account for every item" in correction["instruction"]
+
+
 def test_one_input_obligation_can_be_carried_by_multiple_requirements() -> None:
     feature = _feature_data()
     projection = deepcopy(_projection())

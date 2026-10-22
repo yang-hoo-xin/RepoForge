@@ -92,9 +92,13 @@ def multiple_accounting_conflict_rules() -> list[str]:
 def missing_obligation_feedback(
     obligations: Sequence[Mapping[str, Any]], diagnostic: Mapping[str, Any]
 ) -> list[dict[str, Any]]:
-    if diagnostic.get("failure_category") != "input_accounting_incomplete":
+    if diagnostic.get("failure_category") not in {
+        "input_accounting_incomplete", "requirement_role_not_allowed"
+    }:
         return []
     indexes = diagnostic.get("missing_input_obligation_indexes")
+    if indexes is None and diagnostic.get("failure_category") == "requirement_role_not_allowed":
+        return []
     if (not isinstance(indexes, list) or not indexes
             or any(type(index) is not int for index in indexes)
             or len(indexes) != len(set(indexes))):

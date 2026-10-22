@@ -891,6 +891,22 @@ def _normalized_projection(
             if role not in input_obligations[int(index) - 1]["allowed_roles"]
         ]
         if role_conflicts:
+            raw_accounted_indexes = {
+                int(index)
+                for item in raw_requirements
+                if isinstance(item, dict)
+                and isinstance(item.get("input_obligation_indexes"), list)
+                for index in item["input_obligation_indexes"]
+                if type(index) is int and 1 <= index <= len(input_obligations)
+            } | {
+                int(index)
+                for item in raw_dispositions
+                if isinstance(item, dict)
+                for index in (item.get("input_obligation_index"),)
+                if type(index) is int and 1 <= index <= len(input_obligations)
+            }
+            missing_indexes = [index for index in range(1, len(input_obligations) + 1)
+                               if index not in raw_accounted_indexes]
             raise RequirementCoverageProjectionError(
                 "REQUIREMENT_COVERAGE_REQUIREMENT_INVALID",
                 {
@@ -900,6 +916,8 @@ def _normalized_projection(
                     "requirement_item_index": requirement_item_index,
                     "observed_role": role,
                     "role_conflicts": role_conflicts,
+                    **({"missing_input_obligation_indexes": missing_indexes}
+                       if missing_indexes else {}),
                     "allowed_boundary": {
                         "role_must_be_allowed_by_every_referenced_obligation": True,
                         "split_requirement_when_no_single_role_is_shared": True,
