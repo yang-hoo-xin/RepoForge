@@ -2327,6 +2327,14 @@ def default_artifact_contracts() -> list[ArtifactContract]:
                 "requested_behavior_status",
             ),
         ),
+        # 为什么要有它：策略与执行来源沿用正常ArtifactStore，通用消费者也必须识别其不可变原件。
+        ArtifactContract(
+            artifact_type="strategy_experience", schema_version="1.0",
+            required_fields=frozenset({"kind", "schema_version"}),
+            producer_stage="strategy_experience",
+            consumer_stages=frozenset({"strategy_experience", "task_agent", "evaluation", "dashboard"}),
+            allowed_statuses=frozenset({"success"}), eval_visibility=False,
+        ),
         ArtifactContract(
             artifact_type="task_memory",
             schema_version="1.0",

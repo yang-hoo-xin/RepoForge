@@ -13,6 +13,7 @@ RepoForge 是面向本地和异构模型、以源码证据和真实测试约束�
 | 查看已完成验证 | [实测报告](PUBLIC_RESULTS.md) | HTTP 服务、实际 Agent 运行、模块测试、代码交付测试及对应版本的 CI 结果 |
 | 核对服务测量数字 | [负载数值摘录](evidence/service-load-20261009.json) | 五组条件、完整分母、结果与原摘要 SHA-256 |
 | 理解交付目标 | [产品契约](ACTIVE_PRODUCT_CONTRACT.md) | 新建、修改、继续修复，以及验收与执行边界 |
+| 核对当前自主 Agent 设计 | [自主开发与策略经验实施设计](AGENT_RELIABILITY_LEARNING_GOAL.md) | 已确认主设计及局部修订；U1—U4 集成范围、穿插真实 B 验证及 U5 迁移评测 |
 
 ## 运行与接入
 

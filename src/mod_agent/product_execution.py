@@ -29,7 +29,7 @@ ProductExecutionPhase = Literal[
     "terminal",
 ]
 ProductExecutionDisposition = Literal[
-    "succeeded", "domain_blocked", "platform_blocked", "partial"
+    "succeeded", "domain_blocked", "platform_blocked", "partial", "awaiting_delivery"
 ]
 
 _BINDING_VERSIONS = {
@@ -1338,7 +1338,8 @@ def _validate_effect_trace(events: tuple[ProductExecutionEffectEventV1, ...]) ->
         )
 
 
-def _validate_lifecycle(attempts: tuple[ProductExecutionStoreAttemptV1, ...], *, interrupted_patch: bool = False) -> None:
+def _validate_lifecycle(attempts: tuple[ProductExecutionStoreAttemptV1, ...], *, interrupted_patch: bool = False,
+        task_agent_v2: bool = False) -> None:
     if not attempts:
         return
     nodes: list[tuple[str, int]] = []
@@ -1348,6 +1349,9 @@ def _validate_lifecycle(attempts: tuple[ProductExecutionStoreAttemptV1, ...], *,
             nodes.append(key)
     grammar = PRODUCT_EXECUTION_DECLARATION.lifecycle_grammar
     initial = grammar.initial_prefix[5:] if interrupted_patch else grammar.initial_prefix
+    if task_agent_v2:
+        # 为什么要有它：显式v2跳过技术Evidence/Plan，旧协议完整顺序仍受原有grammar约束。
+        initial = tuple(node for node in initial if node not in {"retrieve_evidence", "create_implementation_plan"})
     observed_initial_nodes = [node for node, attempt in nodes if attempt == 0]
     observed_without_terminal = list(observed_initial_nodes)
     if observed_without_terminal and observed_without_terminal[-1] == "blocked":
@@ -1890,6 +1894,7 @@ class ProductExecutionFactsV1:
     variant_result: ProductBuildCompletionV1 | ProductRuntimeCompletionV1
     failure_stage: str | None
     task_agent_executions: tuple[ProductTaskAgentExecutionV1, ...] = ()
+    v2_delivery_checkpoint_ref: str | None = None
 
 
 def _validated_task_agent_sequences(facts: ProductExecutionFactsV1) -> frozenset[int]:
@@ -1945,8 +1950,10 @@ def _validated_task_agent_sequences(facts: ProductExecutionFactsV1) -> frozenset
             raise ProductExecutionContractError("Task-agent retained execution evidence is unavailable.",
                 side_effects_may_have_started=True) from error
         initial, final = execution.initial_context, outcome.get("final_context")
+        expected_context = ({"feature_spec_ref"} if outcome.get("schema_version") == "task-agent-product-execution.v2"
+            else {"feature_spec_ref", "evidence_pack_ref", "implementation_plan_ref"})
         require(isinstance(final, Mapping) and set(initial) == set(final)
-            == {"feature_spec_ref", "evidence_pack_ref", "implementation_plan_ref"}
+            == expected_context
             and initial["feature_spec_ref"] == final["feature_spec_ref"])
         for context, sequence_limit in ((initial, execution.store_start_sequence),
                 (final, execution.store_start_sequence + len(execution.store_sequences))):
@@ -2036,12 +2043,14 @@ def _validate_product_execution_result_facts(
                          reused_input_count=len(reused), task_agent_sequences=task_agent_sequences)
     _validate_effect_trace(facts.effect_events)
     _validate_lifecycle(tuple(item for item in facts.store_attempts if item.sequence not in upstream_sequences | task_agent_sequences),
-                        interrupted_patch=bool(reused))
+                        interrupted_patch=bool(reused), task_agent_v2=any(
+                            row.outcome.get("schema_version") == "task-agent-product-execution.v2"
+                            for row in facts.task_agent_executions))
     _validate_repair_plan_lifecycle_predicates(facts, upstream_sequences=upstream_sequences | task_agent_sequences)
     _validate_terminal_effect_boundary(facts)
     if facts.feature_id is not None:
         _require_non_empty(facts.feature_id, "feature_id")
-    if facts.terminal_node not in {None, "build", "done", "blocked"}:
+    if facts.terminal_node not in {None, "build", "done", "blocked", "dry_run_apply"}:
         raise ProductExecutionContractError(
             "Product terminal node is unsupported.",
             side_effects_may_have_started=True,
@@ -2095,7 +2104,7 @@ class ProductExecutionResultV1:
     execution_disposition: ProductExecutionDisposition
     failure_stage: str | None
     side_effects_may_have_started: bool
-    terminal_node: Literal["build", "done", "blocked"] | None
+    terminal_node: Literal["build", "done", "blocked", "dry_run_apply"] | None
     store_attempts: tuple[ProductExecutionStoreAttemptV1, ...]
     outputs: tuple[ProductExecutionOutputV1, ...]
     effect_events: tuple[ProductExecutionEffectEventV1, ...]
@@ -2103,6 +2112,7 @@ class ProductExecutionResultV1:
     blockers: tuple[ProductExecutionBlockerV1, ...]
     variant_result: ProductBuildCompletionV1 | ProductRuntimeCompletionV1
     task_agent_executions: tuple[ProductTaskAgentExecutionV1, ...] = ()
+    v2_delivery_checkpoint_ref: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -2124,6 +2134,7 @@ class ProductExecutionResultV1:
             "variant_result": self.variant_result.to_dict(),
             **({"task_agent_executions": [item.to_dict() for item in self.task_agent_executions]}
                if self.task_agent_executions else {}),
+            **({"v2_delivery_checkpoint_ref": self.v2_delivery_checkpoint_ref} if self.v2_delivery_checkpoint_ref else {}),
         }
 
     @classmethod
@@ -2148,6 +2159,8 @@ class ProductExecutionResultV1:
         )
         if "task_agent_executions" in value:
             fields = (*fields, "task_agent_executions")
+        if "v2_delivery_checkpoint_ref" in value:
+            fields = (*fields, "v2_delivery_checkpoint_ref")
         _require_exact_fields(value, fields, "ProductExecutionResultV1")
         if value["contract_version"] != "1":
             raise ProductExecutionContractError(
@@ -2202,6 +2215,7 @@ class ProductExecutionResultV1:
             variant_result=variant,
             task_agent_executions=tuple(ProductTaskAgentExecutionV1.from_dict(item)
                 for item in value.get("task_agent_executions", ())),
+            v2_delivery_checkpoint_ref=value.get("v2_delivery_checkpoint_ref"),
         )
         request = _ProductExecutionResultIdentityV1(
             run_id=parsed.run_id,
@@ -2220,6 +2234,7 @@ class ProductExecutionResultV1:
             variant_result=parsed.variant_result,
             failure_stage=parsed.failure_stage,
             task_agent_executions=parsed.task_agent_executions,
+            v2_delivery_checkpoint_ref=parsed.v2_delivery_checkpoint_ref,
         )
         projected = project_product_execution_result(facts, validate_request=False)
         if projected.to_dict() != parsed.to_dict():
@@ -2259,6 +2274,36 @@ def project_product_execution_result(
         failure_stage = "post_execution_validation"
         platform_status = "partial"
         disposition = "partial"
+    elif facts.terminal_node == "dry_run_apply":
+        # 为什么要有它：U1真实接管完成但尚未Apply，必须明确待交付而不是虚报成功或伪造平台故障。
+        executions = [row for row in facts.task_agent_executions
+            if row.outcome.get("schema_version") == "task-agent-product-execution.v2"]
+        if (len(executions) != 1 or not facts.outputs or facts.outputs[-1].artifact_role != "dry_run_result"
+                or any(event.effect_role in {"isolated_apply", "build", "runtime"} for event in facts.effect_events)
+                or facts.blockers):
+            raise ProductExecutionContractError("V2 pending delivery boundary changed.", side_effects_may_have_started=effects_started)
+        from src.mod_agent.artifacts import ArtifactStore
+        reference = facts.outputs[-1].artifact_ref
+        envelope = json.loads(Path(reference.path).read_text(encoding="utf-8"))
+        payload = envelope["data"]
+        if (ArtifactStore._stable_hash(ArtifactStore._envelope_content_for_hash(envelope)) != reference.artifact_hash
+                or payload.get("task_agent_protocol") != "v2" or payload.get("delivery_status") != "pending"
+                or payload.get("actual_write_performed") is not False or payload.get("whole_task_delivered") is not False
+                or payload.get("candidate_ref") != executions[0].outcome.get("candidate_ref")):
+            raise ProductExecutionContractError("V2 pending delivery artifact changed.", side_effects_may_have_started=effects_started)
+        platform_status, disposition = "completed", "awaiting_delivery"
+        if facts.v2_delivery_checkpoint_ref is not None:
+            from src.mod_agent.task_agent_v2_state import load_v2_artifact
+            candidates = [parent for parent in Path(reference.path).resolve().parents
+                if (parent / facts.v2_delivery_checkpoint_ref).is_file()]
+            if len(candidates) != 1:
+                raise ProductExecutionContractError("V2 delivery checkpoint unavailable.", side_effects_may_have_started=effects_started)
+            checkpoint = load_v2_artifact(candidates[0], facts.v2_delivery_checkpoint_ref)
+            if (checkpoint.get("schema") != "task-agent-delivery-checkpoint.v2"
+                    or checkpoint.get("run_id") != facts.request.run_id or checkpoint.get("request_id") != facts.request.request_id
+                    or checkpoint.get("artifact_refs", {}).get("dry_run_result") != _ref_to_dict(reference)
+                    or checkpoint.get("candidate_source_id") != payload.get("candidate_source_id")):
+                raise ProductExecutionContractError("V2 delivery checkpoint binding changed.", side_effects_may_have_started=effects_started)
     elif facts.terminal_node == "blocked":
         if not facts.outputs or facts.outputs[-1].artifact_role != "blocked_report":
             raise ProductExecutionContractError(
@@ -2312,6 +2357,8 @@ def project_product_execution_result(
             "Product execution lacks a legal terminal or platform failure.",
             side_effects_may_have_started=effects_started,
         )
+    if facts.v2_delivery_checkpoint_ref is not None and disposition != "awaiting_delivery":
+        raise ProductExecutionContractError("V2 delivery checkpoint requires pending delivery.", side_effects_may_have_started=effects_started)
     if platform_status == "completed":
         failure_stage = None
         if facts.feature_id is None:
@@ -2357,6 +2404,7 @@ def project_product_execution_result(
         blockers=facts.blockers,
         variant_result=facts.variant_result,
         task_agent_executions=facts.task_agent_executions,
+        v2_delivery_checkpoint_ref=facts.v2_delivery_checkpoint_ref,
     )
 
 

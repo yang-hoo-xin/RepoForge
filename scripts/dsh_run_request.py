@@ -43,6 +43,8 @@ _VALUES = frozenset({
     "--stage-model-call-limits", "--model-call-budget-policy", "--trace-environment", "--patch-worker-config",
     "--run-id", "--request-id", "--dependency-api-config", "--knowledge-evidence-config",
     "--technical-executor", "--constraint-policy", "--task-agent-edit-paths", "--task-agent-candidate-mode",
+    "--task-agent-protocol",
+    "--task-agent-experience-config",
     "--repository-profile",
 })
 _REQUIRED = {
@@ -51,6 +53,7 @@ _REQUIRED = {
     "--ollama-context-window", "--task-model-call-limit", "--stage-model-call-limits",
 }
 _PATHS = frozenset({
+    "--task-agent-experience-config",
     "--target-project", "--workspace-root", "--settings",
     "--game-folder-build-binding", "--stage-model-call-limits", "--patch-worker-config",
     "--dependency-api-config", "--knowledge-evidence-config",

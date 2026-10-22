@@ -27,6 +27,27 @@ def _not_configured_git_binding() -> dict[str, Any]:
 class PatchProposalBuilder:
     """Convert an implementation plan into patch intent without editing files."""
 
+    def build_v2(self, handoff, *, feature_id, feature_spec_ref, store):
+        """Build directly from verified code and authority, without a synthetic Plan.
+
+        为什么要有它：v2当前代码与绑定不归技术计划所有，产品必须直接消费同一候选。
+        """
+        from src.mod_agent.task_agent_v2_handoff import revalidate_handoff_v2
+        selected = revalidate_handoff_v2(handoff.to_dict(), store=store)
+        changes = selected.changes
+        refs = (str(selected.task_contract_ref), str(selected.check_ref))
+        return PatchProposal(proposal_id=stable_proposal_id(feature_id, (selected.candidate_source_id,)),
+            feature_id=feature_id, summary="Validated v2 candidate awaiting delivery.",
+            files=tuple(row["display_file"] for row in changes), diff_intent=changes,
+            change_units=build_change_units(changes), context_pack={"task_agent_protocol": "v2",
+                "task_agent_handoff_v2": selected.to_dict(), "feature_spec_ref": feature_spec_ref,
+                "artifact_hashes": {"feature_spec": feature_spec_ref["artifact_hash"]}},
+            evidence_refs=refs, scope_boundary=("Existing files within task authority only.",),
+            risk_assessment={"risk_tags": [], "risk_level": "medium", "requires_manual_review": True},
+            expected_tests=("Version-bound public candidate acceptance",),
+            no_op_status=build_no_op_status(is_no_op=False, reason=None),
+            rollback_hints=build_rollback_hints(changes))
+
     @staticmethod
     def required_source_snippet_char_limit(
         implementation_plan: Mapping[str, Any],

@@ -1518,7 +1518,8 @@ def build_graph(
     _add_traced_conditional_edges(graph,
         "draft_feature_spec",
         route_after_feature_spec,
-        dict(registry["draft_feature_spec"]),
+        ({**dict(registry["draft_feature_spec"]), "continue": "generate_patch_proposal"}
+            if getattr(task_agent_execution, "protocol", None) == "v2" else dict(registry["draft_feature_spec"])),
     )
     if stop_after_evidence:
         _add_traced_conditional_edges(graph,
@@ -1565,7 +1566,7 @@ def build_graph(
         route_after_review,
         (
             {"continue": "dry_run_apply", "blocked": END, "repair": END}
-            if validated_patch_continuation_mode is not None
+            if validated_patch_continuation_mode is not None or getattr(task_agent_execution, "protocol", None) == "v2"
             else _review_route_map(
                 registry["review_proposal"],
                 enable_dynamic_review_interrupt=enable_dynamic_review_interrupt,
@@ -1590,7 +1591,7 @@ def build_graph(
         route_after_dry_run,
         (
             {"continue": END, "blocked": END}
-            if validated_patch_continuation_mode is not None
+            if validated_patch_continuation_mode is not None or getattr(task_agent_execution, "protocol", None) == "v2"
             else dry_run_routes
         ),
     )
@@ -2916,6 +2917,35 @@ def _run_generate_patch_with_upstream(state, artifact_store, *, enable_upstream_
         return next_state
 
 
+def _run_generate_patch_proposal_v2(state, store, *, owner, factory):
+    """Run the same product node with an explicit v2 contract consumer.
+
+    为什么要有它：U1必须从真实FeatureSpec进入Proposal，不能在旧Plan后接一个演示适配器。
+    """
+    from src.mod_agent.task_agent_v2_handoff import TaskAgentPatchOutcomeV2
+    initial = {"feature_spec_ref": asdict(_artifact_ref_from_state(state, "feature_spec"))}
+    outcome = factory(state, None, None)
+    if not isinstance(outcome, TaskAgentPatchOutcomeV2) or outcome.initial_context != initial:
+        raise ProductExecutionContractError("V2 task inputs changed.", side_effects_may_have_started=True)
+    selected = _copy_state(state)
+    selected["runtime_summary"]["task_agent_execution"] = outcome.to_dict()
+    if outcome.status != "candidate_ready":
+        selected["blockers"].append({"stage": "generate_patch_proposal",
+            "code": outcome.termination.get("code", "V2_CANDIDATE_UNAVAILABLE"),
+            "message": "V2 execution has no admitted candidate.", "execution_ref": outcome.execution_ref})
+        return selected
+    handoff = owner.validate_handoff(outcome, expected_initial_context=initial)
+    proposal = PatchProposalBuilder().build_v2(handoff, feature_id=state["feature_id"],
+        feature_spec_ref=initial["feature_spec_ref"], store=store)
+    ref = store.write(feature_id=state["feature_id"], artifact_type="patch_proposal",
+        payload=proposal.to_artifact_payload(), status="success",
+        upstream_refs=[_artifact_ref_from_state(state, "feature_spec")],
+        exact_revision_upstream_types={"feature_spec"})
+    _record_artifact(selected, "patch_proposal", ref)
+    selected["current_stage"] = "patch_proposal"
+    return selected
+
+
 def _run_generate_patch_proposal(
     state: ModAgentState,
     artifact_store: ArtifactStore,
@@ -2931,6 +2961,9 @@ def _run_generate_patch_proposal(
     task_agent_execution: Any = None,
     retained_task_agent_handoff: Any = None,
 ) -> ModAgentState:
+    if getattr(task_agent_execution, "protocol", None) == "v2":
+        return _run_generate_patch_proposal_v2(state, artifact_store,
+            owner=task_agent_execution, factory=patch_change_factory)
     saved_patch = None
     saved_candidate = None
     task_handoff = None
@@ -3249,6 +3282,19 @@ def _run_review_proposal(
     ) = None,
 ) -> ModAgentState:
     proposal = _read_artifact_data(state, artifact_store, "patch_proposal")
+    if proposal.get("context_pack", {}).get("task_agent_protocol") == "v2":
+        review = ProposalReviewer().review_v2(proposal, store=artifact_store,
+            feature_spec_ref=asdict(_artifact_ref_from_state(state, "feature_spec")))
+        ref = artifact_store.write(feature_id=state["feature_id"], artifact_type="proposal_review",
+            payload=review.to_artifact_payload(), status="success",
+            upstream_refs=[_artifact_ref_from_state(state, "patch_proposal")])
+        selected = _copy_state(state)
+        selected["current_stage"] = "proposal_review"
+        selected["review_summary"] = {"decision": review.decision, "allowed_next_stage": review.allowed_next_stage,
+            "num_findings": 0, "critic_gate": review.critic_gate,
+            "semantic_assurance": review.semantic_assurance.to_dict(), "human_semantic_review_required": True}
+        _record_artifact(selected, "proposal_review", ref)
+        return selected
     implementation_plan = _read_artifact_data(
         state,
         artifact_store,
@@ -4392,7 +4438,13 @@ def _run_dry_run_apply(
     )
     changed_files = list(proposal.get("files") or [])
     diff_intent = list(proposal.get("diff_intent") or [])
+    v2 = proposal.get("context_pack", {}).get("task_agent_protocol") == "v2"
+    v2_payload = None
+    if v2 and approved:
+        from src.mod_agent.execution.patch_apply import ExactTextPatchApplier
+        v2_payload = ExactTextPatchApplier().dry_run_v2(proposal=proposal, review=review, store=artifact_store)
     generated_payload = (
+        v2_payload if v2 else
         dry_run_factory(
             proposal,
             _read_artifact_data(state, artifact_store, "implementation_plan"),
@@ -4454,6 +4506,12 @@ def _run_dry_run_apply(
     next_state = _copy_state(state)
     next_state["current_stage"] = "dry_run_apply"
     _record_artifact(next_state, "dry_run_result", artifact_ref)
+    if v2 and approved:
+        from src.mod_agent.task_agent_v2_delivery import create_v2_delivery_checkpoint
+        next_state["runtime_summary"]["v2_delivery_checkpoint_ref"] = create_v2_delivery_checkpoint(
+            store=artifact_store, feature_id=state["feature_id"], run_id=state["run_id"], request_id=state["request_id"],
+            proposal_ref=_artifact_ref_from_state(state, "patch_proposal"),
+            review_ref=_artifact_ref_from_state(state, "proposal_review"), dry_run_ref=artifact_ref)
     if not approved:
         next_state["blockers"].append(
             {

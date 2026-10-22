@@ -6891,7 +6891,7 @@ def _request_technical_execution_selection(*, technical_executor, constraint_pol
         task_agent_allowed_edit_paths, local_ollama, defer_approval, run_gtfo_runtime,
         source_retrieval_mode, model_call_budget_policy, patch_worker_configuration,
         planning_target_evidence_ids, repair_ollama_model, task_agent_candidate_mode="baseline",
-        repository_profile=None):
+        repository_profile=None, task_agent_protocol="v1"):
     """Validate an operator-selected experimental executor before any run effects."""
     from pathlib import PurePosixPath
     from src.mod_agent.planning.constraint_context import validate_constraint_policy
@@ -6899,6 +6899,11 @@ def _request_technical_execution_selection(*, technical_executor, constraint_pol
     policy = validate_constraint_policy(constraint_policy)
     if technical_executor not in {"workflow", "task_agent"}:
         raise LocalEntryError("RUN_REQUEST_TECHNICAL_EXECUTOR_INVALID")
+    if task_agent_protocol not in {"v1", "v2"}:
+        raise LocalEntryError("RUN_REQUEST_TASK_AGENT_PROTOCOL_INVALID")
+    if task_agent_protocol == "v2" and (technical_executor != "task_agent" or repository_profile is None):
+        # 为什么要有它：首版v2仅使用明确整文件授权的仓库后端，未适配领域不能自动退回旧协议或扩大范围。
+        raise LocalEntryError("RUN_REQUEST_TASK_AGENT_V2_REPOSITORY_REQUIRED")
     if task_agent_candidate_mode not in {"baseline", "current"}:
         raise LocalEntryError("RUN_REQUEST_TASK_AGENT_CANDIDATE_MODE_INVALID")
     paths = task_agent_allowed_edit_paths
@@ -6939,9 +6944,11 @@ def _request_technical_execution_selection(*, technical_executor, constraint_pol
             or patch_worker_configuration.behavior_evaluator() is None):
         raise LocalEntryError("RUN_REQUEST_TASK_AGENT_EVALUATOR_REQUIRED")
     return {"technical_executor": technical_executor, "constraint_policy": policy,
+            **({"protocol": task_agent_protocol} if task_agent_protocol != "v1" else {}),
             **({"candidate_mode": task_agent_candidate_mode} if task_agent_candidate_mode != "baseline" else {}),
             "allowed_edit_paths_relative_to_project": list(paths),
-            "scope": "common_initial_planning_then_continuous_technical_loop"}
+            "scope": ("task_contract_then_continuous_technical_loop" if task_agent_protocol == "v2"
+                      else "common_initial_planning_then_continuous_technical_loop")}
 
 
 def run_local_request(
@@ -7007,6 +7014,8 @@ def run_local_request(
     constraint_policy: str | None = None,
     task_agent_allowed_edit_paths: tuple[str, ...] = (),
     task_agent_candidate_mode: str = "baseline",
+    task_agent_protocol: str = "v1",
+    task_agent_experience_config: str | None = None,
     execution_trace_configuration: Any = None,
     external_patch_profile: Any = None,
     defer_approval: bool = False,
@@ -7025,6 +7034,14 @@ def run_local_request(
     repository_binding = None
     repository_execution_binding = None
     repository_backend = None
+    experience_configuration_ref = None
+    if task_agent_experience_config is not None:
+        # 为什么要有它：策略配置来自宿主且绑定原件，新学习语义不能静默影响旧协议或由模型自行启用。
+        if task_agent_protocol != "v2" or technical_executor != "task_agent":
+            raise LocalEntryError("RUN_REQUEST_STRATEGY_REQUIRES_V2")
+        experience_path = Path(task_agent_experience_config).resolve(strict=True)
+        experience_configuration_ref = {"path": str(experience_path),
+            "sha256": hashlib.sha256(experience_path.read_bytes()).hexdigest()}
     if repository_profile_path is not None:
         from src.mod_agent.domain.csharp_repository import CSharpRepositoryAdapter
         from src.mod_agent.domain.csharp_repository_backend import CSharpRepositoryProfile
@@ -7042,6 +7059,7 @@ def run_local_request(
     technical_execution = _request_technical_execution_selection(
         technical_executor=technical_executor, constraint_policy=constraint_policy,
         task_agent_candidate_mode=task_agent_candidate_mode,
+        task_agent_protocol=task_agent_protocol,
         task_agent_allowed_edit_paths=task_agent_allowed_edit_paths, local_ollama=local_ollama,
         defer_approval=defer_approval, run_gtfo_runtime=run_gtfo_runtime,
         source_retrieval_mode=source_retrieval_mode, model_call_budget_policy=model_call_budget_policy,
@@ -8339,7 +8357,12 @@ def run_local_request(
                         or upstream_planning_selector.constraint_policy != constraint_policy):
                     raise LocalEntryError("RUN_REQUEST_TASK_AGENT_PROVIDER_CHANGED")
 
-            task_agent_execution = TaskAgentExecution(
+            executor_class = TaskAgentExecution
+            if task_agent_protocol == "v2":
+                from src.mod_agent.task_agent_v2_execution import TaskAgentExecutionV2
+                executor_class = TaskAgentExecutionV2
+            task_agent_execution = executor_class(
+                **({"experience_configuration_ref": experience_configuration_ref} if task_agent_protocol == "v2" else {}),
                 artifact_store=artifact_store, workspace_root=run_root, profile=worker_profile,
                 policy=worker_policy, behavior_evaluator=patch_worker_configuration.behavior_evaluator(),
                 worker_configuration_ref=bound_worker_ref, expected_model_identity=local_model_identity,
@@ -8868,6 +8891,10 @@ def run_local_request(
 
         summary = {
             **task_execution_result_fields(),
+            **({"status": "awaiting_delivery", "whole_task_delivered": False}
+               if product_result.execution_disposition == "awaiting_delivery" else {}),
+            **({"v2_delivery_checkpoint_ref": product_result.v2_delivery_checkpoint_ref}
+               if product_result.v2_delivery_checkpoint_ref is not None else {}),
             "run_id": run_id,
             "current_stage": product_result.terminal_node,
             "feature_id": product_result.feature_id,
@@ -8914,6 +8941,11 @@ def run_local_request(
             "product_execution_result": product_result_projection,
             "execution_trace": product_trace_identity(product_trace, run_root),
         }
+        if task_agent_protocol == "v2" and task_agent_execution is not None:
+            # 为什么要有它：学习在正常终态使用公开经历并计入同一资源账本，不能改写已完成的候选交接原件。
+            summary["strategy_learning"] = task_agent_execution.complete_terminal_learning()
+            summary["model_call_count"] = model_call_count
+            summary["model_call_budget"] = model_budget_snapshot()
         try:
             _persist_graph_terminal_result(
                 run_root=run_root,

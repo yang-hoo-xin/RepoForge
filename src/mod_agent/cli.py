@@ -1142,6 +1142,11 @@ def build_parser(
     apply_parser.add_argument("--resume-payload", help="JSON file containing the existing exact ResumePayload fields.")
     apply_parser.add_argument("--build-profile", help="JSON file containing the existing BuildProfile fields; its working_directory must be this Apply's isolated workspace.")
     apply_parser.add_argument("--human-semantic-decision", help="JSON file containing the existing exact human_semantic_decision_v1 decision.")
+    apply_parser.add_argument("--v2-delivery-checkpoint", help="Exact v2 delivery checkpoint, or Apply receipt for the build action.")
+    apply_parser.add_argument("--v2-delivery-action", choices=("prepare", "apply", "build"), default="prepare")
+    apply_parser.add_argument("--v2-displayed-binding", help="JSON file containing the exact v2 displayed_binding returned by prepare.")
+    apply_parser.add_argument("--task-delegation-ref", help="Existing host-authorized v2 task delegation reference; never a model approval.")
+    apply_parser.add_argument("--operation-id", help="Stable v2 delivery operation identity for retries and reconciliation.")
     apply_parser.add_argument("--allow-build", action="store_true",
         help="Explicitly authorize this Build continuation only; Runtime needs its own existing authorization.")
     _add_execution_trace_arguments(apply_parser)
@@ -1150,8 +1155,10 @@ def build_parser(
         "run-request",
         help="Run one controlled request against an isolated copy of a real target project.",
     )
-    run_parser.add_argument("description", help="Natural-language Mod request.")
-    run_parser.add_argument("--target-project", required=True)
+    run_parser.add_argument("description", nargs="?", help="Natural-language request; omitted only for an exact v2 resume.")
+    run_parser.add_argument("--target-project")
+    run_parser.add_argument("--resume-task-agent", help="Exact persisted v2 task checkpoint reference; restores the original task and resources.")
+    run_parser.add_argument("--artifact-store-root", help="Original store for --resume-task-agent; never a new task store.")
     run_parser.add_argument("--repository-profile",
         help="Explicit SDK-style C# repository build/test profile; keeps the existing product workflow and disables game scope.")
     run_parser.add_argument("--game-folder-build-binding", help="JSON with the existing exact read-only GameFolder binding.")
@@ -1204,6 +1211,9 @@ def build_parser(
         help="JSON list of operator-authorized project-relative existing files; required only for task_agent.")
     run_parser.add_argument("--task-agent-candidate-mode", choices=("baseline", "current"), default="baseline",
         help="Experimental task_agent revision base; baseline preserves the existing candidate protocol.")
+    run_parser.add_argument("--task-agent-protocol", choices=("v1", "v2"), default="v1",
+        help="Explicit task-agent protocol; v2 separates authority, technical plans and file bindings.")
+    run_parser.add_argument("--task-agent-experience-config", help="Hash-bound host strategy snapshot and terminal learning configuration for v2.")
     run_parser.add_argument("--stage-model-call-limits",
         help="JSON object with the existing requirement_projection, requirement_findings, planning, initial_patch and repair call limits.")
     run_parser.add_argument("--dependency-api-config", help="Explicit hash-bound metadata/IL inspector configuration for the run-local GameFolder copy.")
@@ -2397,6 +2407,33 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0 if result.status == "terminal" else 2
 
     if args.command == "apply-patch":
+        if args.v2_delivery_checkpoint:
+            from src.mod_agent.reviewed_patch_continuation import continue_v2_delivery
+            try:
+                if not args.artifact_store_root or any((args.resume_approval, args.human_decision_stdin,
+                        args.resume_payload, args.checkpoint_path, args.checkpoint_hash, args.build_profile)):
+                    raise ValueError("V2_DELIVERY_EXPLICIT_CONFIGURATION_REQUIRED")
+                action = args.v2_delivery_action
+                if (action == "apply" and not args.confirm
+                        or action != "apply" and args.confirm
+                        or action != "build" and (args.continue_build or args.allow_build)):
+                    raise ValueError("V2_DELIVERY_EFFECT_AUTHORIZATION_MISMATCH")
+                # 为什么要有它：v2从同一公开命令消费精确显示绑定与真实批准，不把旧协议字段或模型文本当新权限。
+                displayed = (json.loads(Path(args.v2_displayed_binding).read_text(encoding="utf-8-sig"))
+                             if args.v2_displayed_binding else None)
+                decision = (json.loads(Path(args.human_semantic_decision).read_text(encoding="utf-8-sig"))
+                            if args.human_semantic_decision else None)
+                result = continue_v2_delivery(artifact_store_root=args.artifact_store_root,
+                    checkpoint_ref=args.v2_delivery_checkpoint, action=action, isolated_root=args.isolated_root,
+                    operation_id=args.operation_id, displayed_binding=displayed, human_semantic_decision=decision,
+                    task_delegation_ref=args.task_delegation_ref, allow_build=args.allow_build)
+            except (OSError, ValueError, RuntimeError, TypeError, KeyError) as error:
+                print(json.dumps({"status": "blocked", "protocol": "v2", "reason": str(error),
+                    **{key: getattr(error, key) for key in ("delivery_receipt_ref", "failure_feedback_ref")
+                       if getattr(error, key, None) is not None}}, ensure_ascii=False))
+                return 2
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result.get("status") in {"ready", "prepared", "awaiting_approval", "applied_in_isolation", "built"} else 1
         if args.resume_approval:
             from src.mod_agent.reviewed_patch_continuation import resume_deferred_approval
 
@@ -2592,6 +2629,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0 if result.get("status") in {"awaiting_approval", "delivered"} else 2
 
     if args.command == "run-request":
+        if args.resume_task_agent:
+            from src.mod_agent.task_agent_v2_recovery import resume_v2_task_agent
+            try:
+                selected = list(argv if argv is not None else sys.argv[1:])
+                allowed_flags = {"--resume-task-agent", "--artifact-store-root"}
+                if (not args.artifact_store_root or args.description is not None or args.target_project is not None
+                        or any(value.startswith("--") and value.split("=", 1)[0] not in allowed_flags for value in selected)):
+                    raise ValueError("TASK_V2_RESUME_ORIGINAL_CONFIGURATION_ONLY")
+                # 为什么要有它：恢复必须重用原模型、授权和累计资源，不让新的命令行参数悄悄创建另一套执行条件。
+                result = resume_v2_task_agent(artifact_store_root=args.artifact_store_root,
+                                             checkpoint_ref=args.resume_task_agent)
+            except (OSError, ValueError, RuntimeError, TypeError, KeyError) as error:
+                print(json.dumps({"status": "blocked", "protocol": "v2", "reason": str(error)}, ensure_ascii=False))
+                return 2
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result.get("status") in {"awaiting_delivery", "candidate_ready"} else 1
         if args.resume_initial_findings is not None:
             from src.mod_agent.initial_findings_continuation import (
                 execute_initial_findings_continuation,
@@ -2628,6 +2681,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.findings_stage_allocation or args.findings_approval_stdin:
             raise ValueError("INITIAL_FINDINGS_RESUME_SELECTOR_REQUIRED")
         try:
+            if not args.target_project or not args.description:
+                raise ValueError("RUN_REQUEST_TARGET_AND_DESCRIPTION_REQUIRED")
             dependency_binding = None
             if args.game_folder_build_binding:
                 dependency_document = read_json_object(args.game_folder_build_binding)
@@ -2685,9 +2740,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 **({"technical_executor": args.technical_executor,
                     "constraint_policy": args.constraint_policy,
                     "task_agent_candidate_mode": args.task_agent_candidate_mode,
+                    "task_agent_protocol": args.task_agent_protocol,
+                    "task_agent_experience_config": args.task_agent_experience_config,
                     "task_agent_allowed_edit_paths": _task_agent_edit_paths(args.task_agent_edit_paths)}
                    if (args.technical_executor != "workflow" or args.constraint_policy is not None
-                       or args.task_agent_edit_paths is not None or args.task_agent_candidate_mode != "baseline") else {}),
+                       or args.task_agent_edit_paths is not None or args.task_agent_candidate_mode != "baseline"
+                       or args.task_agent_protocol != "v1" or args.task_agent_experience_config is not None) else {}),
                 stage_model_call_limits=stage_limits,
                 execution_trace_configuration=_execution_trace_configuration(args),
                 defer_approval=bool(args.defer_approval),
@@ -2750,6 +2808,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
         return {
             "succeeded": 0,
+            "awaiting_delivery": 0,
             "domain_blocked": 1,
             "platform_blocked": 2,
             "partial": 2,

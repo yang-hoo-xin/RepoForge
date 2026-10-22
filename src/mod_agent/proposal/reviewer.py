@@ -40,6 +40,25 @@ CHECKED_RULES = (
 class ProposalReviewer:
     """Evaluate a patch proposal before dry-run apply is allowed."""
 
+    def review_v2(self, proposal, *, store, feature_spec_ref):
+        """Review exact admitted v2 content, retaining semantic uncertainty.
+
+        为什么要有它：公开检查不是完整语义证明，Review仍核验候选一致性且不授予Apply权限。
+        """
+        from src.mod_agent.model_qualification import canonical_hash
+        from src.mod_agent.task_agent_v2_handoff import revalidate_handoff_v2
+        pack = proposal["context_pack"]
+        selected = revalidate_handoff_v2(pack["task_agent_handoff_v2"], store=store)
+        if (pack.get("feature_spec_ref") != feature_spec_ref
+                or canonical_hash(proposal["diff_intent"]) != canonical_hash(selected.changes)
+                or proposal["files"] != [row["display_file"] for row in selected.changes]):
+            raise ValueError("V2_PROPOSAL_CANDIDATE_CHANGED")
+        return ProposalReview(decision="approve_dry_run", findings=(), required_changes=(), allowed_next_stage="dry_run_apply",
+            checked_rules=("v2_source_authority", "v2_model_provenance", "v2_candidate_check", "v2_exact_changes"),
+            trace_metrics={"checked_change_count": len(selected.changes)},
+            critic_gate={"required": False, "status": "not_requested"},
+            human_semantic_review_required=True)
+
     def review(
         self,
         proposal: dict[str, Any],

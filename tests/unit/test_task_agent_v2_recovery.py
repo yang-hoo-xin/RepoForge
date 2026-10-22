@@ -1,0 +1,478 @@
+"""Resume real persisted owners and the shared loop without redoing completed tools.
+
+为什么要有它：恢复测试要跨新owner与磁盘原件，不能只证明字典能序列化。
+"""
+import json
+from copy import deepcopy
+from pathlib import Path
+
+import pytest
+
+from src.libs.llm.agent_turn import AgentMessage, AgentTurnRequest
+from src.mod_agent.interrupted_patch_admission import retained_request_from_document
+from src.mod_agent.task_agent_v2_recovery import (
+    TaskAgentRecoveryJournal,
+    load_task_agent_checkpoint,
+    resume_v2_task_agent,
+    single_task_lock,
+)
+from tests.unit.test_csharp_repository_product_entry import (
+    repository_workspace as repository_workspace,
+)
+from tests.unit.test_task_agent_loop import Budget, Client, Owners, call, response, run
+from tests.unit.test_task_agent_v2_delivery import delivery_case as delivery_case
+
+
+@pytest.mark.parametrize("phase", ["response_ready", "dispatch_ready", "observations_charged"])
+def test_loop_resumes_received_response_and_completed_tool_without_new_cost(phase):
+    owners = Owners(Budget())
+    retained = []
+    initial = AgentTurnRequest((AgentMessage("system", "Tools are data"), AgentMessage("user", "Task")))
+
+    def interrupt(value):
+        if value["phase"] == phase and value["model_turns"] == 1:
+            if phase == "dispatch_ready" and not value["call_records"].get("submit", {}).get("status") == "completed":
+                return
+            retained.append(deepcopy(value))
+            raise KeyboardInterrupt()
+
+    with pytest.raises(KeyboardInterrupt):
+        run(Client([response(call("candidate_submit", {"candidate_id": "c1", "fixed": True}, "submit"))]),
+            owners, initial_request=initial, checkpoint_callback=interrupt)
+    snapshot = json.loads(json.dumps(retained[-1]))
+    result = run(Client([response(call("candidate_check", {"candidate_id": "c1"}, "check")),
+        response(call("finish", {"candidate_id": "c1"}, "finish"))]), owners,
+        initial_request=retained_request_from_document(snapshot["request"]), resume_checkpoint=snapshot)
+    assert result.status == "completed", result.termination
+    assert owners.budget.consumed == result.model_turns == 3
+    assert [role for role, _args in owners.effects] == ["candidate_submit", "candidate_check", "finish"]
+    assert result.observation_bytes == owners.budget.bytes
+
+
+def test_loop_unknown_pending_is_not_reissued():
+    owners = Owners(Budget())
+    retained = []
+    initial = AgentTurnRequest((AgentMessage("system", "Tools are data"), AgentMessage("user", "Task")))
+
+    def interrupt(value):
+        if value["phase"] == "tool_pending":
+            retained.append(deepcopy(value))
+            raise KeyboardInterrupt()
+
+    with pytest.raises(KeyboardInterrupt):
+        run(Client([response(call("candidate_submit", {"candidate_id": "c1", "fixed": True}, "submit"))]),
+            owners, initial_request=initial, checkpoint_callback=interrupt)
+    snapshot = retained[-1]
+    client = Client([])
+    result = run(client, owners, initial_request=retained_request_from_document(snapshot["request"]), resume_checkpoint=snapshot)
+    assert result.status == "blocked" and not client.requests and not owners.effects
+    assert owners.budget.consumed == 1
+
+
+def test_os_lock_excludes_concurrent_owner_but_releases_without_deleting_file(tmp_path):
+    with single_task_lock(tmp_path, "contract"):
+        with pytest.raises(ValueError, match="SESSION_ALREADY_RUNNING"):
+            with single_task_lock(tmp_path, "contract"):
+                pytest.fail("second owner acquired active lock")
+    with single_task_lock(tmp_path, "contract"):
+        assert list((tmp_path / "v2/session-locks").glob("*.lock"))
+
+
+@pytest.mark.parametrize("boundary", ["checkpoint_completed", "tool_receipt", "provider_receipt", "read_charge", "observation_charge", "resource_ledger"])
+def test_normal_entry_interruption_reconstructs_owner_and_finishes_same_product(repository_workspace, monkeypatch, capsys, boundary):
+    from src.mod_agent.task_agent_v2_execution import TaskAgentExecutionV2
+    from src.mod_agent.task_agent_v2_state import load_v2_artifact
+    from tests.unit.test_task_agent_v2_product_entry import (
+        test_v2_normal_cli_empty_registry_retarget_and_product_handoff,
+    )
+
+    original_save = TaskAgentRecoveryJournal.save
+    retained = []
+    state_views = []
+    original_prepare = TaskAgentExecutionV2.prepare_decision_request
+
+    def inspect_current_state(owner, request, session):
+        prepared = original_prepare(owner, request, session)
+        facts = next(message.content["current_task_state"] for message in prepared.messages
+            if isinstance(message.content, dict) and "current_task_state" in message.content)
+        assert facts["current_revision_ref"] == session.state.current_revision_ref
+        assert facts["binding_registry_ref"] == session.state.registry_ref
+        assert facts["current_check_ref"] == session.current_check
+        definition = next(tool for tool in prepared.tools if tool.name == "candidate_submit")
+        assert definition.parameters["properties"]["parent_revision_ref"]["enum"] == [session.state.current_revision_ref]
+        state_views.append(deepcopy(facts))
+        return prepared
+
+    monkeypatch.setattr(TaskAgentExecutionV2, "prepare_decision_request", inspect_current_state)
+
+    def interrupt(journal, value):
+        ref = original_save(journal, value)
+        if boundary == "checkpoint_completed" and value["phase"] == "dispatch_ready" and journal.session.current_check and not retained:
+            retained.append((journal.state.store_root, ref, value["model_budget"]["consumed"]))
+            raise KeyboardInterrupt()
+        return ref
+
+    monkeypatch.setattr(TaskAgentRecoveryJournal, "save", interrupt)
+    original_tool = TaskAgentExecutionV2.record_v2_tool_receipt
+    original_output = TaskAgentExecutionV2._save
+
+    def interrupt_tool(owner, origin, output, session):
+        reference = original_tool(owner, origin, output, session)
+        if boundary == "tool_receipt" and origin["name"] == "candidate_check" and not retained:
+            retained.append((owner.store.root, owner.v2_checkpoint_ref, owner.budget_snapshot()["consumed"]))
+            raise KeyboardInterrupt()
+        return reference
+
+    def interrupt_provider(owner, name, payload):
+        ref = original_output(owner, name, payload)
+        if boundary == "provider_receipt" and name.startswith("provider-outcome-") and payload["turn"] == 5 and not retained:
+            retained.append((owner.store.root, owner.v2_checkpoint_ref, owner.budget_snapshot()["consumed"]))
+            raise KeyboardInterrupt()
+        if boundary in {"read_charge", "observation_charge"} and name.startswith("resource-tools-") and not retained:
+            if payload["reservation"]["turn"] == 5 and bool(payload["usage"]["observation_bytes"]) == (boundary == "observation_charge"):
+                retained.append((owner.store.root, owner.v2_checkpoint_ref, owner.budget_snapshot()["consumed"]))
+                raise KeyboardInterrupt()
+        return ref
+
+    monkeypatch.setattr(TaskAgentExecutionV2, "record_v2_tool_receipt", interrupt_tool)
+    monkeypatch.setattr(TaskAgentExecutionV2, "_save", interrupt_provider)
+    from src.mod_agent.task_agent_v2_state import TaskAgentV2State
+    original_resource = TaskAgentV2State.record_resources
+
+    def interrupt_resource(task, usage, operation_id):
+        result = original_resource(task, usage, operation_id)
+        if boundary == "resource_ledger" and ":tools:" in operation_id and not retained:
+            reservations = sum(key.startswith("model-reservation:") for key in task.head["operations"])
+            if reservations == 5:
+                latest = task.root / "session-checkpoints" / (recovery_hash(task.contract_ref) + ".json")
+                retained.append((task.store_root, json.loads(latest.read_bytes())["checkpoint_ref"], 5))
+                raise KeyboardInterrupt()
+        return result
+
+    from src.mod_agent.model_qualification import canonical_hash as recovery_hash
+    monkeypatch.setattr(TaskAgentV2State, "record_resources", interrupt_resource)
+    with pytest.raises(KeyboardInterrupt):
+        test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_workspace, monkeypatch, capsys, False)
+    capsys.readouterr()
+    monkeypatch.setattr(TaskAgentRecoveryJournal, "save", original_save)
+    monkeypatch.setattr(TaskAgentExecutionV2, "record_v2_tool_receipt", original_tool)
+    monkeypatch.setattr(TaskAgentExecutionV2, "_save", original_output)
+    monkeypatch.setattr(TaskAgentV2State, "record_resources", original_resource)
+    store, reference, before = retained[0]
+    saved = load_v2_artifact(store, reference)
+    host = load_v2_artifact(store, saved["host_config_ref"])
+    if boundary == "checkpoint_completed":
+        assert saved["session"]["public_checks"][0]["status"] == "behavior_failed"
+        import subprocess
+        import sys
+        child = subprocess.run([sys.executable, "-B", "-c",
+            "import json,sys; from src.mod_agent.task_agent_v2_recovery import load_task_agent_checkpoint; "
+            "x=load_task_agent_checkpoint(artifact_store_root=sys.argv[1],checkpoint_ref=sys.argv[2]); "
+            "print(json.dumps({'turns':x['checkpoint']['loop']['model_turns'],'contract':x['state'].contract_ref}))",
+            str(store), reference], check=True, capture_output=True, text=True)
+        assert json.loads(child.stdout) == {"turns": 5, "contract": saved["task_contract_ref"]}
+    from src.mod_agent import cli
+    exit_code = cli.main(["run-request", "--resume-task-agent", reference, "--artifact-store-root", str(store)])
+    result = json.loads(capsys.readouterr().out)
+    assert exit_code == 0, result
+    assert result["status"] == "awaiting_delivery", result.get("outcome", {}).get("termination", result)
+    assert result["new_task_created"] is False
+    assert result["request_id"] == host["graph_state"]["request_id"]
+    assert result["run_id"] == host["graph_state"]["run_id"]
+    assert result["cumulative_resources"]["model_calls"] == 13 and before == 5
+    final = load_task_agent_checkpoint(artifact_store_root=store, checkpoint_ref=result["v2_checkpoint_ref"])
+    assert len(final["checkpoint"]["session"]["public_checks"]) == 2
+    assert final["checkpoint"]["loop"]["model_turns"] == 13
+    assert final["state"].contract_ref == saved["task_contract_ref"]
+    assert len(state_views) == 13
+    assert state_views[0]["current_revision_ref"] == final["state"].contract["baseline_manifest_ref"]
+    assert state_views[-1]["current_revision_ref"] == final["state"].current_revision_ref
+
+
+@pytest.mark.parametrize("drift", ["source", "worker", "deadline"])
+def test_saved_checkpoint_rejects_source_drift_before_model_send(repository_workspace, monkeypatch, capsys, drift):
+    from src.mod_agent import task_agent_v2_recovery as recovery
+    from src.mod_agent.task_agent_v2_execution import TaskAgentExecutionV2
+    from tests.unit.test_task_agent_v2_product_entry import (
+        test_v2_normal_cli_empty_registry_retarget_and_product_handoff,
+    )
+
+    if drift == "deadline":
+        original_init = TaskAgentExecutionV2.__init__
+        def bounded(owner, **kwargs):
+            original_init(owner, **kwargs)
+            owner.deadline = recovery.time.monotonic() + 300
+        monkeypatch.setattr(TaskAgentExecutionV2, "__init__", bounded)
+
+    original = TaskAgentRecoveryJournal.save
+    retained = []
+
+    def interrupt(journal, value):
+        ref = original(journal, value)
+        if value["phase"] == "ready" and value["model_turns"] == 1:
+            retained.append((journal.state.store_root, ref, journal.state))
+            raise KeyboardInterrupt()
+        return ref
+
+    monkeypatch.setattr(TaskAgentRecoveryJournal, "save", interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_workspace, monkeypatch, capsys, False)
+    capsys.readouterr()
+    store, ref, state = retained[0]
+    host = state.load(state.load(ref)["host_config_ref"])
+    if drift == "source":
+        source = state.load(state.contract["baseline_manifest_ref"])["source_root"]
+        Path(source, "Library/Arithmetic.cs").write_bytes(b"changed after interruption")
+    elif drift == "worker":
+        worker = Path(host["worker_configuration_ref"]["path"])
+        worker.write_bytes(worker.read_bytes() + b"\n")
+    else:
+        monkeypatch.setattr(recovery.time, "time", lambda: host["deadline_utc"] + 1)
+    with pytest.raises(ValueError):
+        resume_v2_task_agent(artifact_store_root=store, checkpoint_ref=ref)
+
+
+def test_terminal_learning_refreshes_total_resources_without_rewriting_execution(repository_workspace, monkeypatch, capsys):
+    from src.mod_agent.model_qualification import read_bound_json
+    from src.mod_agent.task_agent_v2_execution import TaskAgentExecutionV2
+    from tests.unit.test_task_agent_v2_product_entry import (
+        test_v2_normal_cli_empty_registry_retarget_and_product_handoff,
+    )
+
+    owners = []
+    original = TaskAgentExecutionV2.complete_terminal_learning
+
+    def capture(owner):
+        owners.append(owner)
+        return original(owner)
+
+    monkeypatch.setattr(TaskAgentExecutionV2, "complete_terminal_learning", capture)
+    test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_workspace, monkeypatch, capsys, False)
+    owner = owners[0]
+    before = owner.execution_receipt()
+    immutable_execution = read_bound_json(before.execution_ref)
+    owner.reserve_model_call("initial_patch")
+    owner._v2_state.record_resources({"model_calls": 1, "input_tokens": 3, "output_tokens": 4, "total_tokens": 7},
+        operation_id="controlled-learning-usage")
+    receipt = {"status": "controlled_fixture", "budget_before": before.budget_after, "model_calls": 1,
+        "budget_after": owner.budget_snapshot(), "original_execution_ref": before.execution_ref}
+    receipt["receipt_ref"] = owner._save("controlled-learning.json", receipt.copy())
+    checkpoint_ref = owner.refresh_recovery_checkpoint_after_learning(receipt)
+    loaded = load_task_agent_checkpoint(artifact_store_root=owner.store.root, checkpoint_ref=checkpoint_ref)
+    assert loaded["checkpoint"]["loop"]["model_turns"] == 13
+    assert loaded["checkpoint"]["loop"]["model_budget"]["consumed"] == 14
+    assert loaded["checkpoint"]["loop"]["post_loop_learning"]["loop_budget_before_learning"]["consumed"] == 13
+    assert loaded["state"].head["resources"]["model_calls"] == 14
+    assert read_bound_json(before.execution_ref) == immutable_execution
+
+
+def test_independent_receipts_reject_self_consistent_forgery_and_finalization_holds_lock(repository_workspace, monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    from src.mod_agent.model_qualification import canonical_hash, read_bound_json
+    from src.mod_agent.task_agent_v2_execution import TaskAgentExecutionV2
+    from tests.unit.test_task_agent_v2_product_entry import (
+        test_v2_normal_cli_empty_registry_retarget_and_product_handoff,
+    )
+
+    owners, locked = [], []
+    original_save = TaskAgentExecutionV2._save
+    original_learning = TaskAgentExecutionV2.complete_terminal_learning
+
+    def inspect_save(owner, name, payload):
+        if name in {"loop-result.json", "execution.json"}:
+            with pytest.raises(ValueError, match="SESSION_ALREADY_RUNNING"):
+                with single_task_lock(owner.store.root, owner._recovery_journal.lock_key):
+                    pytest.fail("resume acquired lock during finalization")
+            locked.append(name)
+        return original_save(owner, name, payload)
+
+    def capture(owner):
+        owners.append(owner)
+        return original_learning(owner)
+
+    monkeypatch.setattr(TaskAgentExecutionV2, "_save", inspect_save)
+    monkeypatch.setattr(TaskAgentExecutionV2, "complete_terminal_learning", capture)
+    test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_workspace, monkeypatch, capsys, False)
+    owner = owners[0]
+    assert locked == ["loop-result.json", "execution.json"]
+
+    def controlled_learning():
+        with pytest.raises(ValueError, match="SESSION_ALREADY_RUNNING"):
+            with single_task_lock(owner.store.root, owner._recovery_journal.lock_key):
+                pytest.fail("resume acquired lock during terminal learning")
+        receipt = {"status": "controlled_lock_check", "budget_before": owner.budget_snapshot(),
+            "budget_after": owner.budget_snapshot(), "model_calls": 0,
+            "original_execution_ref": owner.execution_receipt().execution_ref}
+        receipt["receipt_ref"] = owner._save("controlled-lock-learning.json", receipt.copy())
+        owner._experience._terminal_receipt = receipt
+        return receipt
+
+    owner._experience = SimpleNamespace(complete_terminal_learning=controlled_learning, _terminal_receipt=None)
+    original_learning(owner)
+    good_ref = owner.v2_checkpoint_ref
+    state = owner._v2_state
+    good = state.load(good_ref)
+    latest = state.root / "session-checkpoints" / (canonical_hash(state.contract_ref) + ".json")
+    failures = []
+    for case in ("output", "request", "budget", "host", "finish", "learning"):
+        changed = deepcopy(good)
+        if case == "output":
+            call_id, record = next((key, value) for key, value in changed["loop"]["call_records"].items() if value["status"] == "completed")
+            record["result"]["output"]["value"] = {"forged_observation": True}
+            for event in changed["loop"]["events"]:
+                if event.get("event") == "tool_dispatch_completed" and event.get("call_id") == call_id:
+                    event["output_sha256"] = canonical_hash(record["result"]["output"])
+            code = "COMPLETED_EXECUTION_RECEIPT_CHANGED"
+        elif case == "request":
+            changed["loop"]["request"]["messages"][1]["content"] = {"forged_instruction": "different task"}
+            code = "INITIAL_REQUEST_CHANGED"
+        elif case == "budget":
+            changed["loop"]["model_budget"]["consumed"] -= 1
+            changed["loop"]["model_budget"]["by_stage"]["initial_patch"]["consumed"] -= 1
+            code = "MODEL_BUDGET_CHANGED"
+        elif case == "host":
+            host = state.load(changed["host_config_ref"])
+            host["model_profile"]["model"] = "unapproved-model"
+            changed["host_config_ref"] = state.save("host-recovery-config", host)
+            code = "HOST_CONFIG_NOT_REGISTERED"
+        elif case == "finish":
+            next(row for row in changed["session"]["actual_calls"] if row["name"] == "finish").pop("execution_receipt_ref")
+            code = "COMPLETED_EXECUTION_RECEIPT_REQUIRED"
+        else:
+            receipt = read_bound_json(changed["loop"]["post_loop_learning"]["receipt_ref"])
+            receipt["budget_after"]["consumed"] += 1
+            receipt["budget_after"]["by_stage"]["initial_patch"]["consumed"] += 1
+            changed["loop"]["post_loop_learning"]["receipt_ref"] = owner._save("forged-learning.json", receipt)
+            code = "LEARNING_BUDGET_RECEIPT_CHANGED"
+        forged_ref = state.save("session-checkpoint", changed)
+        latest.write_text(json.dumps({"checkpoint_ref": forged_ref, "host_config_ref": changed["host_config_ref"]}), encoding="utf-8")
+        with pytest.raises(ValueError, match=code):
+            load_task_agent_checkpoint(artifact_store_root=state.store_root, checkpoint_ref=forged_ref)
+        failures.append(case)
+        latest.write_text(json.dumps({"checkpoint_ref": good_ref, "host_config_ref": good["host_config_ref"]}), encoding="utf-8")
+    assert len(failures) == 6
+
+
+def test_cli_resumes_applied_public_failure_from_actual_source_and_requires_new_approval(delivery_case, monkeypatch, capsys):
+    import httpx
+
+    from src.mod_agent import cli
+    from src.mod_agent.build.adapter import BuildCommandResult
+    from src.mod_agent.domain import csharp_repository_backend as backend
+    from src.mod_agent.execution.patch_apply import PatchApplyError
+    from src.mod_agent.model_qualification import canonical_hash
+    from src.mod_agent.task_agent_v2_delivery import (
+        apply_v2_delivery,
+        build_v2_delivery,
+    )
+    from src.mod_agent.task_agent_v2_state import TaskAgentV2State, load_v2_artifact
+    from tests.unit.test_task_agent_v2_delivery import approve
+
+    store, checkpoint, isolated, prepared = delivery_case
+    old_checkpoint = load_v2_artifact(store, checkpoint)
+    old_contract = old_checkpoint["handoff"]["task_contract_ref"]
+    applied = apply_v2_delivery(artifact_store_root=store, displayed_binding=prepared["displayed_binding"],
+        human_semantic_decision=approve(prepared))
+    original_verify = backend.nuget._run_nuget_isolated_verification_command
+
+    def formal_failure(profile, command):
+        original_verify(profile, command)
+        report = Path(command[-1])
+        payload = json.loads(report.read_text())
+        payload["tests"][0].update(passed=False, actual="controlled formal failure")
+        report.write_text(json.dumps(payload), encoding="utf-8")
+        return BuildCommandResult(1, "controlled formal failure", "", 1)
+
+    monkeypatch.setattr(backend.nuget, "_run_nuget_isolated_verification_command", formal_failure)
+    failed = build_v2_delivery(artifact_store_root=store, apply_ref=applied["receipt_ref"], operation_id="formal-failure", allow_build=True)
+    assert failed["status"] == "build_failed"
+    monkeypatch.setattr(backend.nuget, "_run_nuget_isolated_verification_command", original_verify)
+    original_transport = httpx.HTTPTransport.handle_request
+    requests, view = [], {}
+
+    def transport(selected, request):
+        if request.method == "GET":
+            return original_transport(selected, request)
+        payload = json.loads(request.content)
+        requests.append(payload)
+        facts = next(json.loads(row["content"])["current_task_state"] for row in payload["messages"]
+            if row["role"] == "user" and '"current_task_state"' in row["content"])
+        observations = [json.loads(row["content"])["value"] for row in payload["messages"] if row["role"] == "tool"]
+        last = observations[-1]
+        if len(requests) == 1:
+            transition = next(json.loads(row["content"])["source_context_transition"] for row in payload["messages"]
+                if row["role"] == "user" and '"source_context_transition"' in row["content"])
+            assert transition["new_apply_approval_granted"] is False and facts["current_check_ref"] is None
+            assert facts["task_contract_ref"] != old_contract
+            name, args = "source_read", {"parent_revision_ref": facts["current_revision_ref"], "path": "Library/Arithmetic.cs"}
+        elif len(requests) == 2:
+            assert "value * Factor.Multiplier" in last["text"]
+            view.update(last)
+            name, args = "binding_add", {"expected_registry_ref": facts["binding_registry_ref"], "source_view_ref": last["source_view_ref"],
+                "target_selector": "Library/Arithmetic.cs", "rationale": "Controlled post-Apply revision", "expected_validation": "Same public tests"}
+        elif len(requests) == 3:
+            name, args = "candidate_submit", {"parent_revision_ref": facts["current_revision_ref"], "edits": [{
+                "binding_id": last["binding_id"], "source_view_ref": view["source_view_ref"],
+                "before_text": "=> value * Factor.Multiplier;", "after_text": "=> (value * Factor.Multiplier);",
+                "rationale": "Controlled equivalent edit to test post-Apply continuity"}]}
+        elif len(requests) == 4:
+            name, args = "candidate_check", {"candidate_ref": facts["current_revision_ref"]}
+        else:
+            assert len(requests) == 5 and last["status"] == "passed"
+            name, args = "finish", {"candidate_ref": facts["current_revision_ref"], "check_ref": facts["current_check_ref"]}
+        return httpx.Response(200, request=request, json={"model": "qwen3:4b-instruct", "done": True, "done_reason": "stop",
+            "prompt_eval_count": 10, "eval_count": 20, "message": {"role": "assistant", "content": "", "tool_calls": [
+                {"function": {"name": name, "arguments": args}}]}})
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", transport)
+    code = cli.main(["run-request", "--resume-task-agent", failed["receipt_ref"], "--artifact-store-root", str(store)])
+    result = json.loads(capsys.readouterr().out)
+    assert code == 0 and result["status"] == "awaiting_delivery", result
+    assert len(requests) == 5 and result["cumulative_resources"]["model_calls"] == 18
+    assert result["run_id"] == old_checkpoint["run_id"] and result["request_id"] == old_checkpoint["request_id"]
+    checkpoint_ref = result["v2_delivery_checkpoint_ref"]
+    new_delivery = load_v2_artifact(store, checkpoint_ref)
+    new_state = TaskAgentV2State(store, new_delivery["handoff"]["task_contract_ref"])
+    assert new_state.load(new_state.contract["baseline_manifest_ref"])["source_root"] == applied["applied_source_root"]
+    assert new_delivery["resource_record"]["delivery_applies"] == new_delivery["resource_record"]["delivery_builds"] == 1
+    assert new_delivery["approval_granted"] is False
+    original_state = TaskAgentV2State(store, old_contract)
+    old_latest = original_state.root / "session-checkpoints" / (canonical_hash(old_contract) + ".json")
+    with pytest.raises(ValueError, match="TASK_CONTRACT_SUPERSEDED"):
+        load_task_agent_checkpoint(artifact_store_root=store, checkpoint_ref=json.loads(old_latest.read_bytes())["checkpoint_ref"])
+    next_isolated = isolated.parent / "next-delivery"
+    next_isolated.mkdir()
+    code = cli.main(["apply-patch", "--artifact-store-root", str(store), "--v2-delivery-checkpoint", checkpoint_ref,
+        "--v2-delivery-action", "prepare", "--isolated-root", str(next_isolated), "--operation-id", "new-diff"])
+    second = json.loads(capsys.readouterr().out)
+    assert code == 0 and second["status"] == "awaiting_approval", second
+    with pytest.raises(PatchApplyError):
+        apply_v2_delivery(artifact_store_root=store, displayed_binding=second["displayed_binding"], human_semantic_decision=approve(prepared))
+    assert not Path(second["displayed_binding"]["isolated_workspace"]).exists()
+    binding_path = isolated.parent / "controlled-new-binding.json"
+    decision_path = isolated.parent / "controlled-new-approval.json"
+    binding_path.write_text(json.dumps(second["displayed_binding"]), encoding="utf-8")
+    decision_path.write_text(json.dumps(approve(second)), encoding="utf-8")
+    code = cli.main(["apply-patch", "--artifact-store-root", str(store), "--v2-delivery-checkpoint", checkpoint_ref,
+        "--v2-delivery-action", "apply", "--confirm", "--v2-displayed-binding", str(binding_path),
+        "--human-semantic-decision", str(decision_path)])
+    applied_again = json.loads(capsys.readouterr().out)
+    assert code == 0 and applied_again["status"] == "applied_in_isolation", applied_again
+    code = cli.main(["apply-patch", "--artifact-store-root", str(store), "--v2-delivery-checkpoint", applied_again["receipt_ref"],
+        "--v2-delivery-action", "build", "--operation-id", "new-build", "--allow-build"])
+    built = json.loads(capsys.readouterr().out)
+    assert code == 0 and built["status"] == "built", built
+    assert built["candidate_ref"] == new_delivery["handoff"]["candidate_ref"]
+    assert built["candidate_source_id"] == new_delivery["candidate_source_id"]
+    assert built["resource_record"]["delivery_applies"] == built["resource_record"]["delivery_builds"] == 2
+    assert built["resource_record"]["model_budget"]["consumed"] == 18
+    assert built["delivered_artifact_refs"]
+    import hashlib
+    for artifact in built["delivered_artifact_refs"]:
+        assert Path(artifact["path"]).resolve().is_relative_to(Path(built["applied_source_root"]).resolve())
+        assert hashlib.sha256(Path(artifact["path"]).read_bytes()).hexdigest() == artifact["sha256"]
+    assert "=> (value * Factor.Multiplier);" in Path(built["applied_source_root"], "Library/Arithmetic.cs").read_text()
+    code = cli.main(["run-request", "--resume-task-agent", failed["receipt_ref"], "--artifact-store-root", str(store)])
+    replay = json.loads(capsys.readouterr().out)
+    assert code == 0 and replay["cumulative_resources"]["model_calls"] == 18 and len(requests) == 5, replay

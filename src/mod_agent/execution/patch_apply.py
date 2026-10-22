@@ -329,6 +329,43 @@ def validate_materialized_patch_submission(materialized: MaterializedPatchBytes)
 class ExactTextPatchApplier:
     """Validate exact replacements and optionally write them inside one workspace."""
 
+    def dry_run_v2(self, *, proposal, review, store):
+        """Validate final v2 bytes against the actual baseline without applying.
+
+        为什么要有它：U1接管只形成待交付记录，精确源码前像与候选身份仍需在Dry-run再次核验。
+        """
+        from src.mod_agent.task_agent_v2_handoff import revalidate_handoff_v2
+        from src.mod_agent.task_agent_v2_state import TaskAgentV2State
+        from src.mod_agent.proposal.reviewer import ProposalReviewer
+        from src.mod_agent.model_qualification import canonical_hash
+        pack = proposal["context_pack"]
+        handoff = revalidate_handoff_v2(pack["task_agent_handoff_v2"], store=store)
+        expected_review = ProposalReviewer().review_v2(proposal, store=store,
+            feature_spec_ref=pack["feature_spec_ref"]).to_artifact_payload()
+        if review != expected_review:
+            raise PatchApplyError("V2_REVIEW_CHANGED")
+        state = TaskAgentV2State(store.root, handoff.task_contract_ref)
+        baseline = state.load(state.contract["baseline_manifest_ref"])
+        root = Path(baseline["source_root"]).resolve(strict=True)
+        originals, staged = {}, {}
+        for change in handoff.changes:
+            target = (root / _safe_relative_path(change["display_file"])).resolve(strict=True)
+            if not target.is_relative_to(root) or target.is_symlink():
+                raise PatchApplyError("V2_SOURCE_OUTSIDE_ROOT")
+            raw = target.read_bytes()
+            if hashlib.sha256(raw).hexdigest() != change["baseline_file_sha256"]:
+                raise PatchApplyError("V2_SOURCE_PREIMAGE_CHANGED")
+            originals[target], staged[target] = raw, change["patch"]["after"].encode("utf-8")
+        checks = _run_low_cost_static_checks(staged)
+        unified = _build_unified_diff(root=root, original_by_target=originals, staged=staged)
+        return {"execution_mode": "dry_run", "actual_write_performed": False, "real_patch_applied": False,
+            "would_write": True, "changed_files": list(proposal["files"]), "diff_stats": _unified_diff_stats(unified),
+            "unified_diff": unified, "diff_hash": canonical_hash({"handoff": handoff.to_dict(), "diff": unified}),
+            "structural_checks": checks, "task_agent_protocol": "v2", "candidate_source_id": handoff.candidate_source_id,
+            "candidate_ref": handoff.candidate_ref, "check_ref": handoff.check_ref,
+            "task_contract_ref": handoff.task_contract_ref, "binding_registry_ref": handoff.binding_registry_ref,
+            "delivery_status": "pending", "whole_task_delivered": False}
+
     def run(
         self, *, workspace_root: str | Path, proposal: dict[str, Any],
         implementation_plan: dict[str, Any], review: dict[str, Any], allow_write: bool,

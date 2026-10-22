@@ -458,9 +458,15 @@ class CSharpRepositoryBackend:
                               and build.artifact_verification.get("status") == "verified")
         artifact_refs = [{"path": row["resolved_path"], "sha256": row["sha256"]}
                          for row in build.verified_artifacts]
-        code_identity = deepcopy(candidate_context["materialized_code_identity"]) if candidate_context is not None else None
+        code_identity = deepcopy(candidate_context.get("materialized_code_identity")) if candidate_context is not None else None
+        v2_binding = {}
+        if candidate_context is not None and candidate_context.get("schema_version") == "task_agent_candidate_check_v2":
+            # 为什么要有它：v2 的执行原件直接绑定合同及源码身份，不能构造旧技术计划来获得通过。
+            v2_binding = {key: deepcopy(candidate_context[key]) for key in (
+                "task_contract_ref", "binding_registry_ref", "candidate_ref", "candidate_source_id",
+                "public_acceptance_ref", "source_snapshot_sha256")}
         # 为什么要有它：候选交接要核对本候选、编译工件和测试详情；正式Build没有模型候选身份时不能假造同一声明。
-        compilation_record = {
+        compilation_record = {**v2_binding,
             "status": "passed" if compilation_passed else "failed", "execution_origin": "executed",
             "all_required_files_compiled": set(data["allowed_edit_paths"]) <= compiled_paths,
             "materialized_code_identity": code_identity,
@@ -471,7 +477,7 @@ class CSharpRepositoryBackend:
             "verification_scope": "isolated_candidate_compilation" if candidate_context is not None else "formal_repository_compilation",
         }
         compilation_ref = _save(run / "compilation.json", compilation_record)
-        report = {"status": status, "failure_owner": owner, "execution_origin": "executed",
+        report = {**v2_binding, "status": status, "failure_owner": owner, "execution_origin": "executed",
                   "profile_ref": self.profile.reference, "fixed_inputs": self.fixed_inputs,
                   "source_inputs": before, "source_root": str(source), "verification_identity": identity,
                   "materialized_code_identity": code_identity,
@@ -495,6 +501,8 @@ class CSharpRepositoryBackend:
         return {**report, "report_ref": reference, "build_result": build}
 
     def __call__(self, context):
+        if context.get("schema_version") == "task_agent_candidate_check_v2":
+            return self._check_v2(context)
         identity = self.verification_identity()
         before = _snapshot(self.source_root)
         changes = context["generated_changes"]
@@ -556,6 +564,191 @@ class CSharpRepositoryBackend:
                 return value
             report["failure_state_observations"] = stable(executed["observations"])
         return {**report, "report_ref": _save(Path(executed["report_ref"]["path"]).parent / "candidate-report.json", report)}
+
+    def _check_v2(self, context):
+        """Check a validated file-level candidate without an implementation Plan.
+
+        为什么要有它：授权和精确源码来自任务状态，技术计划不得成为执行或验收的权限来源。
+        """
+        from src.mod_agent.task_agent_v2_state import TaskAgentV2State
+
+        state = TaskAgentV2State(context["artifact_store_root"], context["task_contract_ref"])
+        candidate = state.validate_candidate(context["candidate_ref"])
+        changes = state.changes_from_baseline(context["candidate_ref"])
+        _require(context["generated_changes"] == changes, "CHANGE_CONTENT_MISMATCH")
+        contract = state.contract
+        baseline = state.load(contract["baseline_manifest_ref"])
+        _require(context["source_snapshot_sha256"] == canonical_hash(baseline), "SOURCE_SNAPSHOT_MISMATCH")
+        registry = state.load(context["binding_registry_ref"])
+        _require(registry.get("contract_ref") == state.contract_ref, "REGISTRY_CONTRACT_MISMATCH")
+        candidate_registry = state.load(candidate["registry_ref"])
+        _require(all(registry["bindings"].get(key) == value for key, value in candidate_registry["bindings"].items()),
+                 "CANDIDATE_REGISTRY_MISMATCH")
+        _require(candidate["candidate_source_id"] == context["candidate_source_id"], "CANDIDATE_IDENTITY_CHANGED")
+        _require(Path(baseline["source_root"]).resolve() == self.source_root, "CONTRACT_SOURCE_MISMATCH")
+        _require(contract.get("execution_profile_ref") == self.profile.reference, "CONTRACT_PROFILE_MISMATCH")
+        _require(bool(contract.get("public_acceptance_ref")), "PUBLIC_ACCEPTANCE_REQUIRED")
+        _require(set(contract["allowed_edit_paths"]) <= set(self.profile.data["allowed_edit_paths"]), "EDIT_OUTSIDE_SCOPE")
+        identity = self.verification_identity()
+        _require(context["verification_identity"] == identity, "VERIFICATION_IDENTITY_CHANGED")
+        acceptance = state.load(contract["public_acceptance_ref"])
+        _require(acceptance.get("verification_identity") == identity, "ACCEPTANCE_VERIFIER_MISMATCH")
+        before = _snapshot(self.source_root)
+        hashes = {row["path"]: row["sha256"] for row in before}
+        _require(all(hashes.get(path) == row["sha256"] for path, row in baseline["files"].items()),
+                 "BASELINE_SOURCE_CHANGED")
+        response = context["model_response"]
+        _require(_ref(response["path"])["sha256"] == response["output_sha256"], "MODEL_RESPONSE_CHANGED")
+        _require(candidate["model_origin"].get("response_ref") == {
+            "path": response["path"], "sha256": response["output_sha256"]}, "CANDIDATE_RESPONSE_MISMATCH")
+        # 为什么要有它：隔离副本沿用正式检查器的固定输入及真实报告要求，v2 只改变候选身份来源。
+        scratch = self.profile.task_work_root(self.workspace_root) / "c"
+        _require(not scratch.resolve().is_relative_to(self.source_root), "CANDIDATE_SCRATCH_INSIDE_SOURCE")
+        _require(scratch.resolve().is_relative_to(self.workspace_root), "CANDIDATE_SCRATCH_OUTSIDE_WORKSPACE")
+        if scratch.exists():
+            _require(not scratch.is_symlink()
+                     and not getattr(scratch.lstat(), "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT,
+                     "LINKED_CANDIDATE_SCRATCH_UNSUPPORTED")
+        scratch.mkdir(parents=True, exist_ok=True)
+        isolated = Path(tempfile.mkdtemp(prefix="", dir=scratch)) / "s"
+        shutil.copytree(self.source_root, isolated, ignore=shutil.ignore_patterns(*_IGNORED))
+        expected = dict(hashes)
+        for relative, text in candidate["files"].items():
+            _require(relative in contract["allowed_edit_paths"], "EDIT_OUTSIDE_SCOPE")
+            content = text.encode("utf-8")
+            _within(isolated, relative).write_bytes(content)
+            expected[relative] = hashlib.sha256(content).hexdigest()
+        _require({row["path"]: row["sha256"] for row in _snapshot(isolated)} == expected, "CANDIDATE_COPY_CHANGED")
+        selected = {**context, "public_acceptance_ref": contract["public_acceptance_ref"]}
+        executed = self.run_build_test(isolated, context["feature_id"], "preapproval_isolated_compilation",
+                                       candidate_context=selected)
+        _require(_snapshot(self.source_root) == before and self.verification_identity() == identity, "ORIGINAL_SOURCE_CHANGED")
+        owner = executed["failure_owner"]
+        binding = {key: selected[key] for key in (
+            "task_contract_ref", "binding_registry_ref", "candidate_ref", "candidate_source_id",
+            "public_acceptance_ref", "source_snapshot_sha256")}
+        report = {**binding, "schema_version": "task_agent_candidate_report_v2",
+            "status": executed["status"], "failure_owner": owner,
+            "owner_binding_ids": sorted({row["binding_id"] for row in changes})
+                if owner == "patch_implementation" else [],
+            "observations": executed["observations"], "execution_origin": "executed",
+            "verification_ref": executed["report_ref"], "verification_summary": executed["verification_summary"],
+            "verification_identity": identity, "verification_scope": executed["verification_scope"],
+            "profile_ref": self.profile.reference, "model_response_sha256": response["output_sha256"],
+            "generated_changes_sha256": canonical_hash(context["generated_changes"]),
+            "validation_results": {
+                "full_compilation": {"status": "passed" if executed["build_execution"].get("build_exit_code") == 0 else "failed",
+                    "all_required_files_compiled": set(self.profile.data["allowed_edit_paths"]) <= {row["path"] for row in executed["compile_inputs"]},
+                    "report_ref": executed["compilation_report_ref"], "build_result": executed["build_result"].to_artifact_payload()},
+                "shared_test_result": {"status": executed["status"], "report_ref": executed["report_ref"]},
+                "runtime": {"status": "not_executed"}}}
+        return {**report, "report_ref": _save(Path(executed["report_ref"]["path"]).parent / "candidate-report.json", report)}
+
+
+def validate_candidate_report_v2(report_ref, *, context=None, require_pass=None,
+                                 task_contract_ref=None, binding_registry_ref=None,
+                                 candidate_ref=None, candidate_source_id=None, verification_identity=None,
+                                 public_acceptance_ref=None):
+    """Recheck persisted candidate, compilation and test evidence for handoff.
+
+    为什么要有它：产品接管需核验同一版本的执行原件，不能仅信任上层保存的 passed 状态。
+    """
+    if "report_ref" in report_ref:
+        report = read_bound_json(report_ref["report_ref"])
+        _require(report == {key: value for key, value in report_ref.items() if key != "report_ref"},
+                 "REPORT_CONTENT_MISMATCH")
+    else:
+        report = read_bound_json(report_ref)
+    if require_pass is None:
+        require_pass = context is None
+    if context is not None:
+        from src.mod_agent.task_agent_v2_state import TaskAgentV2State
+
+        state = TaskAgentV2State(context["artifact_store_root"], context["task_contract_ref"])
+        candidate = state.validate_candidate(context["candidate_ref"])
+        changes = state.changes_from_baseline(context["candidate_ref"])
+        _require(candidate["candidate_source_id"] == context["candidate_source_id"], "CANDIDATE_IDENTITY_CHANGED")
+        registry, original_registry = state.load(context["binding_registry_ref"]), state.load(candidate["registry_ref"])
+        _require(registry.get("contract_ref") == state.contract_ref and all(
+            registry["bindings"].get(key) == value for key, value in original_registry["bindings"].items()),
+            "CANDIDATE_REGISTRY_MISMATCH")
+        _require(context["generated_changes"] == changes
+                 and report.get("generated_changes_sha256") == canonical_hash(changes), "CHANGE_CONTENT_MISMATCH")
+        snapshot = canonical_hash(state.load(state.contract["baseline_manifest_ref"]))
+        _require(context["source_snapshot_sha256"] == report.get("source_snapshot_sha256") == snapshot,
+                 "SOURCE_SNAPSHOT_MISMATCH")
+        response = context["model_response"]
+        _require(_ref(response["path"])["sha256"] == response["output_sha256"] == report.get("model_response_sha256")
+                 and candidate["model_origin"].get("response_ref") == {
+                     "path": response["path"], "sha256": response["output_sha256"]}, "CANDIDATE_RESPONSE_MISMATCH")
+        _require(report.get("profile_ref") == state.contract.get("execution_profile_ref"), "CONTRACT_PROFILE_MISMATCH")
+        task_contract_ref, binding_registry_ref = context["task_contract_ref"], context["binding_registry_ref"]
+        candidate_ref, candidate_source_id = context["candidate_ref"], context["candidate_source_id"]
+        verification_identity = context["verification_identity"]
+        public_acceptance_ref = state.contract["public_acceptance_ref"]
+        _require(state.load(public_acceptance_ref).get("verification_identity") == verification_identity,
+                 "ACCEPTANCE_VERIFIER_MISMATCH")
+    _require(report.get("schema_version") == "task_agent_candidate_report_v2", "V2_REPORT_REQUIRED")
+    expected = {"task_contract_ref": task_contract_ref, "binding_registry_ref": binding_registry_ref,
+                "candidate_ref": candidate_ref, "candidate_source_id": candidate_source_id,
+                "public_acceptance_ref": public_acceptance_ref}
+    _require(all(report.get(key) == value for key, value in expected.items()), "REPORT_CANDIDATE_MISMATCH")
+    _require(report.get("verification_identity") == verification_identity, "REPORT_VERIFIER_MISMATCH")
+    _require(report.get("status") in {"passed", "behavior_failed", "infrastructure_failed"}
+             and report.get("execution_origin") == "executed", "CANDIDATE_CHECK_NOT_EXECUTED")
+    if require_pass:
+        _require(report.get("status") == "passed" and report.get("failure_owner") is None, "CANDIDATE_CHECK_NOT_PASSED")
+    verification = read_bound_json(report["verification_ref"])
+    compilation_ref = report["validation_results"]["full_compilation"]["report_ref"]
+    compilation = read_bound_json(compilation_ref)
+    _require(report["validation_results"]["shared_test_result"] == {
+        "status": report["status"], "report_ref": report["verification_ref"]}, "TEST_REPORT_BINDING_MISMATCH")
+    _require(verification.get("compilation_report_ref") == compilation_ref, "COMPILATION_REPORT_BINDING_MISMATCH")
+    for record in (verification, compilation):
+        _require(all(record.get(key) == value for key, value in expected.items()), "EXECUTION_CANDIDATE_MISMATCH")
+        _require(record.get("execution_origin") == "executed", "EXECUTION_NOT_EXECUTED")
+        _require(record.get("source_snapshot_sha256") == report["source_snapshot_sha256"], "EXECUTION_SNAPSHOT_MISMATCH")
+        _require(record.get("profile_ref") == report["profile_ref"], "EXECUTION_PROFILE_MISMATCH")
+    _require(verification.get("verification_identity") == verification_identity, "EXECUTION_VERIFIER_MISMATCH")
+    _require(verification.get("status") == report["status"]
+             and verification.get("failure_owner") == report.get("failure_owner")
+             and verification.get("observations") == report.get("observations")
+             and verification.get("verification_summary") == report.get("verification_summary"), "EXECUTION_RESULT_MISMATCH")
+    if report["status"] != "passed":
+        # 为什么要有它：真实失败可以进入下一轮决策，产品交付仍须显式要求成功及完整测试原件。
+        return report
+    _require(report.get("failure_owner") is None and compilation.get("status") == "passed", "EXECUTION_NOT_PASSED")
+    _require(compilation.get("all_required_files_compiled") is True
+             and compilation["build_execution"].get("restore_exit_code") == 0
+             and compilation["build_execution"].get("build_exit_code") == 0, "COMPILATION_NOT_EXECUTED")
+    _require(compilation.get("source_inputs") == verification.get("source_inputs")
+             and compilation.get("compile_inputs") == verification.get("compile_inputs"), "COMPILE_INPUTS_MISMATCH")
+    profile = CSharpRepositoryProfile(report["profile_ref"])
+    source = Path(verification["source_root"]).resolve(strict=True)
+    _require(_snapshot(source) == verification["source_inputs"], "CHECKED_SOURCE_CHANGED")
+    profile.verify_fixed_inputs(source, verification["fixed_inputs"])
+    source_hashes = {row["path"]: row["sha256"] for row in verification["source_inputs"]}
+    # 为什么要有它：MSBuild生成的obj源码不在原始快照中，但仍须按实际编译文件核验哈希，不能误拒成功或放过被改写的生成输入。
+    _require(set(profile.data["allowed_edit_paths"]) <= {row["path"] for row in compilation["compile_inputs"]}
+             and all((source_hashes.get(row["path"]) == row["sha256"]
+                      or row["path"] not in source_hashes and "obj" in PurePosixPath(row["path"]).parts)
+                     and _ref(_within(source, row["path"]))["sha256"] == row["sha256"]
+                     for row in compilation["compile_inputs"]),
+             "COMPILED_SOURCE_MISMATCH")
+    artifacts = compilation.get("built_artifact_refs")
+    _require(bool(artifacts) and artifacts == verification.get("built_artifact_refs")
+             and all(_ref(row["path"]) == row for row in artifacts), "BUILT_ARTIFACT_CHANGED")
+    test_execution = verification["test_execution"]
+    _require(test_execution.get("status") == "executed" and test_execution.get("exit_code") == 0,
+             "TESTS_NOT_EXECUTED")
+    test_ref = test_execution["report_ref"]
+    _require(_ref(test_ref["path"]) == test_ref, "TEST_REPORT_CHANGED")
+    tests = _read_tests(Path(test_ref["path"]), profile.data["test_report"]["format"])
+    _require(tests == verification["checks"] and all(row["passed"] for row in tests), "TEST_RESULTS_MISMATCH")
+    summary = {"checks": len(tests), "failed_checks": 0, "executions": 1, "test_command_executed": True}
+    _require(report["verification_summary"] == verification["verification_summary"] == summary,
+             "TEST_SUMMARY_MISMATCH")
+    return report
 
 
 def make_csharp_repository_evaluator(**kwargs):

@@ -22,6 +22,7 @@ from src.libs.llm.agent_turn import (
     AgentTurnClient,
     AgentTurnRequest,
     AgentTurnResponse,
+    AgentUsage,
 )
 from src.mod_agent.model_call_budget import call_allowance, validate_budget
 
@@ -170,7 +171,9 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
                         prior_execution_requests: Sequence[AgentTurnRequest] | None = None,
                         stop_check: Callable[[], Mapping[str, Any] | None] | None = None,
                         tool_definitions: Callable[[], Sequence[AgentToolDefinition]] | None = None,
-                        record_event: Callable[[dict[str, Any]], None] | None = None) -> TaskAgentLoopResult:
+                        record_event: Callable[[dict[str, Any]], None] | None = None,
+                        checkpoint_callback: Callable[[dict[str, Any]], None] | None = None,
+                        resume_checkpoint: Mapping[str, Any] | None = None) -> TaskAgentLoopResult:
     """Let the model choose actions; every execution and result remains owner-bound.
 
     prepare/confirm_reuse/completion_check are trusted, read-only host checks.
@@ -186,12 +189,37 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
     output_corrected = False
     execution_history = ()
     last_budget: dict[str, Any] = {}
+    phase = "ready"
+    pending_response = None
+    reads_charged = observations_charged = False
+    resume_pending = False
+    pending_charge_replay = None
+
+    def checkpoint(next_phase=None, *, terminal=None, completion=None):
+        nonlocal phase
+        if next_phase is not None:
+            phase = next_phase
+        if checkpoint_callback is not None:
+            checkpoint_callback({"schema": "task-agent-loop-checkpoint.v2", "phase": phase,
+                "request": asdict(request), "pending_response": asdict(pending_response) if pending_response else None,
+                "reads_charged": reads_charged, "observations_charged": observations_charged,
+                "pending_charge_replay": deepcopy(pending_charge_replay),
+                "model_turns": turns, "read_units": reads, "observation_bytes": observation_bytes,
+                "tool_argument_correction_used": argument_used, "output_correction_used": output_corrected,
+                "events": deepcopy(events), "usage_by_turn": deepcopy(usage), "call_records": deepcopy(seen),
+                "model_budget": snapshot(), "terminal": terminal, "completion": completion})
 
     def emit(value):
         event = _copy(value)
         events.append(event)
         if record_event is not None:
             record_event(deepcopy(event))
+        if event.get("event") == "provider_send_reserved":
+            checkpoint("provider_pending")
+        elif event.get("event") == "tool_dispatch_started":
+            checkpoint("tool_pending")
+        elif event.get("event") == "tool_dispatch_completed":
+            checkpoint("dispatch_ready")
 
     def snapshot():
         nonlocal last_budget
@@ -208,6 +236,7 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
             snapshot()
         except Exception:
             pass
+        checkpoint(terminal={"code": code, "unknown_effects": unknown, "detail": detail}, completion=completion)
         return TaskAgentLoopResult("completed" if completion is not None else "blocked",
             {"code": code, **({"detail": detail} if detail is not None else {})}, request,
             deepcopy(last_budget), turns, reads, observation_bytes, argument_used,
@@ -216,7 +245,12 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
             tuple(deepcopy((*execution_history, request))))
 
     def charge(*, read_count=0, byte_count=0):
-        nonlocal reads, observation_bytes
+        nonlocal reads, observation_bytes, pending_charge_replay
+        if pending_charge_replay is not None:
+            if pending_charge_replay != {"reads": read_count, "observation_bytes": byte_count}:
+                raise ValueError("TASK_AGENT_RECONCILED_CHARGE_CHANGED")
+            pending_charge_replay = None
+            return
         decision = charge_tool_budget(reads=read_count, observation_bytes=byte_count)
         if decision is False:
             raise ValueError("TASK_AGENT_TOOL_BUDGET_EXHAUSTED")
@@ -314,12 +348,46 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
                 "prior_request_sha256s": [_hash(asdict(item)) for item in execution_history],
                 "prior_result_count": len(visible_results)})
         snapshot()
+        if resume_checkpoint is not None:
+            restored = _copy(resume_checkpoint)
+            if (restored.get("schema") != "task-agent-loop-checkpoint.v2"
+                    or restored.get("phase") not in {"ready", "response_ready", "dispatch_ready", "observations_charged"}
+                    or restored.get("model_budget") != snapshot()
+                    or _hash(restored.get("request")) != _hash(asdict(initial_request))
+                    or any(row.get("status") in {"pending", "unknown"} for row in restored.get("call_records", {}).values())):
+                raise ValueError("TASK_AGENT_RESUME_CHECKPOINT_NOT_ADMITTED")
+            for call_id, record in seen.items():
+                if restored["call_records"].get(call_id) != record:
+                    if restored["call_records"].get(call_id, {}).get("result") != record.get("result"):
+                        raise ValueError("TASK_AGENT_RESUME_HISTORY_CHANGED")
+            seen = restored["call_records"]
+            events, usage = restored["events"], restored["usage_by_turn"]
+            turns, reads, observation_bytes = restored["model_turns"], restored["read_units"], restored["observation_bytes"]
+            argument_used = restored["tool_argument_correction_used"]
+            output_corrected = restored["output_correction_used"]
+            reads_charged, observations_charged = restored["reads_charged"], restored["observations_charged"]
+            pending_charge_replay = restored.get("pending_charge_replay")
+            phase = restored["phase"]
+            if restored.get("completion") is not None:
+                return stop("TASK_AGENT_COMPLETION_ACCEPTED", completion=restored["completion"])
+            if restored.get("pending_response") is not None:
+                document = restored["pending_response"]
+                pending_response = AgentTurnResponse(**{**document,
+                    "tool_calls": tuple(AgentToolCall(**row) for row in document["tool_calls"]),
+                    "usage": AgentUsage(**document["usage"])})
+                resume_pending = True
+            elif phase != "ready":
+                raise ValueError("TASK_AGENT_RESUME_RESPONSE_REQUIRED")
     except Exception as error:
         return stop("TASK_AGENT_INPUT_INVALID", detail={"error_type": type(error).__name__})
 
     while True:
         # Scope: trusted execution-owner termination only, including before the first send.
         # 为什么要有它：已确认的无进展停止不是未知副作用，也不能再预留或发送一轮模型；此入口不接受模型文本作为成功。
+        if not resume_pending:
+            pending_response = None
+            reads_charged = observations_charged = False
+            checkpoint("ready")
         try:
             termination = stop_check() if stop_check is not None else None
             if termination is not None:
@@ -346,39 +414,47 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
                 return stop("TASK_AGENT_TOOL_DEFINITIONS_INVALID", detail={"error_type": type(error).__name__})
         try:
             before = snapshot()
-            if call_allowance(before, model_role) <= 0:
+            if not resume_pending and call_allowance(before, model_role) <= 0:
                 return stop("TASK_AGENT_MODEL_BUDGET_EXHAUSTED")
-            if reserve_model_call() is False:
+            if not resume_pending and reserve_model_call() is False:
                 return stop("TASK_AGENT_MODEL_BUDGET_EXHAUSTED")
             reserved = snapshot()
-            if (reserved["maximum"] != before["maximum"]
+            if not resume_pending and (reserved["maximum"] != before["maximum"]
                     or reserved.get("policy", "stage_and_total") != before.get("policy", "stage_and_total")
                     or reserved["consumed"] != before["consumed"] + 1):
                 return stop("TASK_AGENT_MODEL_RESERVATION_INVALID")
-            turns += 1
-            emit({"event": "provider_send_reserved", "turn": turns, "model_budget": reserved})
+            if not resume_pending:
+                turns += 1
+                emit({"event": "provider_send_reserved", "turn": turns, "model_budget": reserved})
         except Exception as error:
             return stop("TASK_AGENT_MODEL_RESERVATION_FAILED", detail={"error_type": type(error).__name__})
         try:
-            with trace_operation("task.agent.turn", kind="llm", attributes={"turn": turns}) as span:
-                response = client.complete_turn(request)
-                if isinstance(response, AgentTurnResponse):
-                    span.update(provider=response.provider, model=response.model, stop_reason=response.stop_reason)
+            if resume_pending:
+                response = pending_response
+            else:
+                with trace_operation("task.agent.turn", kind="llm", attributes={"turn": turns}) as span:
+                    response = client.complete_turn(request)
+                    if isinstance(response, AgentTurnResponse):
+                        span.update(provider=response.provider, model=response.model, stop_reason=response.stop_reason)
         except Exception as error:
             usage.append({"turn": turns, "usage": None, "usage_available": False})
             return stop("TASK_AGENT_PROVIDER_TURN_FAILED", detail={"error_type": type(error).__name__,
                 "provider_diagnostic": deepcopy(getattr(error, "diagnostic", None))})
         if not isinstance(response, AgentTurnResponse):
             return stop("TASK_AGENT_RESPONSE_INVALID")
-        usage.append({"turn": turns, "provider": response.provider, "model": response.model,
-                      "request_id": response.request_id, "stop_reason": response.stop_reason,
-                      "usage": response.usage.to_dict(), "usage_available": True})
+        if not resume_pending:
+            usage.append({"turn": turns, "provider": response.provider, "model": response.model,
+                          "request_id": response.request_id, "stop_reason": response.stop_reason,
+                          "usage": response.usage.to_dict(), "usage_available": True})
         try:
-            if response_admission is not None:
+            if response_admission is not None and not resume_pending:
                 response_admission(response)
         except Exception as error:
             return stop("TASK_AGENT_RESPONSE_NOT_ADMITTED", detail={"error_type": type(error).__name__,
                 "code": getattr(error, "code", None)})
+        pending_response = response
+        if not resume_pending:
+            checkpoint("response_ready")
         if response.stop_reason in _STOPPED:
             return stop("TASK_AGENT_RESPONSE_INCOMPLETE" if response.stop_reason in
                 {"length", "max_tokens", "max_output_tokens", "incomplete"} else "TASK_AGENT_PROVIDER_STOPPED")
@@ -434,6 +510,10 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
             output_corrected = True
             emit({"event": "output_format_correction", "turn": turns, "observation_bytes": size,
                 "host_message_sha256": _hash(asdict(notice)), "output_correction_used": True})
+            resume_pending = False
+            pending_response = None
+            reads_charged = observations_charged = False
+            checkpoint("ready")
             continue
         if response.provider_state is None:
             return stop("TASK_AGENT_TOOL_STATE_MISSING")
@@ -457,6 +537,10 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
                     raise ValueError("TASK_AGENT_TOOL_CALL_IDENTITY_CHANGED")
                 if previous and previous["status"] not in {"not_dispatched", "completed"}:
                     raise ValueError("TASK_AGENT_PREVIOUS_OUTCOME_NOT_REUSABLE")
+                if resume_pending and previous and previous["status"] == "completed":
+                    prepared_rows.append((call, action, PreparedTaskAction(arguments, 0, previous.get("version_identity")),
+                        "resume_completed", None, args_hash))
+                    continue
                 prepared = action.prepare(arguments)
                 if (not isinstance(prepared, PreparedTaskAction) or type(prepared.read_cost) is not int
                         or prepared.read_cost < 0 or prepared.version_identity is not None
@@ -531,8 +615,8 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
                         if correctable_mixed else
                         "No candidate was created or checked; any existing candidate and check are unchanged. "
                         "Correct the indicated fields using the active candidate_submit schema and argument_errors. "
-                        "An initial submission uses context_id and patch_json; a current-candidate revision uses "
-                        "the current parent identity and edits. You may also inspect authorized code or request upstream review. "
+                        "Use the fields required by the currently supplied candidate_submit schema, "
+                        "with the current source identity and authorized targets. You may also inspect authorized code. "
                         "This correction grants no new permission or budget. "
                         "为什么要有它：首次提交与后续修订都可能有可纠正的格式错误，未执行不等于禁止继续合法修改。"
                         if input_error_codes.get(call.call_id) == "TASK_AGENT_CANDIDATE_ARGUMENTS_INVALID" else
@@ -556,11 +640,18 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
             except Exception:
                 return stop("TASK_AGENT_OBSERVATION_BUDGET_EXHAUSTED", unadmitted=corrections)
             retain(corrections, response)
+            resume_pending = False
+            pending_response = None
+            reads_charged = observations_charged = False
+            checkpoint("ready")
             continue
 
         requested_reads = sum(row[2].read_cost for row in prepared_rows if row[3] != "reuse")
         try:
-            charge(read_count=requested_reads)
+            if not reads_charged:
+                charge(read_count=requested_reads)
+                reads_charged = True
+                checkpoint("dispatch_ready")
         except TaskReadBudgetError as error:
             # Scope: an entirely legal, never-dispatched read/search batch may shrink once under the same budgets.
             # 为什么要有它：模型缺少额度信息时可调整调用数量，但不能部分执行、重放历史动作、扩大权限或重新领取纠错机会。
@@ -596,11 +687,22 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
             except Exception:
                 return stop("TASK_AGENT_OBSERVATION_BUDGET_EXHAUSTED", unadmitted=corrections)
             retain(corrections, response)
+            resume_pending = False
+            pending_response = None
+            reads_charged = observations_charged = False
+            checkpoint("ready")
             continue
         except Exception:
             return stop("TASK_AGENT_READ_BUDGET_EXHAUSTED")
         results, final_decision = [], None
         for call, action, prepared, mode, proof, args_hash in prepared_rows:
+            if mode == "resume_completed":
+                previous_result = AgentToolResult(**deepcopy(seen[call.call_id]["result"]))
+                results.append(previous_result)
+                decision = previous_result.output.get("completion_check")
+                if action.role == "finish" and isinstance(decision, dict) and decision.get("accepted") is True:
+                    final_decision = decision
+                continue
             started = False
             try:
                 emit({"event": "tool_dispatch_prepared", "turn": turns, "call_id": call.call_id,
@@ -660,9 +762,16 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
                         detail={"error_type": type(error).__name__})
         size = sum(len(_json(asdict(result)).encode("utf-8")) for result in results)
         try:
-            charge(byte_count=size)
+            if not observations_charged:
+                charge(byte_count=size)
+                observations_charged = True
+                checkpoint("observations_charged")
         except Exception:
             return stop("TASK_AGENT_OBSERVATION_BUDGET_EXHAUSTED", unadmitted=results)
         retain(results, response)
+        resume_pending = False
+        pending_response = None
+        reads_charged = observations_charged = False
+        checkpoint("ready", completion=final_decision)
         if final_decision is not None:
             return stop("TASK_AGENT_COMPLETION_ACCEPTED", completion=final_decision)

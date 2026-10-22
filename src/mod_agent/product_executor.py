@@ -1047,7 +1047,8 @@ class _ProductStoreRecorder:
                 side_effects_may_have_started=False)
         initial = {role + "_ref": {"feature_id": state["feature_id"], "artifact_type": role,
             "path": state["artifacts"][role], "artifact_hash": state["artifact_hashes"][role]}
-            for role in ("feature_spec", "evidence_pack", "implementation_plan")}
+            for role in (("feature_spec",) if getattr(owner, "protocol", None) == "v2"
+                else ("feature_spec", "evidence_pack", "implementation_plan"))}
         self._task_agent_owner, self._task_agent_start = owner, len(self.attempts)
         start_sequence = len(self.attempts) + sum(row.origin == "reused_input" for row in self.outputs)
         outer_attempt = self._repair_attempt
@@ -1935,7 +1936,8 @@ def execute_product_execution(
     outputs = tuple(recorder.outputs)
     terminal = (
         graph_result.get("current_stage")
-        if graph_result.get("current_stage") in {"build", "done", "blocked"}
+        if graph_result.get("current_stage") in ({"build", "done", "blocked", "dry_run_apply"}
+            if getattr(adapters.task_agent_execution, "protocol", None) == "v2" else {"build", "done", "blocked"})
         and failure_stage is None
         else None
     )
@@ -1983,5 +1985,6 @@ def execute_product_execution(
             variant_result=variant,
             failure_stage=failure_stage,
             task_agent_executions=tuple(recorder.task_agent_executions),
+            v2_delivery_checkpoint_ref=graph_result.get("runtime_summary", {}).get("v2_delivery_checkpoint_ref"),
         )
     )

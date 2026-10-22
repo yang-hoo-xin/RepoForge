@@ -30,6 +30,28 @@ _INPUT_FIELDS = {"feature_spec": "feature_spec_artifact", "evidence_pack": "evid
                  "implementation_plan": "implementation_plan_artifact"}
 
 
+def continue_v2_delivery(*, artifact_store_root, checkpoint_ref, action, isolated_root=None,
+        operation_id=None, displayed_binding=None, human_semantic_decision=None,
+        task_delegation_ref=None, allow_build=False):
+    """Normal Apply entry dispatch for v2, independent of the historical Plan.
+
+    为什么要有它：同一用户入口需要显式协议消费，不能因恢复而把新候选伪装为旧Plan。
+    """
+    from src.mod_agent.task_agent_v2_delivery import apply_v2_delivery, build_v2_delivery, prepare_v2_delivery
+    if action == "prepare":
+        return prepare_v2_delivery(artifact_store_root=artifact_store_root, checkpoint_ref=checkpoint_ref,
+            isolated_root=isolated_root, operation_id=operation_id)
+    if action == "apply":
+        if not isinstance(displayed_binding, dict) or displayed_binding.get("checkpoint_ref") != checkpoint_ref:
+            raise ValueError("V2_DELIVERY_EXACT_DISPLAY_BINDING_REQUIRED")
+        return apply_v2_delivery(artifact_store_root=artifact_store_root, displayed_binding=displayed_binding,
+            human_semantic_decision=human_semantic_decision, task_delegation_ref=task_delegation_ref)
+    if action == "build":
+        return build_v2_delivery(artifact_store_root=artifact_store_root, apply_ref=checkpoint_ref,
+            operation_id=operation_id, allow_build=allow_build, task_delegation_ref=task_delegation_ref)
+    raise ValueError("V2_DELIVERY_ACTION_UNSUPPORTED")
+
+
 def _ref(value, feature_id, kind):
     if (not isinstance(value, dict) or set(value) != set(_REF_FIELDS)
             or any(not isinstance(value[key], str) or not value[key] for key in _REF_FIELDS)):

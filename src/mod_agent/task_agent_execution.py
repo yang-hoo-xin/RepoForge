@@ -105,8 +105,13 @@ def _admitted_response(value, profile):
 
 
 def prepare_task_agent_contract(documents, *, workspace_root, evaluator, policy, documentation_holder=None,
-        verification_configured=None):
+        verification_configured=None, protocol="v1"):
     """Reuse the normal Patch contract and its dependency/verification model views."""
+    if protocol == "v2":
+        # 为什么要有它：v2合同直接消费宿主任务与授权，不能从技术计划生成必改义务或伪造旧Plan。
+        from src.mod_agent.task_agent_v2_tools import prepare_v2_contract
+        return prepare_v2_contract(documents)
+    _require(protocol == "v1", "PROTOCOL_INVALID")
     from src.mod_agent.local_entry import (
         _external_evidence_items,
         _patch_agent_initial_messages,

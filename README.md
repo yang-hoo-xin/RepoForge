@@ -128,6 +128,10 @@ uv run --frozen python -m scripts.run_v0_1_demo --output artifacts/v0_1_demo
 
 候选和正式交付使用同一套构建／测试；`apply-patch --resume-approval` 后，`apply-patch --continue-build --allow-build` 从原检查点恢复配置，无需另写较弱的 BuildProfile。该通路已用真实 SDK 验证失败、修订、复验及恢复交付；验收中的模型与审批为测试脚本，不作为模型自主修复成绩。原工程不被修改，构建在本地工作副本内执行，并非操作系统安全沙箱。
 
+连续任务 Agent 的 **v2 协议正在集成验证，尚非默认**。在上述显式 C# 仓库配置、本地 Ollama、隔离构建及延期审批入口上，使用 `--technical-executor task_agent --task-agent-protocol v2`。模型可以先调查，再在已授权文件范围内选择修改目标、修订当前候选和选择公开测试；技术计划不授予权限。经验通过可选的 `--task-agent-experience-config` 接入，临时探针没有合格隔离执行环境时不可运行。完整范围和当前缺口见[实施设计](docs/AGENT_RELIABILITY_LEARNING_GOAL.md)及[项目进度](docs/PROJECT_STATE.md)。为什么要有它：新能力的可选入口、默认状态和实际验证范围需要同时说明，不能把开发中的接口当成已证实的自主交付能力。
+
+v2 中断任务使用 `mod-agent run-request --resume-task-agent <原检查点引用> --artifact-store-root <原工件目录>`，沿用原配置、权限与累计资源，不附加新任务参数。候选接管后的 `awaiting_delivery` 仍非交付：使用输出的 `v2_delivery_checkpoint_ref`，经 `apply-patch --v2-delivery-checkpoint <引用> --v2-delivery-action prepare|apply|build` 分别准备精确审批、执行 Apply 和构建；各阶段使用返回的当前引用及适用的批准参数，不能混用 v1 恢复参数。完整调用示例见[正常 CLI 回归](tests/unit/test_task_agent_v2_product_entry.py)。为什么要有它：恢复必须继续同一任务，交付必须绑定实际候选和批准，不能靠重新运行领取新预算或沿用旧检查。
+
 ### Docker 服务演示
 
 环境：Docker Engine / Docker Desktop 与 Compose。将 [`.env.example`](deployment/service/.env.example) 复制为 `deployment/service/.env`，设置两个不同的随机值：`SERVICE_API_TOKEN` 和 `SERVICE_REDIS_PASSWORD`；保留已有配置，凭据不提交 Git。为什么要有它：接口和队列使用独立凭据，公开仓库只保存可共享的模板。

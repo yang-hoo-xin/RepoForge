@@ -2429,7 +2429,18 @@ class ArtifactStore:
                 "New approved binding_resolution writes must use the "
                 "request-bound Edit Authority contract."
             )
-        missing = sorted(contract.required_upstream_artifacts - provided_types)
+        required_upstreams = contract.required_upstream_artifacts
+        if artifact_type == "patch_proposal" and payload.get("context_pack", {}).get("task_agent_protocol") == "v2":
+            # 为什么要有它：v2产品原件直接依赖需求和已验证交接，不能伪造旧Evidence/Plan来满足存储格式。
+            from src.mod_agent.task_agent_v2_handoff import revalidate_handoff_v2
+            pack = payload["context_pack"]
+            revalidate_handoff_v2(pack["task_agent_handoff_v2"], store=self)
+            if len(upstream_refs) != 1 or provided_types != {"feature_spec"} or {
+                    "feature_id": upstream_refs[0].feature_id, "artifact_type": upstream_refs[0].artifact_type,
+                    "path": upstream_refs[0].path, "artifact_hash": upstream_refs[0].artifact_hash} != pack["feature_spec_ref"]:
+                raise ArtifactStoreError("V2 proposal FeatureSpec binding changed.")
+            required_upstreams = frozenset({"feature_spec"})
+        missing = sorted(required_upstreams - provided_types)
         if missing:
             raise ArtifactStoreError(
                 f"Artifact {artifact_type!r} missing required upstream artifacts: {missing}"
