@@ -222,7 +222,8 @@ class TaskAgentV2Experience:
         self.owner = owner
         self.configuration_ref = deepcopy(configuration_ref)
         self.config = read_bound_json(configuration_ref)
-        if (set(self.config) != {"schema_version", "store_root", "snapshot_ref", "extract_on_terminal"}
+        required = {"schema_version", "store_root", "snapshot_ref", "extract_on_terminal"}
+        if (not required <= set(self.config) or set(self.config) - required - {"trial_binding_ref"}
                 or self.config["schema_version"] != "task_agent_experience_config_v1"
                 or type(self.config["extract_on_terminal"]) is not bool):
             raise ValueError("TASK_V2_EXPERIENCE_CONFIG_INVALID")
@@ -231,12 +232,40 @@ class TaskAgentV2Experience:
             raise ValueError("TASK_V2_EXPERIENCE_STORE_INVALID")
         self.memory = StrategyExperience(ArtifactStore(root))
         self.snapshot = self.config["snapshot_ref"]
+        self.trial_binding = self._read_trial_binding()
         self._terminal_receipt = None
         self.check_boundary()
+
+    def _read_trial_binding(self):
+        reference = self.config.get("trial_binding_ref")
+        if reference is None:
+            return None
+        from src.mod_agent.evaluation.strategy_adoption import _planned_pairs
+
+        binding = read_bound_json(reference)
+        if (set(binding) != {"schema_version", "protocol_ref", "task_id", "attempt", "arm"}
+                or binding["schema_version"] != "strategy_trial_run_binding_v1"
+                or binding["arm"] not in {"B", "B+"} or type(binding["attempt"]) is not int
+                or not isinstance(binding["task_id"], str) or not binding["task_id"]):
+            raise ValueError("TASK_V2_TRIAL_BINDING_INVALID")
+        protocol = read_bound_json(binding["protocol_ref"])
+        if protocol.get("schema_version") != "strategy_trial_protocol_v1":
+            raise ValueError("TASK_V2_TRIAL_PROTOCOL_INVALID")
+        planned = _planned_pairs(protocol)
+        if (binding["task_id"], binding["attempt"]) not in planned:
+            raise ValueError("TASK_V2_TRIAL_TASK_NOT_PLANNED")
+        expected_snapshot = protocol["snapshot_ref"] if binding["arm"] == "B+" else None
+        if self.snapshot != expected_snapshot:
+            raise ValueError("TASK_V2_TRIAL_ARM_SNAPSHOT_MISMATCH")
+        self.memory.check_snapshot(protocol["snapshot_ref"])
+        # 为什么要有它：已有host配置会在首个模型请求前绑定此配置；试验元数据只证明预登记，不增加技术或执行权限。
+        return {"binding": binding, "protocol": protocol}
 
     def check_boundary(self):
         if read_bound_json(self.configuration_ref) != self.config:
             raise ValueError("TASK_V2_EXPERIENCE_CONFIG_CHANGED")
+        if self._read_trial_binding() != self.trial_binding:
+            raise ValueError("TASK_V2_TRIAL_BINDING_CHANGED")
         if self.snapshot is not None:
             self.memory.check_snapshot(self.snapshot)
 

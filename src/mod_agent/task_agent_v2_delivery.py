@@ -493,6 +493,35 @@ def delivery_recovery_context(*, artifact_store_root, receipt_ref):
         "approval_inherited": False, "authority_inherited": False}
 
 
+def read_completed_v2_delivery(*, artifact_store_root, receipt_ref, native_execution_ref):
+    """Read a completed product delivery for the exact native technical execution.
+
+    为什么要有它：经验评测需要消费已有真实交付及产物原件，不能把候选通过或调用者填写的delivered当作交付。
+    """
+    context = delivery_recovery_context(artifact_store_root=artifact_store_root, receipt_ref=receipt_ref)
+    receipt = load_v2_artifact(artifact_store_root, receipt_ref)
+    _require(receipt.get("status") == "built" and receipt.get("whole_task_delivered") is True,
+        "COMPLETED_DELIVERY_REQUIRED")
+    checkpoint = load_v2_artifact(artifact_store_root, receipt["checkpoint_ref"])
+    _require(checkpoint["handoff"]["execution_ref"] == native_execution_ref,
+        "DELIVERY_NATIVE_EXECUTION_CHANGED")
+    report = read_bound_json(receipt["verification_ref"])
+    checks = report.get("checks", [])
+    _require(report.get("execution_origin") == "executed" and report.get("status") == "passed"
+        and report.get("test_execution", {}).get("status") == "executed" and checks
+        and all(row.get("passed") is True for row in checks)
+        and report["verification_summary"]["checks"] == len(checks)
+        and report["verification_summary"].get("failed_checks") == 0
+        and report.get("built_artifact_refs") == receipt.get("delivered_artifact_refs")
+        and receipt.get("delivered_artifact_refs"), "COMPLETED_DELIVERY_CHECK_CHANGED")
+    return {"status": "delivered", "candidate_source_id": receipt["candidate_source_id"],
+        "candidate_ref": receipt["candidate_ref"], "native_execution_ref": native_execution_ref,
+        "delivery_receipt_ref": receipt_ref, "resource_record": context["resource_record"],
+        "delivery_scope": receipt["delivery_scope"], "delivered_artifact_refs": receipt["delivered_artifact_refs"],
+        "verification": {"passed": True, "candidate_source_id": receipt["candidate_source_id"],
+            "native_verification_ref": receipt["verification_ref"], "delivery_receipt_ref": receipt_ref}}
+
+
 def _save_rebase_worker(root, document):
     raw = json.dumps(document, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
     path = Path(root) / "v2/rebase-workers" / (hashlib.sha256(raw).hexdigest() + ".json")

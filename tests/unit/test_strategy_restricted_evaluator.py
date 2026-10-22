@@ -124,17 +124,34 @@ def qualified(tmp_path, monkeypatch):
     return {"evaluator_ref": evaluator_ref, "candidates": candidates, "controls": controls}
 
 
-def test_qualified_production_checker_originals_allow_policy_transition(tmp_path, qualified):
+def test_qualified_checker_does_not_upgrade_handwritten_native_execution(tmp_path, qualified):
     from tests.unit.test_strategy_adoption import pair
     from tests.unit.test_strategy_experience import setup
     fixture = setup.__wrapped__(tmp_path / "memory")
     memory, strategy, _, args = pair(tmp_path / "pair", fixture, minimum_pairs=1, qualified_evaluator=qualified)
     decision_ref = decide_strategy_adoption(memory, strategy, **args)
     decision = memory.read(decision_ref)
-    assert decision["target_state"] == "active"
+    assert decision["target_state"] == "trial"
+    assert "native_execution_evidence_missing" in decision["activation_blockers"]
     assert decision["claim"] == "verified_restricted_csharp_paired_evidence"
     assert all(row["status"] == "verified_restricted_csharp" for row in decision["results"][0]["evaluator_evidence"].values())
-    assert memory.read(memory.transition(strategy, decision_ref))["state"] == "active"
+    assert memory.read(memory.transition(strategy, decision_ref))["state"] == "trial"
+
+
+def test_qualified_score_cannot_retire_strategy_with_unverified_execution(tmp_path, qualified):
+    from tests.unit.test_strategy_adoption import pair
+    from tests.unit.test_strategy_experience import setup
+
+    swapped = {**qualified, "candidates": {"B": qualified["candidates"]["B+"], "B+": qualified["candidates"]["B"]}}
+    memory, strategy, snapshot, args = pair(tmp_path / "pair", setup.__wrapped__(tmp_path / "memory"),
+        outcomes=(True, False), minimum_pairs=1, qualified_evaluator=swapped)
+    decision_ref = decide_strategy_adoption(memory, strategy, **args)
+    decision = memory.read(decision_ref)
+    assert decision["reported_regressions"] == 1
+    assert "native_execution_evidence_missing" in decision["activation_blockers"]
+    assert decision["target_state"] == "trial"
+    assert memory.read(memory.transition(strategy, decision_ref))["state"] == "trial"
+    assert memory.check_snapshot(snapshot)
 
 
 def test_wrong_candidate_version_and_unexecuted_original_reject(tmp_path, qualified):

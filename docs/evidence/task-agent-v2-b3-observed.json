@@ -66,6 +66,18 @@
     "replay_result": "historical_view_rejected_with_bounded_model_correction",
     "original_task_head_unchanged": true,
     "new_model_calls": 0,
-    "new_same_task_run_started": false
+    "new_same_task_run_started": false,
+    "native_diagnostic_export_ref": {
+      "path": "C:/tmp/rfext-polly-v2-b3-native-diagnostic-v1/execution.json",
+      "sha256": "062b30c810885b3e685e819d7c5b2d1e7bc490412a1dc71d69800f3f1884e390"
+    },
+    "diagnostic_code_snapshot_ref": {
+      "path": "C:/tmp/rfcode-native-export-b3-v1/snapshot.json",
+      "sha256": "ee7a1f175720bd3e4200436588e05a6f4ca25f87c22aae0ebd1ab80de6613746"
+    },
+    "exported_ledger_model_calls": 14,
+    "exported_unknown_usage_calls": 1,
+    "export_freeze_binding": "freeze_binding_unproven",
+    "original_execution_and_head_hashes_unchanged": true
   }
 }

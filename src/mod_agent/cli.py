@@ -1151,6 +1151,19 @@ def build_parser(
         help="Explicitly authorize this Build continuation only; Runtime needs its own existing authorization.")
     _add_execution_trace_arguments(apply_parser)
 
+    strategy_export_parser = subparsers.add_parser("export-strategy-execution",
+        help="Export retained native Task Agent evidence for strategy evaluation without running a model.")
+    strategy_export_parser.add_argument("--execution-record", required=True, help="Original native execution.json.")
+    strategy_export_parser.add_argument("--call-id", required=True, help="Actual completed decision/tool call to examine.")
+    strategy_export_parser.add_argument("--output-root", required=True)
+    strategy_export_parser.add_argument("--artifact-store-root")
+    strategy_export_parser.add_argument("--protocol-record", help="Legacy diagnostic protocol; cannot establish pre-run freezing.")
+    strategy_export_parser.add_argument("--task-id", help="Legacy diagnostic label; pre-bound trials derive this from native evidence.")
+    strategy_export_parser.add_argument("--arm", choices=("B", "B+"))
+    strategy_export_parser.add_argument("--attempt", type=int)
+    strategy_export_parser.add_argument("--learning-receipt", help="Original terminal learning receipt, if retained.")
+    strategy_export_parser.add_argument("--delivery-receipt", help="Exact completed v2 delivery receipt reference, if available.")
+
     run_parser = subparsers.add_parser(
         "run-request",
         help="Run one controlled request against an isolated copy of a real target project.",
@@ -2627,6 +2640,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
         print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if result.get("status") in {"awaiting_approval", "delivered"} else 2
+
+    if args.command == "export-strategy-execution":
+        from src.mod_agent.evaluation.independent_preparation import file_ref
+        from src.mod_agent.evaluation.strategy_native_export import export_strategy_execution
+
+        try:
+            # 为什么要有它：评测通过正常命令消费真实执行原件，动作、经验送达和成本由导出器核验，调用者不能手填成绩。
+            reference = export_strategy_execution(native_execution_ref=file_ref(args.execution_record),
+                call_id=args.call_id, output_root=args.output_root, artifact_store_root=args.artifact_store_root,
+                protocol_ref=file_ref(args.protocol_record) if args.protocol_record else None,
+                task_id=args.task_id, arm=args.arm, attempt=args.attempt,
+                learning_receipt_ref=file_ref(args.learning_receipt) if args.learning_receipt else None,
+                delivery_receipt_ref=args.delivery_receipt)
+        except (OSError, ValueError, RuntimeError, TypeError, KeyError) as error:
+            print(json.dumps({"status": "blocked", "reason": str(error)}, ensure_ascii=False))
+            return 2
+        print(json.dumps({"status": "exported", "execution_ref": reference}, ensure_ascii=False, indent=2))
+        return 0
 
     if args.command == "run-request":
         if args.resume_task_agent:

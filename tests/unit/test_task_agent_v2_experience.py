@@ -2,6 +2,7 @@
 import json
 from dataclasses import asdict
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -15,13 +16,14 @@ from src.mod_agent.domain.full_project_compilation import _save
 from src.mod_agent.evaluation.strategy_adoption import record_strategy_withdrawal
 from src.mod_agent.planning.strategy_experience import StrategyExperience
 from src.mod_agent.task_agent_v2_execution import TaskAgentExecutionV2
+from src.mod_agent.task_agent_v2_experience import TaskAgentV2Experience
 from tests.unit.test_csharp_repository_backend import _fake_execution, _profile
 from tests.unit.test_csharp_repository_product_entry import (
     repository_workspace as repository_workspace,
 )
 
 
-def _configuration(root, *, consume, extract):
+def _configuration(root, *, consume, extract, trial=False):
     memory = StrategyExperience(ArtifactStore(root / "experience"))
     source = _save(root / "public-experience-source.json", {"observation": "A failed behavior was reproduced before repair."})
     strategy = {"applicability": {"runtime": "dotnet", "target_domain": "csharp_repository"},
@@ -34,19 +36,52 @@ def _configuration(root, *, consume, extract):
     policy = _save(root / "trial-policy.json", {"schema_version": "strategy_trial_policy_v1",
         "allowed_origin_kinds": ["human"], "allowed_domains": {"runtime": ["dotnet"]}})
     snapshot = memory.admit_trial(proposed, policy_ref=policy)
-    ref = _save(root / "experience-config.json", {"schema_version": "task_agent_experience_config_v1",
+    config = {"schema_version": "task_agent_experience_config_v1",
         "store_root": str(memory.store.root), "snapshot_ref": asdict(snapshot) if consume else None,
-        "extract_on_terminal": extract})
+        "extract_on_terminal": extract}
+    if trial:
+        from src.mod_agent.evaluation.memory_comparison import INVARIANTS
+        from src.mod_agent.model_qualification import canonical_hash
+
+        task_source = _save(root / "trial-source.json", {"task_id": "double", "task_family": "controlled-arithmetic",
+            "source_version": "controlled-v1"})
+        exposure = _save(root / "trial-exposure.json", {"task_id": "double", "source_ref": task_source,
+            "attempt": 1, "exposure": "exposed"})
+        evaluator = _save(root / "trial-evaluator.json", {"kind": "controlled-placeholder-not-qualified"})
+        invariants = {key: {"fixture": key} for key in INVARIANTS | {"feedback"}}
+        invariants["judge"] = {"evaluator_ref": evaluator}
+        protocol = _save(root / "trial-protocol.json", {"schema_version": "strategy_trial_protocol_v1",
+            "batch_complete": True, "snapshot_ref": asdict(snapshot), "invariants": invariants,
+            "invariants_sha256": canonical_hash(invariants), "task_families": ["controlled-arithmetic"],
+            "planned_pairs": [{"task_id": "double", "task_family": "controlled-arithmetic", "attempt": 1,
+                "source_ref": task_source, "exposure_ref": exposure,
+                "current_context": {"runtime": "dotnet", "target_domain": "csharp_repository"}}]})
+        config["trial_binding_ref"] = _save(root / "trial-binding.json", {
+            "schema_version": "strategy_trial_run_binding_v1", "protocol_ref": protocol,
+            "task_id": "double", "attempt": 1, "arm": "B+" if consume else "B"})
+    ref = _save(root / "experience-config.json", config)
     return memory, ref
 
 
+def test_trial_arm_cannot_relabel_a_consuming_configuration_as_baseline(tmp_path):
+    _memory, reference = _configuration(tmp_path, consume=True, extract=False, trial=True)
+    config = json.loads(Path(reference["path"]).read_text(encoding="utf-8"))
+    binding = json.loads(Path(config["trial_binding_ref"]["path"]).read_text(encoding="utf-8"))
+    config["trial_binding_ref"] = _save(tmp_path / "wrong-arm.json", {**binding, "arm": "B"})
+    wrong = _save(tmp_path / "wrong-config.json", config)
+    with pytest.raises(ValueError, match="TASK_V2_TRIAL_ARM_SNAPSHOT_MISMATCH"):
+        TaskAgentV2Experience(SimpleNamespace(), wrong)
+
+
 @pytest.mark.parametrize("mode", ["consume", "withdraw", "extract", "compile_extract", "rejected_extract",
-    "discovery_extract", "discovery_tamper_extract", "discovery_environment_extract", "recheck_extract"])
+    "discovery_extract", "discovery_tamper_extract", "discovery_environment_extract", "recheck_extract",
+    "trial_consume", "trial_off"])
 def test_experience_through_normal_cli_actual_requests_and_terminal(repository_workspace, monkeypatch, capsys, mode):
     root = repository_workspace
     profile, source = _profile(root)
     extract_mode = mode.endswith("extract")
-    memory, config = _configuration(root, consume=not extract_mode, extract=extract_mode)
+    consume = not extract_mode and mode != "trial_off"
+    memory, config = _configuration(root, consume=consume, extract=extract_mode, trial=mode.startswith("trial_"))
     _fake_execution(monkeypatch)
     fake_build = backend.nuget._run_nuget_isolated_build
     def build(selected):
@@ -111,7 +146,7 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
         requests.append(payload)
         views = [json.loads(row["content"])["strategy_experience"] for row in payload["messages"]
             if row["role"] == "user" and '"strategy_experience"' in row["content"]]
-        if not extract_mode:
+        if consume:
             assert len(views) == 1 and views[0]["strategies"][0]["suggested_action"].startswith("Read the implementation")
         else:
             assert not views
@@ -263,4 +298,17 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
         assert owner._experience.context(owner._v2_session)["counterexample_kind"] == "none"
     else:
         assert receipt["status"] == "not_enabled"
-        assert len(list(owner.output_root.glob("experience-delivery-*.json"))) == len(requests)
+        assert len(list(owner.output_root.glob("experience-delivery-*.json"))) == (len(requests) if consume else 0)
+        if mode.startswith("trial_"):
+            journal = owner._recovery_journal
+            host = owner._v2_state.load(journal.host_config_ref)
+            assert host["experience_configuration_ref"] == config
+            assert owner._experience.trial_binding["binding"]["arm"] == ("B+" if consume else "B")
+            protocol = owner._experience.trial_binding["protocol"]
+            assert protocol["planned_pairs"][0]["task_id"] == "double"
+            # 为什么要有它：首个派发前的宿主配置必须已包含冻结引用，导出不能事后为旧运行补造比较条件。
+            first_checkpoint = owner._v2_state.load(owner._recovery_journal.latest_ref)
+            while first_checkpoint["previous_checkpoint_ref"] is not None:
+                first_checkpoint = owner._v2_state.load(first_checkpoint["previous_checkpoint_ref"])
+            assert first_checkpoint["host_config_ref"] == journal.host_config_ref
+            assert first_checkpoint["loop"]["model_budget"]["consumed"] == 0

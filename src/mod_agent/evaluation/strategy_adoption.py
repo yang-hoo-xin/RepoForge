@@ -135,10 +135,17 @@ def _evaluate(memory, strategy_ref, protocol_ref, result_refs, policy_ref):
             "task_family", "source_ref", "exposure_ref", "exposure", "current_context")), "FROZEN_TASK_PROVENANCE_CHANGED")
         _require(set(pair["arms"]) == {"B", "B+"}, "PAIRED_ARMS_REQUIRED")
         view = memory.advisory_model_view(memory.select(protocol["snapshot_ref"], pair["current_context"]))
-        verdicts, actions, costs, evaluator_evidence = {}, {}, {}, {}
+        verdicts, actions, costs, evaluator_evidence, native_evidence = {}, {}, {}, {}, {}
         for arm in ("B", "B+"):
             row = pair["arms"][arm]
             execution = read_bound_json(row["execution_ref"])
+            if execution.get("native_execution_ref") or execution.get("native_export_request_ref"):
+                from src.mod_agent.evaluation.strategy_native_export import (
+                    validate_native_strategy_execution,
+                )
+                native_evidence[arm] = validate_native_strategy_execution(row["execution_ref"])
+            else:
+                native_evidence[arm] = {"status": "native_execution_evidence_missing"}
             verdict = read_bound_json(row["evaluation_ref"])
             _require(execution.get("schema_version") == "strategy_execution_receipt_v1"
                 and execution["arm"] == arm and execution["task_id"] == pair["task_id"]
@@ -190,9 +197,12 @@ def _evaluate(memory, strategy_ref, protocol_ref, result_refs, policy_ref):
         action_changes += actions["B"] != actions["B+"]
         gains += is_unseen and verdicts["B+"] and not verdicts["B"] and actions["B"] != actions["B+"]
         regressions += verdicts["B"] and not verdicts["B+"]
+        if all(native_evidence[arm]["status"] == "native_execution_verified" for arm in ("B", "B+")):
+            _require(native_evidence["B"]["actual_common_conditions_sha256"] == native_evidence["B+"]["actual_common_conditions_sha256"],
+                "ACTUAL_COMMON_CONDITIONS_MISMATCH")
         results.append({"task_id": pair["task_id"], "attempt": pair["attempt"], "unseen": is_unseen,
             "source_ref": pair["source_ref"], "exposure_ref": pair["exposure_ref"], "reported_results": verdicts,
-            "costs": costs, "evaluator_evidence": evaluator_evidence,
+            "costs": costs, "evaluator_evidence": evaluator_evidence, "native_evidence": native_evidence,
             "cost_difference_Bplus_minus_B": {key: costs["B+"]["values"][key] - costs["B"]["values"][key]
                 if costs["B+"]["values"][key] is not None and costs["B"]["values"][key] is not None else None
                 for key in _COST_FIELDS}})
@@ -209,6 +219,14 @@ def _evaluate(memory, strategy_ref, protocol_ref, result_refs, policy_ref):
     verified = bool(results) and all(row["evaluator_evidence"][arm]["status"] == "verified_restricted_csharp"
         for row in results for arm in ("B", "B+"))
     blockers = [] if verified else ["independent_strategy_evaluator_adapter_not_registered_or_evidence_missing"]
+    if any(row["native_evidence"][arm]["status"] != "native_execution_verified" for row in results for arm in ("B", "B+")):
+        blockers.append("native_execution_evidence_missing")
+    if any(row["native_evidence"][arm].get("freeze_binding", {}).get("status") != "protocol_bound_before_model"
+            for row in results for arm in ("B", "B+")):
+        blockers.append("protocol_preregistration_binding_unproven")
+    if any(row["native_evidence"][arm].get("planned_source_binding") != "source_and_request_verified"
+            for row in results for arm in ("B", "B+")):
+        blockers.append("planned_source_binding_unproven")
     if missing:
         blockers.append("planned_pair_results_missing")
     if any(row["costs"][arm]["unknown_fields"] for row in results for arm in ("B", "B+")):
@@ -219,7 +237,8 @@ def _evaluate(memory, strategy_ref, protocol_ref, result_refs, policy_ref):
     if cost_policy != {"mode": "report_only"}:
         blockers.append("explicit_cost_adoption_policy_required")
     target = "trial"
-    if verified and regressions:
+    # 为什么要有它：停用的因果判断也须有完整执行和比较依据，不能让手写动作记录借真实评分自动停用经验。
+    if not blockers and regressions:
         retirement = policy.get("retire_after_regressions")
         target = "retired" if type(retirement) is int and retirement > 0 and regressions >= retirement else "disabled"
     elif (not blockers and policy["allow_limited_activation"] and unseen >= policy["minimum_unseen_pairs"]

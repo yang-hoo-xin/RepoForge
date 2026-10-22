@@ -47,7 +47,7 @@ def approve(prepared):
     return {**prepared["human_semantic_decision_binding"], "decision": "approve", "reviewer_identity": "CONTROLLED TEST HUMAN"}
 
 
-def test_exact_approval_apply_build_and_replay_preserve_original(delivery_case):
+def test_exact_approval_apply_build_and_replay_preserve_original(delivery_case, capsys):
     store, checkpoint_ref, _isolated, prepared = delivery_case
     checkpoint = load_v2_artifact(store, checkpoint_ref)
     original = Path(checkpoint["source_root"]) / "Library/Arithmetic.cs"
@@ -100,6 +100,50 @@ def test_exact_approval_apply_build_and_replay_preserve_original(delivery_case):
         build_v2_delivery(artifact_store_root=store, apply_ref=applied["receipt_ref"], operation_id="build-2", allow_build=True)
     recovery = delivery_recovery_context(artifact_store_root=store, receipt_ref=built["receipt_ref"])
     assert recovery["requires_fresh_source_views"] is True and recovery["approval_inherited"] is False
+    native_ref = checkpoint["handoff"]["execution_ref"]
+    observed = delivery_module.read_completed_v2_delivery(artifact_store_root=store,
+        receipt_ref=built["receipt_ref"], native_execution_ref=native_ref)
+    assert observed["status"] == "delivered" and observed["candidate_source_id"] == built["candidate_source_id"]
+    assert observed["verification"]["native_verification_ref"] == built["verification_ref"]
+    with pytest.raises(ValueError, match="DELIVERY_NATIVE_EXECUTION_CHANGED"):
+        delivery_module.read_completed_v2_delivery(artifact_store_root=store,
+            receipt_ref=built["receipt_ref"], native_execution_ref={**native_ref, "sha256": "0" * 64})
+    with pytest.raises(ValueError, match="COMPLETED_DELIVERY_REQUIRED"):
+        delivery_module.read_completed_v2_delivery(artifact_store_root=store,
+            receipt_ref=applied["receipt_ref"], native_execution_ref=native_ref)
+    _export_completed_delivery(store, checkpoint, built, capsys)
+
+
+def _export_completed_delivery(store, checkpoint, built, capsys):
+    from src.mod_agent import cli
+    from src.mod_agent.domain.full_project_compilation import _save
+    from src.mod_agent.model_qualification import read_bound_json
+
+    task = TaskAgentV2State(store, checkpoint["handoff"]["task_contract_ref"])
+    baseline = task.load(task.contract["baseline_manifest_ref"])
+    source = _save(store.parent / "diagnostic-source.json", {"task_id": "delivery-fixture", "task_family": "controlled-arithmetic",
+        "source_version": "controlled-v1", "source_files_sha256": canonical_hash({p: row["sha256"] for p, row in baseline["files"].items()}),
+        "original_request_sha256": canonical_hash(task.load(task.contract["original_request_ref"])["original_request"])})
+    exposure = _save(store.parent / "diagnostic-exposure.json", {"task_id": "delivery-fixture", "source_ref": source,
+        "attempt": 1, "exposure": "exposed"})
+    protocol = _save(store.parent / "diagnostic-protocol.json", {"schema_version": "strategy_trial_protocol_v1",
+        "batch_complete": True, "snapshot_ref": None, "invariants": {}, "invariants_sha256": canonical_hash({}),
+        "task_families": ["controlled-arithmetic"], "planned_pairs": [{"task_id": "delivery-fixture",
+            "task_family": "controlled-arithmetic", "attempt": 1, "source_ref": source, "exposure_ref": exposure,
+            "current_context": {}}]})
+    native_ref = checkpoint["handoff"]["execution_ref"]
+    native = read_bound_json(native_ref)
+    call_id = next(row["call_id"] for row in native["completed_tool_records"] if row["name"] == "finish")
+    code = cli.main(["export-strategy-execution", "--execution-record", native_ref["path"], "--call-id", call_id,
+        "--output-root", str(store.parent / "strategy-delivery-export"), "--protocol-record", protocol["path"],
+        "--task-id", "delivery-fixture", "--attempt", "1", "--arm", "B", "--delivery-receipt", built["receipt_ref"]])
+    result = json.loads(capsys.readouterr().out)
+    assert code == 0, result
+    exported = read_bound_json(result["execution_ref"])
+    delivery = read_bound_json(exported["delivery_ref"])
+    assert delivery["status"] == "delivered" and delivery["candidate_source_id"] == built["candidate_source_id"]
+    assert read_bound_json(delivery["verification_ref"])["native_verification_ref"] == built["verification_ref"]
+    assert exported["freeze_binding"]["status"] == "freeze_binding_unproven"
 
 
 def test_public_build_failure_binds_applied_preimages_and_budget(delivery_case, monkeypatch):

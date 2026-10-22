@@ -132,6 +132,8 @@ uv run --frozen python -m scripts.run_v0_1_demo --output artifacts/v0_1_demo
 
 v2 中断任务使用 `mod-agent run-request --resume-task-agent <原检查点引用> --artifact-store-root <原工件目录>`，沿用原配置、权限与累计资源，不附加新任务参数。候选接管后的 `awaiting_delivery` 仍非交付：使用输出的 `v2_delivery_checkpoint_ref`，经 `apply-patch --v2-delivery-checkpoint <引用> --v2-delivery-action prepare|apply|build` 分别准备精确审批、执行 Apply 和构建；各阶段使用返回的当前引用及适用的批准参数，不能混用 v1 恢复参数。完整调用示例见[正常 CLI 回归](tests/unit/test_task_agent_v2_product_entry.py)。为什么要有它：恢复必须继续同一任务，交付必须绑定实际候选和批准，不能靠重新运行领取新预算或沿用旧检查。
 
+经验对照可在现有经验配置中提供可选 `trial_binding_ref`，绑定已冻结协议、任务、尝试及 B／B+ 组别；宿主会在首次模型调用前保存这一关联。已结束运行可通过 `mod-agent export-strategy-execution --execution-record <原execution.json> --call-id <实际调用ID> --output-root <新目录>` 导出供评测核验的原生证据，预登记信息从原配置派生。缺少前置关联的历史运行只能作为诊断材料，仍保留未知成本；该命令不运行模型或评测题。为什么要有它：模型真正看到了什么、执行了什么以及比较条件是否预先固定，需要从正常入口的原件判断。
+
 ### Docker 服务演示
 
 环境：Docker Engine / Docker Desktop 与 Compose。将 [`.env.example`](deployment/service/.env.example) 复制为 `deployment/service/.env`，设置两个不同的随机值：`SERVICE_API_TOKEN` 和 `SERVICE_REDIS_PASSWORD`；保留已有配置，凭据不提交 Git。为什么要有它：接口和队列使用独立凭据，公开仓库只保存可共享的模板。
