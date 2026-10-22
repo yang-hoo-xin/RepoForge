@@ -3048,6 +3048,52 @@ def test_model_cannot_downgrade_pre_patch_obligation_role_or_gate() -> None:
     assert materialized["requirements"][3]["required_before_patch"] is False
 
 
+def test_projection_correction_receives_precise_requirement_role_diagnostic() -> None:
+    feature = _feature_data()
+    invalid = _model_projection()
+    invalid["requirements"][1]["role"] = "preservation"
+    correction_payloads = []
+
+    def complete_json(role, payload, _schema):
+        if role == "requirement_projection":
+            return deepcopy(invalid)
+        correction_payloads.append(deepcopy(payload))
+        return _model_projection()
+
+    provider = StructuredModelRequirementCoverageProvider(complete_json)
+    corrected = provider.project(
+        feature_data=feature,
+        request=str(feature["user_request"]),
+    )
+
+    assert corrected == _deterministically_completed_model_projection()
+    diagnostic = correction_payloads[0]["rejection_diagnostic"]
+    assert diagnostic == {
+        "error_code": "REQUIREMENT_COVERAGE_REQUIREMENT_INVALID",
+        "phase": "semantic_materialization",
+        "failure_category": "requirement_role_not_allowed",
+        "json_path": "$.requirements[1].role",
+        "requirement_item_index": 1,
+        "observed_role": "preservation",
+        "role_conflicts": [{
+            "input_obligation_index": 3,
+            "input_obligation_json_path": (
+                "$.requirements[1].input_obligation_indexes[0]"
+            ),
+            "allowed_roles": ["pre_patch_evidence"],
+        }],
+        "allowed_boundary": {
+            "role_must_be_allowed_by_every_referenced_obligation": True,
+            "split_requirement_when_no_single_role_is_shared": True,
+        },
+        "bounded_correction_attempts_remaining": 1,
+    }
+    assert "use a role from that entry's allowed_roles" in " ".join(
+        correction_payloads[0]["rules"]
+    )
+    assert "split the requirement" in correction_payloads[0]["instruction"]
+
+
 def test_one_input_obligation_can_be_carried_by_multiple_requirements() -> None:
     feature = _feature_data()
     projection = deepcopy(_projection())

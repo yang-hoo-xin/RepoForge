@@ -868,15 +868,44 @@ def _normalized_projection(
                 or not 1 <= index <= len(input_obligations)
                 for index in obligation_indexes
             )
-            or any(
-                role not in input_obligations[int(index) - 1]["allowed_roles"]
-                for index in obligation_indexes
-            )
             or not isinstance(query_leads, list)
             or not 1 <= len(query_leads) <= 4
             or any(not isinstance(value, str) or not value.strip() for value in query_leads)
         ):
             raise ValueError("REQUIREMENT_COVERAGE_REQUIREMENT_INVALID")
+        role_conflicts = [
+            {
+                "input_obligation_index": int(index),
+                "input_obligation_json_path": (
+                    f"$.requirements[{requirement_item_index}]"
+                    ".input_obligation_indexes"
+                    f"[{input_obligation_item_index}]"
+                ),
+                "allowed_roles": list(
+                    input_obligations[int(index) - 1]["allowed_roles"]
+                ),
+            }
+            for input_obligation_item_index, index in enumerate(
+                obligation_indexes
+            )
+            if role not in input_obligations[int(index) - 1]["allowed_roles"]
+        ]
+        if role_conflicts:
+            raise RequirementCoverageProjectionError(
+                "REQUIREMENT_COVERAGE_REQUIREMENT_INVALID",
+                {
+                    "phase": "semantic_materialization",
+                    "failure_category": "requirement_role_not_allowed",
+                    "json_path": f"$.requirements[{requirement_item_index}].role",
+                    "requirement_item_index": requirement_item_index,
+                    "observed_role": role,
+                    "role_conflicts": role_conflicts,
+                    "allowed_boundary": {
+                        "role_must_be_allowed_by_every_referenced_obligation": True,
+                        "split_requirement_when_no_single_role_is_shared": True,
+                    },
+                },
+            )
         normalized_query_leads = list(
             dict.fromkeys(value.strip() for value in query_leads)
         )

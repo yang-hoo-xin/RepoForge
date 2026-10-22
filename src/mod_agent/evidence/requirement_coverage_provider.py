@@ -2383,6 +2383,15 @@ def _projection_correction_instruction(
             "selected direction to the returned complete projection and preserve "
             "fields unrelated to those paths."
         )
+    if rejection_diagnostic.get("failure_category") == "requirement_role_not_allowed":
+        return (
+            f"{instruction} For every entry in rejection_diagnostic.role_conflicts, "
+            "change the containing requirement role to one of that obligation's "
+            "allowed_roles. A requirement role must be allowed by every obligation "
+            "index it references; split the requirement when those obligations have "
+            "no shared allowed role. Preserve the original obligation indexes and "
+            "semantics."
+        )
     return instruction
 
 
@@ -2429,6 +2438,21 @@ def _projection_correction_rules(
                     "Apply every remove_json_paths entry from the selected direction "
                     "to the returned complete projection and preserve fields "
                     "unrelated to those paths."
+                ),
+            ]
+        )
+    elif rejection_diagnostic.get("failure_category") == "requirement_role_not_allowed":
+        rules.extend(
+            [
+                (
+                    "For every rejection_diagnostic.role_conflicts entry, use a "
+                    "role from that entry's allowed_roles. The selected role must "
+                    "be allowed by every input_obligation_index in that requirement."
+                ),
+                (
+                    "Split a requirement when its referenced obligations do not "
+                    "share one allowed role; retain every original obligation index "
+                    "exactly once or in another explicitly legal accounting location."
                 ),
             ]
         )
