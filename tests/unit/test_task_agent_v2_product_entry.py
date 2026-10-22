@@ -163,9 +163,12 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
             name, args = "candidate_submit", {"parent_revision_ref": memory["parent"], "edits": [{
                 "binding_id": memory["unused_binding"], "source_view_ref": memory["Unused.cs"]["source_view_ref"],
                 "before_text": "Marker = 0", "after_text": "Marker = 1", "rationale": "Intentionally wrong controlled hypothesis"}]}
+            del args["edits"][0]["rationale"]
             if exercise_correction and len(requests) == 4:
                 del args["edits"][0]["before_text"]
         elif turn in {5, 12}:
+            if turn == 5:
+                assert last["edit_explanations"] == [{"binding_id": memory["unused_binding"], "status": "not_expressed", "rationale": None}]
             memory["parent"] = last["candidate_ref"]
             name, args = "candidate_check", {"candidate_ref": memory["parent"]}
         elif turn == 11:

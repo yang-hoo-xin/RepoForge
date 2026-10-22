@@ -221,7 +221,10 @@ class TaskAgentSessionV2:
                 model_origin={key: deepcopy(origin[key]) for key in ("call_id", "response_ref", "arguments_ref")})
             self.submission_origins[result["candidate_ref"]] = origin
             self.current_check = None
-            return result
+            # 为什么要有它：解释缺失应保留为未表达，不能据此阻断已满足权限、版本及精确前像的编辑。
+            return {**result, "edit_explanations": [{"binding_id": item["binding_id"],
+                "status": "expressed" if "rationale" in item else "not_expressed",
+                "rationale": item.get("rationale")} for item in args["edits"]]}
         if name == "candidate_check":
             return self._check(args["candidate_ref"])
         return {"candidate_ref": args["candidate_ref"], "check_ref": args["check_ref"]}
@@ -284,7 +287,7 @@ class TaskAgentSessionV2:
         edit = {"type": "object", "additionalProperties": False,
             "properties": {"binding_id": binding_schema, "source_view_ref": text, "before_text": text,
                            "after_text": {"type": "string"}, "rationale": text},
-            "required": ["binding_id", "source_view_ref", "before_text", "after_text", "rationale"]}
+            "required": ["binding_id", "source_view_ref", "before_text", "after_text"]}
         specs: list[tuple[str, str, dict[str, Any], list[str], str]] = [
             ("source_read", "source_read", {"parent_revision_ref": text, "path": text, "root_id": text},
                 ["parent_revision_ref", "path"], "Read an authorized file at baseline or a named candidate, returning a version-bound source_view_ref."),
@@ -304,7 +307,8 @@ class TaskAgentSessionV2:
                 "binding_id must be returned by binding_add; a snapshot or source_view reference is not a binding ID. "
                 f"Current registry: {self.state.registry_ref}. Valid binding IDs: {sorted(bindings)}. "
                 + ("The registry is empty: register an authorized file before submitting. " if not bindings else "")
-                + "Same schema for first and later edits; all previous edits remain unless explicitly reversed."),
+                + "Same schema for first and later edits; all previous edits remain unless explicitly reversed. "
+                "rationale is optional explanatory evidence; omission is recorded as not_expressed without inventing a reason."),
             ("candidate_check", "candidate_check", {"candidate_ref": text}, ["candidate_ref"],
                 "Execute full frozen public acceptance against this exact current candidate. Return actual failure observations."),
             ("finish", "finish", {"candidate_ref": text, "check_ref": text}, ["candidate_ref", "check_ref"],

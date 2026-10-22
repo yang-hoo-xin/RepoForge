@@ -178,3 +178,29 @@ def test_v2_correction_uses_current_schema_without_legacy_patch_format(session):
     assert "candidate_submit schema" in correction["message"]
     assert "patch_json" not in correction["message"] and "context_id" not in correction["message"]
     assert any("before_text" in error for error in correction["argument_errors"])
+
+
+def test_missing_edit_explanation_is_recorded_without_blocking_authorized_code_change(session):
+    state = session.state
+    view = state.read_source("baseline", "A.cs")
+    binding = state.add_binding(state.registry_ref, view["source_view_ref"], "A.cs")
+    arguments = {"parent_revision_ref": state.current_revision_ref, "edits": [{"binding_id": binding["binding_id"],
+        "source_view_ref": view["source_view_ref"], "before_text": "a = 1;", "after_text": "a = 3;"}]}
+    replies = [response("candidate_submit", arguments, "unexplained-edit"),
+        AgentTurnResponse("ollama_chat_local", "local", "", (), stop_reason="refusal", provider_state={})]
+    requests = []
+
+    def complete(request):
+        requests.append(request)
+        return replies.pop(0)
+
+    result = session.run(SimpleNamespace(complete_turn=complete), session.observe_dispatch_event)
+    assert not result.tool_argument_correction_used and not result.unknown_effects
+    assert result.call_records["unexplained-edit"]["status"] == "completed"
+    output = requests[1].tool_results[-1].output["value"]
+    assert output["edit_explanations"] == [{"binding_id": binding["binding_id"], "status": "not_expressed", "rationale": None}]
+    assert state.materialize(output["candidate_ref"])["A.cs"] == "a = 3;\n"
+    assert session.actual_calls[-1]["arguments"] == arguments
+    assert "rationale" not in session.actual_calls[-1]["arguments"]["edits"][0]
+    with pytest.raises(TaskAgentV2StateError, match="stale_parent_revision"):
+        action(session, "candidate_submit").prepare(arguments)
