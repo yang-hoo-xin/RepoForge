@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import stat
 import string
@@ -27,6 +28,7 @@ from src.mod_agent.model_qualification import canonical_hash, read_bound_json
 
 _IGNORED = {".git", ".idea", "bin", "obj", ".vs", "TestResults"}
 _VERSION = "csharp_repository_profile_v1"
+_RESERVED_BUILD_PROPERTIES = {"BuildProjectReferences", "RepositoryCompileInputs", "UseSharedCompilation"}
 
 
 class _RepositoryNuGetProfile(nuget.NuGetIsolatedBuildProfile):
@@ -86,9 +88,10 @@ class CSharpRepositoryProfile:
         self._reference = deepcopy(reference)
         self._data = read_bound_json(self._reference)
         data = self._data
-        _require(set(data) == {"profile_version", "dotnet_ref", "project_path", "test_project_path",
-                              "nuget_config_path", "configuration", "allowed_edit_paths",
-                              "expected_artifacts", "test_command", "test_report", "timeout_seconds"},
+        required = {"profile_version", "dotnet_ref", "project_path", "test_project_path",
+                    "nuget_config_path", "configuration", "allowed_edit_paths",
+                    "expected_artifacts", "test_command", "test_report", "timeout_seconds"}
+        _require(required <= set(data) <= required | {"build_properties"},
                  "PROFILE_FIELDS_INVALID")
         _require(data["profile_version"] == _VERSION, "PROFILE_VERSION_INVALID")
         _require(_ref(data["dotnet_ref"]["path"]) == data["dotnet_ref"], "DOTNET_CHANGED")
@@ -100,6 +103,13 @@ class CSharpRepositoryProfile:
                  and PurePosixPath(data["test_project_path"]).parent.as_posix() != ".", "SEPARATE_TEST_PROJECT_REQUIRED")
         _require(type(data["configuration"]) is str and data["configuration"].isalnum(), "CONFIGURATION_INVALID")
         _require(type(data["timeout_seconds"]) is int and data["timeout_seconds"] > 0, "TIMEOUT_INVALID")
+        properties = data.get("build_properties", {})
+        _require(isinstance(properties, dict) and all(
+            type(key) is str and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,127}", key)
+            and key not in _RESERVED_BUILD_PROPERTIES
+            and type(value) is str and 0 < len(value) <= 512
+            and not any(character in value for character in "\r\n\0")
+            for key, value in properties.items()), "BUILD_PROPERTIES_INVALID")
         for key in ("allowed_edit_paths", "expected_artifacts"):
             values = data[key]
             _require(isinstance(values, list) and values and len(set(values)) == len(values), key.upper() + "_INVALID")
@@ -192,6 +202,10 @@ class CSharpRepositoryProfile:
         executable = self._data["dotnet_ref"]["path"]
         project = str(_within(source, self._data["project_path"]))
         packages, appdata = run / "p", run / "a"
+        # Scope: immutable host-selected MSBuild properties, never model-provided arguments.
+        # 为什么要有它：正常仓库可能需要固定版本计算或其他环境属性；所有构建阶段必须使用同一显式合同，不能靠外层环境暗传。
+        build_properties = tuple(f"-p:{key}={value}" for key, value in sorted(
+            self._data.get("build_properties", {}).items()))
         return replace(_RepositoryNuGetProfile(**vars(base)), profile_id="csharp_repository_explicit_build_test",
                        working_directory=source,
                        packages_path=packages, http_cache_path=run / "h", scratch_path=run / "s",
@@ -200,7 +214,7 @@ class CSharpRepositoryProfile:
                        additional_user_config_path=appdata / "NuGet" / "config",
                        restore_command=(executable, "restore", project, "--configfile", str(config), "--packages", str(packages)),
                        build_command=(executable, "build", project, "--no-restore", "--configuration",
-                                      self._data["configuration"], "-p:UseSharedCompilation=false"))
+                                      self._data["configuration"], "-p:UseSharedCompilation=false", *build_properties))
 
     def task_work_root(self, task_root):
         """Short physical workspace, derived only from the owning task and profile."""
@@ -369,7 +383,9 @@ class CSharpRepositoryBackend:
                                           else part for part in profile.restore_command),
                     build_command=(data["dotnet_ref"]["path"], "build", str(_within(source, data["test_project_path"])),
                                    "--no-restore", "--configuration", data["configuration"], "-m:1",
-                                   "-p:BuildProjectReferences=false", "-p:UseSharedCompilation=false"))
+                                   "-p:BuildProjectReferences=false", "-p:UseSharedCompilation=false",
+                                   *(f"-p:{key}={value}" for key, value in sorted(
+                                       data.get("build_properties", {}).items()))))
                 test_build = _run_build(tests_profile)
                 test_execution["build"] = test_build.to_dict()
                 (run / "tests-build.stdout.txt").write_text(test_build.stdout, encoding="utf-8")

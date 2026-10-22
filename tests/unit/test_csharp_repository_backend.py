@@ -18,7 +18,7 @@ def _write(path, text):
     path.write_text(text, encoding="utf-8")
 
 
-def _profile(tmp_path, *, real=False):
+def _profile(tmp_path, *, real=False, build_properties=None):
     source = tmp_path / "source"
     if real:
         selected = os.environ.get("REPOFORGE_DOTNET") or shutil.which("dotnet")
@@ -57,6 +57,8 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(new {
             "test_command": ["run", "--project", "{test_project}", "--configuration", "{configuration}", "--", "{report_path}"],
             "test_report": {"path": "assertions.json", "format": "json_assertions"},
             "timeout_seconds": 60}
+    if build_properties is not None:
+        data["build_properties"] = build_properties
     path = tmp_path / "repository-profile.json"
     _write(path, json.dumps(data))
     return owner.CSharpRepositoryProfile.load(path), source
@@ -128,7 +130,7 @@ def test_profile_rejects_unbound_or_unsafe_scope(tmp_path, field, value):
 
 
 def test_declared_sdk_and_project_used_for_restore_and_build(tmp_path):
-    profile, source = _profile(tmp_path)
+    profile, source = _profile(tmp_path, build_properties={"MinVerSkip": "true"})
     prepared = profile.create_nuget_profile(tmp_path / "baseline", source)
     assert prepared.restore_command[:3] == (profile.data["dotnet_ref"]["path"], "restore", str(source / "Library/Library.csproj"))
     assert prepared.build_command[:3] == (profile.data["dotnet_ref"]["path"], "build", str(source / "Library/Library.csproj"))
@@ -140,11 +142,12 @@ def test_declared_sdk_and_project_used_for_restore_and_build(tmp_path):
     assert prepared.environment["MSBUILDDISABLENODEREUSE"] == "1"
     assert prepared.environment["DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER"] == "1"
     assert "-p:UseSharedCompilation=false" in prepared.build_command
+    assert "-p:MinVerSkip=true" in prepared.build_command
     assert not (source / "Library/bin").exists()  # Profile creation performs no Build/test.
 
 
 def test_shared_build_and_test_result_is_real_object_and_reference_bound(tmp_path, monkeypatch):
-    profile, source = _profile(tmp_path)
+    profile, source = _profile(tmp_path, build_properties={"MinVerSkip": "true"})
     backend = _backend(tmp_path, profile, source)
     identity = backend.verification_identity()
     calls = _fake_execution(monkeypatch)
@@ -163,6 +166,7 @@ def test_shared_build_and_test_result_is_real_object_and_reference_bound(tmp_pat
         assert prepared.environment["MSBUILDDISABLENODEREUSE"] == "1"
         assert prepared.environment["DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER"] == "1"
         assert "-p:UseSharedCompilation=false" in prepared.build_command
+        assert "-p:MinVerSkip=true" in prepared.build_command
     saved = json.loads(Path(result["report_ref"]["path"]).read_text(encoding="utf-8"))
     returned = result["build_result"].to_artifact_payload()
     assert returned["artifact_verification"]["repository_validation_ref"] == result["report_ref"]
@@ -172,6 +176,20 @@ def test_shared_build_and_test_result_is_real_object_and_reference_bound(tmp_pat
     assert result["report_ref"] == _ref(result["report_ref"]["path"])
     assert backend.verification_identity() == identity
     assert _backend(tmp_path, profile, source).verification_identity() == identity
+
+
+@pytest.mark.parametrize("properties", [
+    {"UseSharedCompilation": "true"}, {"BuildProjectReferences": "true"},
+    {"bad;name": "true"}, {"MinVerSkip": "line\nbreak"}, [],
+])
+def test_profile_rejects_unsafe_or_reserved_build_properties(tmp_path, properties):
+    profile, _ = _profile(tmp_path)
+    data = profile.data
+    data["build_properties"] = properties
+    path = Path(profile.reference["path"])
+    _write(path, json.dumps(data))
+    with pytest.raises(ValueError, match="BUILD_PROPERTIES_INVALID"):
+        owner.CSharpRepositoryProfile.load(path)
 
 
 def test_verifier_identity_survives_exact_source_relocation_but_not_drift(tmp_path, monkeypatch):
