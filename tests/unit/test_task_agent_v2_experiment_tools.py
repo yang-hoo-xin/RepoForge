@@ -80,3 +80,32 @@ def test_normal_experiment_factory_connects_optional_sdk_runner_without_executin
     assert isinstance(experiments.probe_runner, RepositoryProbeRunner)
     assert experiments.probe_runner.backend is backend
     assert tools._experiments(session) is experiments
+
+
+@pytest.mark.parametrize("configured", [False, True])
+def test_actual_decision_request_reports_probe_configuration_without_claiming_qualification(state, tmp_path, monkeypatch, configured):
+    from src.libs.llm.agent_turn import AgentMessage, AgentTurnRequest
+    from src.mod_agent.domain.full_project_compilation import _save
+    from src.mod_agent.domain.repository_probe_runner import RepositoryProbeRunner
+    from src.mod_agent.task_agent_v2_execution import TaskAgentExecutionV2
+
+    data = {"profile_version": "csharp_repository_profile_v1"}
+    if configured:
+        data["probe_runner"] = {"kind": "docker_sdk_project_v1"}
+    profile_ref = _save(tmp_path / "profile.json", data)
+    worker_ref = _save(tmp_path / "worker.json", {"behavior_evaluator": {
+        "factory_name": "make_csharp_repository_evaluator", "kwargs": {"profile_ref": profile_ref}}})
+    monkeypatch.setattr(RepositoryProbeRunner, "_environment", lambda *_args: pytest.fail("Input facts must not execute qualification"))
+    owner = SimpleNamespace(worker_configuration_ref=worker_ref)
+    session = SimpleNamespace(state=state, current_check=None)
+    original = AgentTurnRequest(messages=(AgentMessage("user", "Investigate the public issue"),))
+    before = set(state.root.rglob("*"))
+    actual = TaskAgentExecutionV2.prepare_decision_request(owner, original, session)
+    facts = actual.messages[-1].content["current_task_state"]["experiment_capabilities"]
+    assert actual.messages[0] == original.messages[0]
+    assert facts["repository_profile_ref"] == profile_ref
+    assert facts["registered_tests"]["status"] == "configured"
+    assert facts["probe_submission"] == {"status": "available", "executes_code": False}
+    assert facts["probe_execution"]["status"] == ("qualification_required" if configured else "unavailable")
+    assert facts["probe_execution"]["runtime_qualification_verified"] is False
+    assert set(state.root.rglob("*")) == before

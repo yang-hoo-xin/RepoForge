@@ -124,6 +124,8 @@ class TaskAgentExecutionV2(TaskAgentExecution):
         return self._save("task-observation-" + uuid4().hex + ".json", value)
 
     def prepare_decision_request(self, request, session):
+        from src.mod_agent.task_agent_v2_experiment_tools import experiment_configuration_facts
+
         state = session.state
         registry = state.validate_registry(state.registry_ref)
         current_check = state.load(session.current_check) if session.current_check is not None else None
@@ -132,6 +134,7 @@ class TaskAgentExecutionV2(TaskAgentExecution):
             "valid_bindings": [{"binding_id": key, "path": item["canonical_path"]} for key, item in sorted(registry["bindings"].items())],
             "current_check_ref": session.current_check, "current_check_status": current_check["status"] if current_check else None,
             "technical_plan_ref": state.head["plan_ref"], "baseline_revision_ref": state.contract["baseline_manifest_ref"],
+            "experiment_capabilities": experiment_configuration_facts(self),
             "baseline_usage": "Historical source reference; editing must name current_revision_ref and a matching source_view_ref."}
         prepared = replace(request, messages=(*request.messages, AgentMessage("user", {"current_task_state": current})))
         return self._experience.prepare_decision_request(prepared, session) if getattr(self, "_experience", None) is not None else prepared

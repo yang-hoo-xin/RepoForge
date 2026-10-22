@@ -85,6 +85,11 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         assert "binding_add" in tools, "v2 must reach investigation without pre-model planning"
         context = next(json.loads(x["content"]) for x in payload["messages"]
             if x["role"] == "user" and '"task_agent_v2"' in x["content"])
+        capabilities = next(json.loads(x["content"])["current_task_state"]["experiment_capabilities"]
+            for x in reversed(payload["messages"]) if x["role"] == "user" and '"current_task_state"' in x["content"])
+        assert capabilities["registered_tests"]["status"] == "configured"
+        assert capabilities["probe_execution"]["status"] == "unavailable"
+        assert capabilities["probe_submission"]["executes_code"] is False
         tool_outputs = [json.loads(x["content"]) for x in payload["messages"] if x["role"] == "tool"]
         observed = [row.get("value", row) for row in tool_outputs]
         last = observed[-1] if observed else None

@@ -23,6 +23,38 @@ from src.mod_agent.task_agent_v2_experiments import (
 )
 
 
+def experiment_configuration_facts(owner):
+    """Expose configured choices without starting discovery or runner qualification.
+
+    为什么要有它：模型选择实验前应知道已确定的环境限制，配置存在仍不证明实际执行资格。
+    """
+    facts = {"scope": "configuration_only_not_runtime_qualification",
+        "probe_submission": {"status": "available", "executes_code": False},
+        "registered_tests": {"status": "configuration_unknown"},
+        "probe_execution": {"status": "configuration_unknown"}}
+    reference = getattr(owner, "worker_configuration_ref", None)
+    if reference is None:
+        return facts
+    worker = read_bound_json(reference)
+    evaluator = worker.get("behavior_evaluator")
+    if not isinstance(evaluator, dict) or evaluator.get("factory_name") != "make_csharp_repository_evaluator":
+        return facts
+    profile_ref = evaluator.get("kwargs", {}).get("profile_ref")
+    if profile_ref is None:
+        return facts
+    profile = read_bound_json(profile_ref)
+    if profile.get("profile_version") != "csharp_repository_profile_v1":
+        return facts
+    facts["repository_profile_ref"] = deepcopy(profile_ref)
+    facts["registered_tests"] = {"status": "configured", "requires_current_revision_catalog": True,
+        "grants_acceptance": False}
+    configured = profile.get("probe_runner") is not None
+    facts["probe_execution"] = {"status": "qualification_required" if configured else "unavailable",
+        "reason": "runner_configuration_requires_actual_qualification" if configured else "qualified_runner_not_configured",
+        "runtime_qualification_verified": False, "grants_acceptance": False}
+    return facts
+
+
 def _experiments(session):
     cached = getattr(session, "_experiments", None)
     if cached is None:
