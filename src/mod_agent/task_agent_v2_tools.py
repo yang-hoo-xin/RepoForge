@@ -146,7 +146,7 @@ class TaskAgentSessionV2:
     def _validate_binding_prerequisites(self, args):
         """Check actual authority before offering correction of a mistaken ID.
 
-        为什么要有它：缺少注册可以给出未执行反馈，但旧源码、旧父版本及越权不能降级成普通参数重试。
+        为什么要有它：合法历史读取可要求重新读取，实际编辑仍核当前前像；无效引用、旧父版本及越权不能借纠错绕过。
         """
         state = self.state
         parent = state._revision(args["parent_revision_ref"])
@@ -164,7 +164,22 @@ class TaskAgentSessionV2:
             if path not in state.contract["allowed_edit_paths"]:
                 raise TaskAgentV2StateError("edit_path_denied")
             binding = bindings.get(edit["binding_id"])
-            state._validate_view(view, parent, binding["canonical_path"] if binding else path)
+            selected_path = binding["canonical_path"] if binding else path
+            try:
+                state._validate_view(view, parent, selected_path)
+            except TaskAgentV2StateError as error:
+                previous_parent = view.get("parent_revision_ref")
+                if error.code != "stale_or_invalid_source_view" or not isinstance(previous_parent, str) or previous_parent == parent:
+                    raise
+                # 为什么要有它：只将经过真实历史源码核验的过期读取返回模型，不能替换引用、改写补丁或接受旧前像。
+                state._validate_view(view, previous_parent, selected_path)
+                raise TaskCandidateRevisionInputError((
+                    "source_view_ref belongs to a historical revision; no edit was executed.",
+                    "current_parent_revision_ref=" + parent,
+                    "Read this file at the current parent using source_read or candidate_read, then use its returned source_view_ref and exact before_text.",
+                    "path=" + selected_path,
+                    "This feedback grants no new authority or budget and does not refresh the reference automatically.",
+                )) from error
             if binding is None:
                 unknown.append(edit["binding_id"])
         if unknown:

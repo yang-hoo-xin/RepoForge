@@ -1,0 +1,71 @@
+{
+  "schema_version": "observed_task_result_v1",
+  "record_origin": "post_run_observation_of_retained_originals",
+  "implementation_commit": "cdc10b9a0b54f638c54ef708ad3113651362200b",
+  "run_id": "dsh_379b036c2fdd40c8a2c7c7fe18843ab6",
+  "started_ref": {
+    "path": "C:/tmp/rfext-polly-v2-b3/started.json",
+    "sha256": "85eac630222df5c13020091aaa7b751390a6bbf0bcc976cb73447669ddf0502c"
+  },
+  "execution_ref": {
+    "path": "C:/tmp/rfext-polly-v2-b3/runs/dsh_379b036c2fdd40c8a2c7c7fe18843ab6/a/task-agent-execution/execution.json",
+    "sha256": "cf17ea00244a31b24cf9ad731869f9f0a066e58105b8afad197ebdae606fc6db"
+  },
+  "loop_result_ref": {
+    "path": "C:/tmp/rfext-polly-v2-b3/runs/dsh_379b036c2fdd40c8a2c7c7fe18843ab6/a/task-agent-execution/loop-result.json",
+    "sha256": "b2f80c83010045d04478742e8d32c76d04e715d11a5fd42d15c53789db5ebbce"
+  },
+  "technical_status": "blocked",
+  "termination_code": "TASK_AGENT_BATCH_NOT_ADMITTED",
+  "termination_reason": "stale_or_invalid_source_view",
+  "latest_submission_parent_was_current": true,
+  "latest_submission_view_was_historical": true,
+  "accepted_candidates": 1,
+  "candidate_compilation_passed": false,
+  "public_business_tests_executed": 0,
+  "independent_business_evaluation": "not_executed",
+  "whole_task_delivered": false,
+  "actual_model_decisions": [
+    "searched_and_read_source",
+    "read_public_reproduction",
+    "submitted_probe_and_requested_execution",
+    "continued_after_probe_capability_unavailable",
+    "registered_authorized_file_target",
+    "submitted_candidate",
+    "requested_full_public_check",
+    "recognized_variable_scope_error_from_actual_compiler_feedback",
+    "revised_technical_plan",
+    "proposed_second_patch_with_current_parent_but_historical_source_view"
+  ],
+  "probe_executed": false,
+  "outer_supplied_solution": false,
+  "scripted_actions": false,
+  "model_call_reservations_including_learning": 14,
+  "known_provider_responses": 13,
+  "known_usage": {
+    "input_tokens": 255982,
+    "output_tokens": 3567,
+    "total_tokens": 259549,
+    "cached_input_tokens_included_in_input": 186129
+  },
+  "learning": {
+    "episode_created": true,
+    "dispatch_recorded": true,
+    "response_retained": false,
+    "result": "unknown_after_interruption",
+    "unknown_usage_attempts": 1,
+    "strategy_generated": "unproven",
+    "retry_started": false
+  },
+  "outer_runner_result_json": "missing_after_interruption",
+  "outer_process_exit_code": null,
+  "outer_process_termination_cause": "unknown",
+  "original_artifacts_rewritten": false,
+  "followup": {
+    "saved_last_request_replayed_read_only": true,
+    "replay_result": "historical_view_rejected_with_bounded_model_correction",
+    "original_task_head_unchanged": true,
+    "new_model_calls": 0,
+    "new_same_task_run_started": false
+  }
+}

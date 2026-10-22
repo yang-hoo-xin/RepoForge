@@ -74,7 +74,7 @@ def test_read_authority_rejection_is_hard_and_known(session, args, code):
     assert not any(event["event"] == "tool_dispatch_started" for event in result.events)
 
 
-def test_only_exact_preimage_and_no_change_errors_are_correctable(session):
+def test_exact_preimage_and_valid_historical_read_errors_are_correctable(session):
     state = session.state
     view = state.read_source("baseline", "A.cs")
     binding = state.add_binding(state.registry_ref, view["source_view_ref"], "A.cs")
@@ -92,8 +92,9 @@ def test_only_exact_preimage_and_no_change_errors_are_correctable(session):
     state.submit("baseline", [edit])
     with pytest.raises(TaskAgentV2StateError, match="stale_parent_revision"):
         submit.prepare({"parent_revision_ref": "baseline", "edits": [edit]})
-    with pytest.raises(TaskAgentV2StateError, match="stale_or_invalid_source_view"):
+    with pytest.raises(TaskCandidateRevisionInputError) as error:
         submit.prepare({"parent_revision_ref": state.current_revision_ref, "edits": [edit]})
+    assert "historical revision" in str(error.value.argument_errors)
 
 
 @pytest.mark.parametrize("change", [{"provider": "different"}, {"stop_reason": "refusal"}, {"stop_reason": "length"}])

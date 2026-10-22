@@ -23,7 +23,7 @@ from tests.unit.test_csharp_repository_product_entry import (
 @pytest.mark.parametrize("real_sdk", [False, True], ids=["controlled-build", "real-sdk"])
 def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_workspace, monkeypatch, capsys, real_sdk,
                                                                  exercise_experiments=False, exercise_discovery=False,
-                                                                 exercise_correction=False):
+                                                                 exercise_correction=False, exercise_stale_view=False):
     short_workspace = repository_workspace
     if real_sdk and os.environ.get("REPOFORGE_REAL_REPOSITORY_CLI_INTEGRATION") != "1":
         pytest.skip("Explicit SDK integration; decisions remain scripted.")
@@ -91,6 +91,15 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
             assert last["selection_available"] is False
             assert receipt["observations"]["tests_executed"] == 1
             assert last["grants_acceptance"] is False
+        if exercise_stale_view and len(requests) == 12:
+            assert last["status"] == "rejected_not_executed"
+            assert "historical revision" in str(last["argument_errors"])
+            assert memory["parent"] in str(last["argument_errors"])
+            return httpx.Response(200, request=request, json={"model": model,
+                "message": {"role": "assistant", "content": "", "tool_calls": [{"function": {
+                    "name": "candidate_read", "arguments": {"parent_revision_ref": memory["parent"],
+                        "path": "Library/Unused.cs"}}}]}, "done": True,
+                "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
         if exercise_experiments and len(requests) <= 3:
             if len(requests) == 1:
                 name, args = "probe_submit", {"source_revision_ref": context["parent_revision_ref"],
@@ -110,7 +119,8 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                     {"function": {"name": name, "arguments": args}}]}, "done": True,
                 "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
         turn = (len(requests) - (3 if exercise_experiments else 0) - int(exercise_discovery)
-                - int(exercise_correction and len(requests) > 4))
+                - int(exercise_correction and len(requests) > 4)
+                - (2 if exercise_stale_view and len(requests) > 12 else 0))
         if turn == 1:
             memory.update(parent=context["parent_revision_ref"], registry=context["binding_registry_ref"])
             name, args = "plan_update", {"plan": {"hypotheses": ["Investigate marker state"], "intended_targets": ["Library/Unused.cs"]}}
@@ -135,6 +145,7 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                 assert current["binding_registry_ref"] == memory["registry"]
             else:
                 memory.update(registry=last["registry_ref"], unused_binding=last["binding_id"])
+                memory["original_unused_view"] = memory["Unused.cs"]["source_view_ref"]
             name, args = "candidate_submit", {"parent_revision_ref": memory["parent"], "edits": [{
                 "binding_id": memory["unused_binding"], "source_view_ref": memory["Unused.cs"]["source_view_ref"],
                 "before_text": "Marker = 0", "after_text": "Marker = 1", "rationale": "Intentionally wrong controlled hypothesis"}]}
@@ -152,6 +163,8 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                  "before_text": "=> value;", "after_text": "=> value * Factor.Multiplier;", "rationale": "Use multiplier"},
                 {"binding_id": memory["Factor.cs_binding"], "source_view_ref": memory["Factor.cs"]["source_view_ref"],
                  "before_text": "Multiplier = 1", "after_text": "Multiplier = 2", "rationale": "Correct multiplier"}]}
+            if exercise_stale_view and len(requests) == 11:
+                args["edits"][0]["source_view_ref"] = memory["original_unused_view"]
         else:
             assert turn == 13 and last["status"] == "passed"
             name, args = "finish", {"candidate_ref": memory["parent"], "check_ref": last["check_ref"]}
@@ -181,9 +194,12 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
     assert code == 0 and pending["status"] == "awaiting_delivery", {
         "result_file": str(short_workspace / "v2-entry-result.json"), "status": pending.get("status"),
         "reason": pending.get("reason"), "outcome": pending.get("task_agent_outcome")}
-    assert len(requests) == 13 + (3 if exercise_experiments else 0) + int(exercise_discovery) + int(exercise_correction)
+    assert len(requests) == (13 + (3 if exercise_experiments else 0) + int(exercise_discovery)
+                             + int(exercise_correction) + (2 if exercise_stale_view else 0))
     if exercise_correction:
         assert pending["model_call_budget"]["consumed"] == 14
+    if exercise_stale_view:
+        assert pending["model_call_budget"]["consumed"] == 15
     assert {p.name: p.read_bytes() for p in (source / "Library").glob("*.cs")} == baseline
     root = Path(pending["run_root"])
     assert not (root / "a/features" / pending["feature_id"] / "implementation_plan.json").exists()
@@ -267,3 +283,8 @@ def test_normal_cli_discovery_before_edit_preserves_actual_failed_execution(repo
 def test_normal_cli_correctable_missing_preimage_continues_same_task_and_budget(repository_workspace, monkeypatch, capsys):
     test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
         repository_workspace, monkeypatch, capsys, False, exercise_correction=True)
+
+
+def test_normal_cli_historical_view_requires_refresh_before_revision(repository_workspace, monkeypatch, capsys):
+    test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
+        repository_workspace, monkeypatch, capsys, False, exercise_stale_view=True)
