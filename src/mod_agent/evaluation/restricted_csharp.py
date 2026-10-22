@@ -150,7 +150,9 @@ def _verify_inspect(document, *, token, entrypoint, command, mounts, runtime):
         raise ValueError("RESTRICTED_CSHARP_INSPECT_POLICY_MISMATCH")
 
 
-def _attach(arguments, *, stdin, timeout, stop):
+def _attach(arguments, *, stdin, timeout, stop, output_limit=OUTPUT_LIMIT):
+    if type(output_limit) is not int or not 0 < output_limit <= 134_217_728:
+        raise ValueError("RESTRICTED_CSHARP_OUTPUT_LIMIT_INVALID")
     process = subprocess.Popen(arguments, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE)
     buffers = {"stdout": bytearray(), "stderr": bytearray()}
@@ -158,7 +160,7 @@ def _attach(arguments, *, stdin, timeout, stop):
 
     def collect(name, stream):
         while chunk := stream.read(8192):
-            remaining = OUTPUT_LIMIT - len(buffers[name])
+            remaining = output_limit - len(buffers[name])
             buffers[name].extend(chunk[:max(remaining, 0)])
             if len(chunk) > remaining:
                 excess.set()

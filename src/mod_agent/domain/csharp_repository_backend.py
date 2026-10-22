@@ -91,8 +91,11 @@ class CSharpRepositoryProfile:
         required = {"profile_version", "dotnet_ref", "project_path", "test_project_path",
                     "nuget_config_path", "configuration", "allowed_edit_paths",
                     "expected_artifacts", "test_command", "test_report", "timeout_seconds"}
-        _require(required <= set(data) <= required | {"build_properties"},
+        _require(required <= set(data) <= required | {"build_properties", "probe_runner"},
                  "PROFILE_FIELDS_INVALID")
+        if "probe_runner" in data:
+            from src.mod_agent.domain.repository_probe_runner import validate_probe_runner_config
+            validate_probe_runner_config(data["probe_runner"])
         _require(data["profile_version"] == _VERSION, "PROFILE_VERSION_INVALID")
         _require(_ref(data["dotnet_ref"]["path"]) == data["dotnet_ref"], "DOTNET_CHANGED")
         _require(Path(data["dotnet_ref"]["path"]).name.lower() in {"dotnet", "dotnet.exe"}, "DOTNET_REQUIRED")

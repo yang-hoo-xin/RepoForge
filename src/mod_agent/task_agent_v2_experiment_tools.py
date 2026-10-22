@@ -28,7 +28,12 @@ def _experiments(session):
     if cached is None:
         worker = read_bound_json(session.owner.worker_configuration_ref)
         backend = CSharpRepositoryBackend(**worker["behavior_evaluator"]["kwargs"])
-        cached = TaskAgentExperiments(state=session.state, test_runner=CSharpRegisteredTestRunner(backend))
+        probe_runner = None
+        if backend.profile.data.get("probe_runner") is not None:
+            from src.mod_agent.domain.repository_probe_runner import RepositoryProbeRunner
+            probe_runner = RepositoryProbeRunner(state=session.state, backend=backend)
+        cached = TaskAgentExperiments(state=session.state, test_runner=CSharpRegisteredTestRunner(backend),
+            probe_runner=probe_runner)
         session._experiments = cached
     return cached
 

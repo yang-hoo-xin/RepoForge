@@ -63,3 +63,20 @@ def test_old_revision_failure_does_not_invalidate_current_candidate(state):
     session = SimpleNamespace(state=state, current_check="current-passed-check")
     _invalidate_check(session, "baseline", {"executed": True, "status": "failed", "result_ref": "old-observation"})
     assert session.current_check == "current-passed-check"
+
+
+def test_normal_experiment_factory_connects_optional_sdk_runner_without_executing_it(state, monkeypatch):
+    from src.mod_agent import task_agent_v2_experiment_tools as tools
+    from src.mod_agent.domain.repository_probe_runner import RepositoryProbeRunner
+
+    config = {"kind": "docker_sdk_project_v1", "image": "mcr.microsoft.com/dotnet/sdk@sha256:" + "a" * 64,
+        "sdk_version": "8.0.100", "target_framework": "net8.0", "project_path": "Library.csproj"}
+    backend = SimpleNamespace(profile=SimpleNamespace(data={"probe_runner": config}))
+    monkeypatch.setattr(tools, "read_bound_json", lambda _ref: {"behavior_evaluator": {"kwargs": {}}})
+    monkeypatch.setattr(tools, "CSharpRepositoryBackend", lambda **_kwargs: backend)
+    monkeypatch.setattr(RepositoryProbeRunner, "_environment", lambda *_args: pytest.fail("Constructing tools must not execute qualification"))
+    session = SimpleNamespace(state=state, owner=SimpleNamespace(worker_configuration_ref="controlled"))
+    experiments = tools._experiments(session)
+    assert isinstance(experiments.probe_runner, RepositoryProbeRunner)
+    assert experiments.probe_runner.backend is backend
+    assert tools._experiments(session) is experiments

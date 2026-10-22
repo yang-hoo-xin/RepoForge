@@ -272,7 +272,10 @@ class TaskAgentExperiments:
             "probe_artifact_ref": probe_artifact_ref, "profile_ref": self.probe_profile_ref,
             "model_origin": deepcopy(model_origin or {}), "runner_identity": capability.get("runner_identity") if qualified else None}
         if not qualified:
-            return self._execute(operation_id, request, None)
+            unavailable = self._execute(operation_id, {**request, "capability": deepcopy(capability)}, None)
+            return {**unavailable, "capability_reason": capability.get("reason", "qualified_runner_not_configured") if isinstance(capability, dict)
+                else "qualified_runner_not_configured", "qualification_attempt_ref": capability.get("qualification_attempt_ref")
+                if isinstance(capability, dict) else None}
 
         def run():
             _require(self.probe_runner.verify_capability(self.probe_profile_ref) == capability, "PROBE_CAPABILITY_CHANGED")

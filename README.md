@@ -134,6 +134,8 @@ v2 中断任务使用 `mod-agent run-request --resume-task-agent <原检查点�
 
 经验对照可在现有经验配置中提供可选 `trial_binding_ref`，绑定已冻结协议、任务、尝试及 B／B+ 组别；宿主会在首次模型调用前保存这一关联。已结束运行可通过 `mod-agent export-strategy-execution --execution-record <原execution.json> --call-id <实际调用ID> --output-root <新目录>` 导出供评测核验的原生证据，预登记信息从原配置派生。缺少前置关联的历史运行只能作为诊断材料，仍保留未知成本；该命令不运行模型或评测题。为什么要有它：模型真正看到了什么、执行了什么以及比较条件是否预先固定，需要从正常入口的原件判断。
 
+可选的完整工程探针通过仓库配置中的 `probe_runner` 接入：`kind=docker_sdk_project_v1`，指定已在本机可用的官方 SDK 镜像 digest、准确 `sdk_version`、`target_framework` 和被引用的 `.csproj` 路径；需要依赖包时指定离线 `.nupkg` 目录及其清单哈希。平台生成引用所选候选工程的探针项目，分别在受限构建和运行容器中执行，不接受模型提交工程脚本。宿主资格检查未通过时返回能力不可用，不下载镜像、不启动 Docker Desktop、不回退到宿主执行。当前只有受控边界与接入验证，实际 Docker 隔离资格仍待环境成立；它不是独立业务验收。配置字段和受控示例见[探针执行器测试](tests/unit/test_repository_probe_runner.py)。为什么要有它：完整依赖工程的实验、模型自建探针与正式验收用途不同，未验证的执行环境不能被接口存在掩盖。
+
 ### Docker 服务演示
 
 环境：Docker Engine / Docker Desktop 与 Compose。将 [`.env.example`](deployment/service/.env.example) 复制为 `deployment/service/.env`，设置两个不同的随机值：`SERVICE_API_TOKEN` 和 `SERVICE_REDIS_PASSWORD`；保留已有配置，凭据不提交 Git。为什么要有它：接口和队列使用独立凭据，公开仓库只保存可共享的模板。
