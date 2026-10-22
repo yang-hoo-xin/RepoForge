@@ -160,7 +160,7 @@ def test_shared_build_and_test_result_is_real_object_and_reference_bound(tmp_pat
     compilation = json.loads(Path(result["compilation_report_ref"]["path"]).read_text(encoding="utf-8"))
     assert compilation["verification_scope"] == "formal_repository_compilation"
     assert len(calls) == 3
-    assert "-p:BuildProjectReferences=false" in calls[1].build_command
+    assert "-p:BuildProjectReferences=false" not in calls[1].build_command
     assert calls[1].environment["DOTNET_ROOT"] == calls[0].environment["DOTNET_ROOT"]
     for prepared in calls[:2]:
         assert prepared.environment["MSBUILDDISABLENODEREUSE"] == "1"

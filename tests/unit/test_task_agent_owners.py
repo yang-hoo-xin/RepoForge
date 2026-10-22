@@ -192,7 +192,7 @@ def test_current_candidate_search_observes_changed_bytes_with_real_scoped_refs(a
     for item in result.payload["items"]:
         assert item["logical_source_path"] == "generated_mods/SyntheticMod/Behavior.cs"
         assert "RecordMissingMarker" in item["excerpt"]
-        assert Path(item["source_path"]).is_relative_to(inputs.store.root)
+        assert Path(item["source_path"]).is_relative_to(inputs.store.root / "v")
         assert item["source_ref"] in result.source_refs
         assert "RecordMissingMarker" in Path(item["source_path"]).read_text()
     assert inputs.behavior.read_bytes() == before

@@ -383,7 +383,7 @@ class CSharpRepositoryBackend:
                                           else part for part in profile.restore_command),
                     build_command=(data["dotnet_ref"]["path"], "build", str(_within(source, data["test_project_path"])),
                                    "--no-restore", "--configuration", data["configuration"], "-m:1",
-                                   "-p:BuildProjectReferences=false", "-p:UseSharedCompilation=false",
+                                   "-p:UseSharedCompilation=false",
                                    *(f"-p:{key}={value}" for key, value in sorted(
                                        data.get("build_properties", {}).items()))))
                 test_build = _run_build(tests_profile)

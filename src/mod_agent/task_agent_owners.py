@@ -175,9 +175,11 @@ class TaskAgentOwners:
         为什么要有它：搜索必须观察当前候选；文件引用仍指向真实字节，不把候选哈希伪挂到原始文件上。
         """
         key = _sha({"baseline": baseline, "code": view["materialized_code_identity"]})
-        workspace = self.output_root / ("current-source-" + key[:24])
+        # Scope: immutable current-source projection under the owning ArtifactStore.
+        # 为什么要有它：真实仓库的深目录叠加run/owner前缀会超过Windows路径限制；短物理根不改变逻辑路径、源码身份或权限。
+        workspace = self.store.root.resolve() / "v" / key[:16]
         target = workspace / self.search_root
-        if (not workspace.resolve().is_relative_to(self.output_root)
+        if (not workspace.resolve().is_relative_to(self.store.root.resolve())
                 or not target.resolve().is_relative_to(workspace.resolve())):
             raise ValueError("TASK_UPSTREAM_CURRENT_VIEW_OUTSIDE_SCOPE")
         files = {}
