@@ -1,0 +1,37 @@
+{
+  "schema": "serilog-real-b-terminal-learning-intent.v1",
+  "base_before_controller": "ba555f2",
+  "question": "Can genuine B use the current source/history/resource facts to investigate, select targets and revise from public observations, and can a qualifying terminal public episode produce a traceable proposed strategy through the normal product hook?",
+  "prior_evidence": [
+    "The prior B/B+ pair stopped at the context gate without a candidate.",
+    "The later context attempt was externally stopped, censoring emerging source reads; reservation13 has unknown response and cost. It remains closed, not a fair full-task efficacy result."
+  ],
+  "changes_since_context_attempt": [
+    "Bounded archived exact-action index, preserving original public source/history references.",
+    "Actual deadline and cumulative resource facts in each decision; deadline retained by execution/recovery and checked before technical/learning transport.",
+    "Terminal learning enabled with no injected strategy, in a new strategy store and the same new task ledger."
+  ],
+  "design": "One exposed-development absolute capability run, not a controlled causal comparison, B/B+ result, unseen task or U5 migration result.",
+  "planned_attempts": 1,
+  "new_independent_local_wall_seconds": 1800,
+  "per_request_timeout_seconds": 600,
+  "model": "qwen3-coder:30b",
+  "model_digest": "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca",
+  "context_window": 65536,
+  "output_budget": 4096,
+  "resource_policy": "meter_only; task and any terminal extraction share this new ledger/window; no transfer of ended attempts' allowance",
+  "public_preparation_path": "C:/tmp/rf-serilog-v2-pair-main/public-preparation.json",
+  "baseline_path": "C:/tmp/rf-serilog-v2-pair-main/baseline-result.json",
+  "run_root": "C:/tmp/rf-serilog-v2-learning-main",
+  "snapshot_root": "C:/tmp/rfcode-serilog-v2-learning-B",
+  "model_help": "Original public requirement, public reproduction and platform/environment preparation only; no reference patch, hidden evaluation, technical repair hint or prescribed action sequence.",
+  "verification": [
+    "Validate bound public source/requirement/profile and existing public baseline; freeze platform and actual registered business argv.",
+    "Keep the attempt running to its actual terminal condition or owned hard deadline, not a progress-snapshot heuristic.",
+    "Inspect original requests, responses, executed actions, candidates, public feedback and terminal learning separately through the shared evidence entry.",
+    "Evaluate an actual candidate independently after terminal with private material kept out of solver and learning input."
+  ],
+  "learning_success_boundary": "A genuine model-generated proposed strategy establishes production, not adoption, migration benefit or automatic improvement. No qualifying gain is a valid not-triggered result.",
+  "cost_boundary": "Task runtime, model loading, independent evaluation and platform development separate; cached input is a subset, unknowns retained.",
+  "return_to": "Remaining U1-U5 integration and new-task experience trials; neither Serilog success nor Docker availability is a global prerequisite. No automatic second attempt."
+}
