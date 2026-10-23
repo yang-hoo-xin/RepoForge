@@ -243,7 +243,8 @@ class FrozenExecution:
         """Bind the original run-request's configuration paths, without rewriting them."""
         external = {row["path"]: row for row in self.document["external_refs"] if row["role"] == "bound_input"}
         for field in ("settings", "patch_worker_config", "stage_model_call_limits", "execution_config", "recovery_config",
-                      "game_folder_build_binding", "external_patch_profile", "dependency_api_config", "knowledge_evidence_config"):
+                      "game_folder_build_binding", "external_patch_profile", "dependency_api_config", "knowledge_evidence_config",
+                      "repository_profile", "task_agent_experience_config"):
             value = getattr(parsed, field, None)
             if not value:
                 continue

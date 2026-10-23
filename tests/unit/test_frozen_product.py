@@ -255,14 +255,14 @@ def build_parser():
     parser.add_argument("--workspace-root")
     parser.add_argument("--run-id")
     parser.add_argument("--settings", default="config/settings.yaml")
-    for flag in ("--patch-worker-config", "--stage-model-call-limits", "--game-folder-build-binding", "--external-patch-profile"):
+    for flag in ("--patch-worker-config", "--stage-model-call-limits", "--game-folder-build-binding", "--external-patch-profile", "--repository-profile", "--task-agent-experience-config"):
         parser.add_argument(flag)
     return parser
 
 def main(argv):
     args = build_parser().parse_args(argv)
     observed = {"model":load_settings(args.settings).llm.model}
-    for field in ("patch_worker_config", "stage_model_call_limits", "game_folder_build_binding", "external_patch_profile"):
+    for field in ("patch_worker_config", "stage_model_call_limits", "game_folder_build_binding", "external_patch_profile", "repository_profile", "task_agent_experience_config"):
         value = getattr(args, field)
         if value:
             observed[field] = json.loads(Path(value).read_text(encoding="utf-8"))
@@ -273,7 +273,7 @@ def main(argv):
 
 
 @pytest.mark.parametrize("field", ["settings", "patch-worker-config", "stage-model-call-limits",
-                                    "game-folder-build-binding", "external-patch-profile"])
+                                    "game-folder-build-binding", "external-patch-profile", "repository-profile", "task-agent-experience-config"])
 def test_unbound_external_configuration_rejected_before_actual_consumption(tmp_path, field):
     import yaml
 
@@ -328,7 +328,7 @@ def test_default_relative_settings_resolves_to_frozen_resource_and_records_actua
 
 
 @pytest.mark.parametrize("field", ["settings", "patch-worker-config", "stage-model-call-limits",
-                                    "game-folder-build-binding", "external-patch-profile"])
+                                    "game-folder-build-binding", "external-patch-profile", "repository-profile", "task-agent-experience-config"])
 def test_declared_external_input_is_hash_checked_and_retained_without_argv_change(tmp_path, field):
     source = _configuration_source(tmp_path)
     external = source / "config/settings.yaml" if field == "settings" else tmp_path / "outside.json"

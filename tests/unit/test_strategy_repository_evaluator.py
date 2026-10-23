@@ -125,6 +125,17 @@ def test_aggregate_matches_whole_candidate_and_rejects_wrong_candidate(evidence,
     value = read_bound_json(verdict)
     assert owner.validate_repository_strategy_verdict(value)["status"] == "verified_repository_csharp"
     assert "checks" not in value
+    relocated = tmp_path / "frozen-backend.py"
+    shutil.copyfile(owner.backend.__file__, relocated)
+    moved_worker = read_bound_json(worker_ref)
+    moved_worker["behavior_evaluator"]["factory_ref"] = _ref(relocated)
+    moved_worker_ref = _save(tmp_path / "moved-worker.json", moved_worker)
+    moved_execution = read_bound_json(execution)
+    moved_execution["native_execution_ref"] = _save(tmp_path / "moved-native.json", {
+        "worker_binding": _worker_binding(moved_worker_ref)})
+    value["execution_ref"] = _save(tmp_path / "moved-execution.json", moved_execution)
+    assert owner.validate_repository_strategy_verdict(value)["status"] == "verified_repository_csharp"
+    value["execution_ref"] = execution
     value["evaluator_result_ref"] = kwargs["controls"]["equivalent"]
     with pytest.raises(ValueError, match="VERDICT_CHANGED"):
         owner.validate_repository_strategy_verdict(value)
@@ -196,7 +207,7 @@ def test_stage_facts_cannot_be_replaced_by_final_summary(evidence, mutation):
         owner._stage_facts(report, root)
 
 
-@pytest.mark.parametrize("selector", [["--framework", "net7.0"], ["--runtime=win-x64"],
+@pytest.mark.parametrize("selector", [["--runtime=win-x64"],
     ["-o", "old-output"], ["/p:TargetFramework=net7.0"], ["--property", "OutputPath=old-output"]])
 def test_other_artifact_selectors_are_not_silently_qualified(selector):
     with pytest.raises(ValueError, match="TEST_ARTIFACT_SELECTION_UNSUPPORTED"):
@@ -208,3 +219,16 @@ def test_build_only_target_framework_override_cannot_select_another_test_artifac
     with pytest.raises(ValueError, match="TEST_ARTIFACT_SELECTION_UNSUPPORTED"):
         owner._validate_test_configuration({"configuration": "Release", "build_properties": {"TargetFramework": "net8.0"},
             "test_command": ["run", "--project", "{test_project}", "--configuration", "Release"]})
+
+
+@pytest.mark.parametrize("observed,accepted", [(None, False), ("net7.0", False), ("net8.0", True)])
+def test_framework_requires_matching_actual_test_build_output(observed, accepted):
+    data = {"configuration": "Release", "test_command": ["test", "{test_project}",
+        "--configuration", "Release", "--framework", "net8.0"]}
+    outputs = {"status": "captured", "outputs": [{"target_framework": observed,
+        "configuration": "Release", "runtime_identifier": ""}]}
+    if accepted:
+        owner._validate_test_configuration(data, outputs)
+    else:
+        with pytest.raises(ValueError, match="TEST_FRAMEWORK_OUTPUT_REQUIRED"):
+            owner._validate_test_configuration(data, outputs if observed else None)

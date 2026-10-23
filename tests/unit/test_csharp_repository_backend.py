@@ -94,7 +94,8 @@ def _backend(tmp_path, profile, source, **kwargs):
         workspace_root=tmp_path, output_root=tmp_path / "build-records", **kwargs)
 
 
-def _fake_execution(monkeypatch, *, tests=None, test_exit=0, missing=False, stale=False, compile_paths=True):
+def _fake_execution(monkeypatch, *, tests=None, test_exit=0, missing=False, stale=False, compile_paths=True,
+                    capture_outputs=False, mutate_test_output=False):
     calls = []
     def build(profile):
         calls.append(profile)
@@ -104,12 +105,20 @@ def _fake_execution(monkeypatch, *, tests=None, test_exit=0, missing=False, stal
             capture = Path(next(part.split("=", 1)[1] for part in profile.build_command if "RepositoryCompileInputs=" in part))
             if compile_paths:
                 _write(capture, f"{source / 'Library/Library.csproj'}|{source / 'Library/Arithmetic.cs'}\n")
+        if capture_outputs and any("RepositoryTestOutputs=" in part for part in profile.build_command):
+            source = profile.working_directory
+            artifact = source / "tests/bin/Release/net8.0/Tests.dll"
+            _write(artifact, "CONTROLLED TEST OUTPUT")
+            capture = Path(next(part.split("=", 1)[1] for part in profile.build_command if "RepositoryTestOutputs=" in part))
+            _write(capture, f"{source / 'tests/Tests.csproj'}|{artifact}|Release|net8.0|\n")
         return NuGetIsolatedBuildExecution(0, 0, "", "", "", "", 1)
     def verify(profile, command):
         calls.append(command)
         report = Path(command[-1])
         assert not report.exists()
         assert "--no-build" in command and "--no-restore" in command
+        if mutate_test_output:
+            _write(profile.working_directory / "tests/bin/Release/net8.0/Tests.dll", "MUTATED")
         if not missing:
             _write(report, json.dumps({"schema_version": "csharp-test-report.v1",
                                       "tests": tests if tests is not None else [
@@ -120,6 +129,52 @@ def _fake_execution(monkeypatch, *, tests=None, test_exit=0, missing=False, stal
     monkeypatch.setattr(owner.nuget, "_run_nuget_isolated_build", build)
     monkeypatch.setattr(owner.nuget, "_run_nuget_isolated_verification_command", verify)
     return calls
+
+
+def test_test_build_outputs_bind_actual_framework_and_hash(tmp_path, monkeypatch):
+    profile, source = _profile(tmp_path)
+    _fake_execution(monkeypatch, capture_outputs=True)
+    result = _backend(tmp_path, profile, source).run_build_test(source, "test", "controlled_fixture")
+    outputs = result["test_execution"]["test_build_outputs"]
+    assert outputs["status"] == "captured"
+    assert outputs["outputs"] == [{"project": str(source / "tests/Tests.csproj"),
+        "target_path": str(source / "tests/bin/Release/net8.0/Tests.dll"), "configuration": "Release",
+        "target_framework": "net8.0", "runtime_identifier": "",
+        "artifact_ref": _ref(source / "tests/bin/Release/net8.0/Tests.dll")}]
+    assert _ref(outputs["capture_ref"]["path"]) == outputs["capture_ref"]
+    fact = json.loads(Path(result["stage_receipts"]["test_build_outputs"]["path"]).read_text())
+    assert fact["execution"] == outputs
+
+
+def test_test_build_outputs_mutation_retains_execution_and_denies_result(tmp_path, monkeypatch):
+    profile, source = _profile(tmp_path)
+    _fake_execution(monkeypatch, capture_outputs=True, mutate_test_output=True)
+    with pytest.raises(ValueError, match="BUILT_ARTIFACT_CHANGED_DURING_TEST"):
+        _backend(tmp_path, profile, source).run_build_test(source, "test", "controlled_fixture")
+    error = json.loads(next((tmp_path / "build-records").glob("*/integrity-error.json")).read_text())
+    assert {"test_build", "test_build_outputs", "test_execution", "raw_test_result"} <= error["stage_receipts"].keys()
+    assert error["status"] == "unknown"
+    assert not list((tmp_path / "build-records").glob("*/report.json"))
+
+
+@pytest.mark.parametrize("defect", ["outside", "wrong_project", "malformed", "targets_changed"])
+def test_test_output_capture_rejects_unbound_metadata(tmp_path, defect):
+    profile, source = _profile(tmp_path)
+    targets = tmp_path / "capture.targets"
+    targets.write_bytes(owner.test_output_capture_targets())
+    artifact = source / "tests/bin/Tests.dll"
+    project = source / "tests/Tests.csproj"
+    if defect == "outside":
+        artifact = tmp_path / "outside.dll"
+    if defect == "wrong_project":
+        project = source / "Library/Library.csproj"
+    _write(artifact, "fixture")
+    capture = tmp_path / "capture.txt"
+    _write(capture, "bad" if defect == "malformed" else f"{project}|{artifact}|Release|net8.0|\n")
+    if defect == "targets_changed":
+        targets.write_bytes(b"changed")
+    with pytest.raises(ValueError, match="TEST_OUTPUT"):
+        owner._test_build_outputs(profile.data, source, targets, capture)
 
 
 def test_profile_binding_relocates_but_tests_and_config_are_immutable(tmp_path):
@@ -179,6 +234,7 @@ def test_shared_build_and_test_result_is_real_object_and_reference_bound(tmp_pat
     result = backend.run_build_test(source, "test", "controlled_fixture")
     assert isinstance(result["build_result"], BuildResult)
     assert result["status"] == "passed"
+    assert result["test_execution"]["test_build_outputs"]["status"] == "unavailable"
     assert result["verification_summary"] == {"checks": 1, "failed_checks": 0, "executions": 1, "test_command_executed": True}
     assert result["checks"][0]["check_id"] == result["checks"][0]["name"] == "double"
     assert result["materialized_code_identity"] is None
@@ -327,7 +383,7 @@ def test_test_execution_cannot_change_inputs_or_built_artifact(tmp_path, monkeyp
     assert not (run / "report.json").exists()
     assert not (run / "candidate-report.json").exists()
     stages = integrity["stage_receipts"]
-    assert set(stages) == {"build", "test_build", "test_execution", "raw_test_result"}
+    assert set(stages) == {"build", "test_build", "test_build_outputs", "test_execution", "raw_test_result"}
     execution = owner.read_bound_json(stages["test_execution"])
     assert execution["execution"]["exit_code"] == 0
     assert execution["execution"]["stdout"] == "fixture"
@@ -354,7 +410,7 @@ def test_post_test_snapshot_exception_retains_stage_facts_without_acceptance(tmp
     assert not (run / "report.json").exists()
     receipt = owner.read_bound_json(_ref(run / "integrity-error.json"))
     assert receipt["status"] == "unknown"
-    assert set(receipt["stage_receipts"]) == {"build", "test_build", "test_execution", "raw_test_result"}
+    assert set(receipt["stage_receipts"]) == {"build", "test_build", "test_build_outputs", "test_execution", "raw_test_result"}
     for stage, reference in receipt["stage_receipts"].items():
         fact = owner.read_bound_json(reference)
         assert fact["stage"] == stage
@@ -557,6 +613,11 @@ def test_real_no_package_repository_failure_then_repair(tmp_path):
     failed = backend.run_build_test(source, "real-library", "local_developer_verification")
     assert failed["status"] == "behavior_failed", failed
     assert failed["checks"][0]["actual"] == 3
+    emitted = failed["test_execution"]["test_build_outputs"]
+    assert emitted["status"] == "captured"
+    assert len(emitted["outputs"]) == 1
+    assert emitted["outputs"][0]["target_framework"] == "net8.0"
+    assert emitted["outputs"][0]["project"] == str(source / "tests/Tests.csproj")
     path = source / "Library/Arithmetic.cs"
     path.write_text(path.read_text().replace("=> value;", "=> value * 2;"), encoding="utf-8")
     passed = backend.run_build_test(source, "real-library", "local_developer_verification")

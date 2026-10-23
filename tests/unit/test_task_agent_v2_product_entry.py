@@ -284,7 +284,7 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         assert integrity["status"] == "unknown" and integrity["error_type"] == "OSError"
         assert "controlled post-execution source integrity failure" in integrity["error"]
         assert integrity["context"]["candidate_ref"] == memory["parent"]
-        assert set(integrity["stage_receipts"]) == {"build", "test_build", "test_execution", "raw_test_result"}
+        assert set(integrity["stage_receipts"]) == {"build", "test_build", "test_build_outputs", "test_execution", "raw_test_result"}
         facts = {}
         for stage, reference in integrity["stage_receipts"].items():
             raw = Path(reference["path"]).read_bytes()

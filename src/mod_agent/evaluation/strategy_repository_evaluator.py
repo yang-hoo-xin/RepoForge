@@ -37,17 +37,17 @@ def _groups(tests, kind):
     return groups
 
 
-def _validate_test_configuration(data):
+def _validate_test_configuration(data, test_build_outputs=None):
     # 为什么要有它：no-build只跳过构建，不自动继承先前构建的Configuration；缺省或覆盖会选到旧产物。
     command = data["test_command"]
     prefix = command[:command.index("--")] if "--" in command else command
-    selected = []
+    selected, frameworks = [], []
     for index, argument in enumerate(prefix):
         _require(not argument.startswith("@") and not re.search(r"(?:^|[;,:])configuration\s*=", argument, re.I),
                  "TEST_CONFIGURATION_OVERRIDE_UNSUPPORTED")
-        # 为什么要有它：本适配尚未绑定其他框架、RID或输出目录的测试产物；不能只核对Configuration就批准它们。
+        # 为什么要有它：框架须匹配实际构建回执；尚未绑定的RID或输出目录覆盖继续拒绝。
         selector = re.split(r"[=:]", argument.lower(), maxsplit=1)[0]
-        _require(selector not in {"--framework", "-f", "--runtime", "-r", "--arch", "-a", "--os",
+        _require(selector not in {"--runtime", "-r", "--arch", "-a", "--os",
             "--output", "-o", "--artifacts-path", "--self-contained", "--no-self-contained",
             "-p", "/p", "/property", "-property", "--property"}, "TEST_ARTIFACT_SELECTION_UNSUPPORTED")
         if argument in {"--configuration", "-c"}:
@@ -55,6 +55,11 @@ def _validate_test_configuration(data):
             selected.append(prefix[index + 1])
         elif argument.startswith(("--configuration=", "-c=")):
             selected.append(argument.split("=", 1)[1])
+        if argument in {"--framework", "-f"}:
+            _require(index + 1 < len(prefix), "TEST_FRAMEWORK_VALUE_MISSING")
+            frameworks.append(prefix[index + 1])
+        elif argument.startswith(("--framework=", "-f=")):
+            frameworks.append(argument.split("=", 1)[1])
     _require(len(selected) == 1 and selected[0] in {"{configuration}", data["configuration"]},
              "TEST_CONFIGURATION_MUST_MATCH_BUILD")
     _require(all(key.lower() != "configuration" or value == data["configuration"]
@@ -65,6 +70,12 @@ def _validate_test_configuration(data):
         "appendtargetframeworktooutputpath", "appendruntimeidentifiertooutputpath"}
     _require(not selectors.intersection(key.lower() for key in data.get("build_properties", {})),
              "TEST_ARTIFACT_SELECTION_UNSUPPORTED")
+    if frameworks:
+        _require(len(frameworks) == 1 and re.fullmatch(r"[A-Za-z0-9_.-]+", frameworks[0]), "TEST_FRAMEWORK_INVALID")
+        captured = test_build_outputs or {}
+        matching = [row for row in captured.get("outputs", []) if row.get("target_framework") == frameworks[0]
+            and row.get("configuration") == data["configuration"] and row.get("runtime_identifier") == ""]
+        _require(captured.get("status") == "captured" and len(matching) == 1, "TEST_FRAMEWORK_OUTPUT_REQUIRED")
 
 
 def _stage_facts(report, root):
@@ -79,7 +90,7 @@ def _stage_facts(report, root):
     context = integrity["context"]
     _require(all(context.get(key) == report.get(key) for key in (
         "source_root", "source_inputs", "profile_ref", "verification_identity")), "STAGE_SOURCE_CHANGED")
-    _require({"build", "test_build", "test_execution", "raw_test_result"} <= set(stages), "STAGE_MISSING")
+    _require({"build", "test_build", "test_build_outputs", "test_execution", "raw_test_result"} <= set(stages), "STAGE_MISSING")
     facts = {}
     for name, reference in stages.items():
         _require(Path(reference["path"]).resolve() == root / (name + "-fact.json"), "STAGE_SCOPE_CHANGED")
@@ -90,6 +101,7 @@ def _stage_facts(report, root):
     test = report["test_execution"]
     _require(facts["build"]["execution"] == report["build_execution"]
         and facts["test_build"]["execution"] == test["build"]
+        and facts["test_build_outputs"]["execution"] == test["test_build_outputs"]
         and facts["test_execution"]["execution"] == {key: value for key, value in test.items() if key != "report_ref"}
         and facts["raw_test_result"]["raw_report_ref"] == test["report_ref"], "STAGE_RESULT_CHANGED")
     return facts
@@ -99,7 +111,7 @@ def _report(configuration, reference):
     report = read_bound_json(reference)
     profile = backend.CSharpRepositoryProfile(configuration["profile_ref"])
     data = profile.data
-    _validate_test_configuration(data)
+    _validate_test_configuration(data, report.get("test_execution", {}).get("test_build_outputs"))
     source = Path(report["source_root"]).resolve(strict=True)
     root = Path(reference["path"]).parent.resolve()
     _require(Path(reference["path"]).name == "report.json", "NATIVE_REPORT_REQUIRED")
@@ -185,11 +197,12 @@ def _report(configuration, reference):
             split += 1
     _require(test["command"] == [data["dotnet_ref"]["path"], *command], "TEST_COMMAND_CHANGED")
     facts = _stage_facts(report, root)
-    expected_test_build = [data["dotnet_ref"]["path"], "build", str(backend._within(source, data["test_project_path"])),
-        "--no-restore", "--configuration", data["configuration"], "-m:1", "-p:UseSharedCompilation=false",
-        *(f"-p:{key}={value}" for key, value in sorted(data.get("build_properties", {}).items()))]
+    expected_test_build = list(backend.expected_test_build_command(data, source,
+        root / "test-outputs.targets", root / "test-outputs.txt"))
     _require(facts["test_build"]["commands"]["build"] == expected_test_build
         and facts["test_execution"]["commands"]["test"] == test["command"], "TEST_BUILD_COMMAND_CHANGED")
+    captured = backend._test_build_outputs(data, source, root / "test-outputs.targets", root / "test-outputs.txt")
+    _require(captured == test["test_build_outputs"], "TEST_BUILD_OUTPUTS_CHANGED")
     tests = backend._read_tests(expected_report, data["test_report"]["format"])
     _require(tests == report["checks"], "TEST_CHECKS_CHANGED")
     groups = _groups(tests, data["test_report"]["format"])
@@ -271,7 +284,8 @@ def validate_repository_strategy_verdict(verdict):
         worker_ref = native["worker_binding"]["configuration_ref"]
         _require(_worker_binding(worker_ref) == native["worker_binding"], "NATIVE_WORKER_CHANGED")
         selected = read_bound_json(worker_ref)["behavior_evaluator"]
-        _require(selected["factory_ref"] == _ref(backend.__file__)
+        # 为什么要有它：冻结求解器在另一目录运行；原worker精确引用已重验，等字节后端不能因搬迁被误当成另一实现。
+        _require(selected["factory_ref"]["sha256"] == _ref(backend.__file__)["sha256"]
                  and selected["factory_name"] == "make_csharp_repository_evaluator", "NATIVE_REPOSITORY_REQUIRED")
         public_profile = backend.CSharpRepositoryProfile(selected["kwargs"]["profile_ref"])
         frozen = selected["kwargs"]["expected_fixed_inputs"]

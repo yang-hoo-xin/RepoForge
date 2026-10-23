@@ -303,6 +303,55 @@ def _read_tests(path, kind):
     return tests
 
 
+def test_output_capture_targets():
+    # 为什么要有它：目标框架和工件路径必须来自实际 MSBuild 求值，而不是按目录惯例猜测。
+    return b'''<Project>
+  <Target Name="RepoForgeCaptureTestOutputs" AfterTargets="Build"
+          Condition="'$(MSBuildProjectFullPath)' == '$(RepositoryTestProject)' and '$(TargetPath)' != '' and Exists('$(TargetPath)')">
+    <WriteLinesToFile File="$(RepositoryTestOutputs)"
+      Lines="$(MSBuildProjectFullPath)|$(TargetPath)|$(Configuration)|$(TargetFramework)|$(RuntimeIdentifier)"
+      Overwrite="false" Encoding="UTF-8" />
+  </Target>
+</Project>'''
+
+
+def expected_test_build_command(data, source, targets, capture):
+    project = str(_within(source, data["test_project_path"]))
+    return (data["dotnet_ref"]["path"], "build", project,
+            "--no-restore", "--configuration", data["configuration"], "-m:1",
+            "-p:UseSharedCompilation=false",
+            *(f"-p:{key}={value}" for key, value in sorted(data.get("build_properties", {}).items())),
+            f"-p:CustomBeforeMicrosoftCommonTargets={targets}",
+            f"-p:RepositoryTestOutputs={capture}", f"-p:RepositoryTestProject={project}")
+
+
+def _test_build_outputs(data, source, targets, capture):
+    _require(not targets.is_symlink() and targets.read_bytes() == test_output_capture_targets(),
+             "TEST_OUTPUT_TARGETS_CHANGED")
+    result = {"status": "unavailable", "capture_ref": None, "targets_ref": _ref(targets), "outputs": []}
+    if not capture.exists():
+        return result
+    _require(not capture.is_symlink() and capture.resolve().parent == targets.parent.resolve(),
+             "TEST_OUTPUT_CAPTURE_OUTSIDE_RUN")
+    result["capture_ref"] = _ref(capture)
+    expected_project = _within(source, data["test_project_path"])
+    for line in capture.read_text(encoding="utf-8-sig").splitlines():
+        fields = line.split("|")
+        _require(len(fields) == 5, "TEST_OUTPUT_CAPTURE_INVALID")
+        project, target, configuration, framework, runtime = fields
+        path = Path(target).resolve(strict=True)
+        _require(Path(project).resolve(strict=True) == expected_project and path.is_relative_to(source)
+                 and path.is_file() and not Path(target).is_symlink(), "TEST_OUTPUT_OUTSIDE_SCOPE")
+        _require(configuration == data["configuration"], "TEST_OUTPUT_CONFIGURATION_MISMATCH")
+        row = {"project": str(expected_project), "target_path": str(path), "configuration": configuration,
+               "target_framework": framework, "runtime_identifier": runtime, "artifact_ref": _ref(path)}
+        if row not in result["outputs"]:
+            result["outputs"].append(row)
+    _require(bool(result["outputs"]), "TEST_OUTPUT_CAPTURE_EMPTY")
+    result["status"] = "captured"
+    return result
+
+
 def _run_build(profile):
     started = time.perf_counter()
     try:
@@ -430,14 +479,13 @@ class CSharpRepositoryBackend:
                 observations.append({"check_id": "declared_project_compilation", "expected": sorted(required),
                                      "observed": {"compiled_paths": sorted({row["path"] for row in compiled})}})
             else:
+                test_targets = run / "test-outputs.targets"
+                test_targets.write_bytes(test_output_capture_targets())
+                test_capture = run / "test-outputs.txt"
                 tests_profile = replace(profile,
                     restore_command=tuple(str(_within(source, data["test_project_path"])) if part == str(_within(source, data["project_path"]))
                                           else part for part in profile.restore_command),
-                    build_command=(data["dotnet_ref"]["path"], "build", str(_within(source, data["test_project_path"])),
-                                   "--no-restore", "--configuration", data["configuration"], "-m:1",
-                                   "-p:UseSharedCompilation=false",
-                                   *(f"-p:{key}={value}" for key, value in sorted(
-                                       data.get("build_properties", {}).items()))))
+                    build_command=expected_test_build_command(data, source, test_targets, test_capture))
                 test_build = _run_build(tests_profile)
                 test_execution["build"] = test_build.to_dict()
                 record_stage("test_build", test_build.to_dict(), commands={
@@ -450,6 +498,8 @@ class CSharpRepositoryBackend:
                                          "observed": {"exit_code": test_build.exit_code,
                                                       "stdout": test_build.stdout, "stderr": test_build.stderr}})
                 else:
+                    test_execution["test_build_outputs"] = _test_build_outputs(data, source, test_targets, test_capture)
+                    record_stage("test_build_outputs", test_execution["test_build_outputs"])
                     output = run / "test-output"
                     output.mkdir()
                     report_path = _within(output, data["test_report"]["path"])
@@ -517,7 +567,13 @@ class CSharpRepositoryBackend:
         verify_integrity_part("source_snapshot", lambda: _require(_snapshot(source) == before, "INPUT_CHANGED_DURING_EXECUTION"))
         verify_integrity_part("verifier_identity", lambda: _require(self.verification_identity() == identity, "INPUT_CHANGED_DURING_EXECUTION"))
         verify_integrity_part("built_artifacts", lambda: _require(all(
-            _ref(row["resolved_path"])["sha256"] == row["sha256"] for row in build.verified_artifacts), "BUILT_ARTIFACT_CHANGED_DURING_TEST"))
+            _ref(row["resolved_path"])["sha256"] == row["sha256"] for row in build.verified_artifacts)
+            and all(_ref(row["artifact_ref"]["path"]) == row["artifact_ref"]
+                    for row in test_execution.get("test_build_outputs", {}).get("outputs", []))
+            and all(_ref(ref["path"]) == ref for ref in (
+                test_execution.get("test_build_outputs", {}).get("capture_ref"),
+                test_execution.get("test_build_outputs", {}).get("targets_ref")) if ref),
+            "BUILT_ARTIFACT_CHANGED_DURING_TEST"))
         integrity_ref = _save(run / "integrity.json", {
             "schema_version": "csharp_repository_integrity_v1", "status": "validated",
             "context": context, "stage_receipts": ledger["stages"], "checks": ledger["integrity_checks"]})
@@ -811,6 +867,9 @@ def validate_candidate_report_v2(report_ref, *, context=None, require_pass=None,
             _require(fact.get("execution") == verification["build_execution"], "BUILD_STAGE_MISMATCH")
         elif stage == "test_build":
             _require(fact.get("execution") == verification["test_execution"].get("build"), "TEST_BUILD_STAGE_MISMATCH")
+        elif stage == "test_build_outputs":
+            _require(fact.get("execution") == verification["test_execution"].get("test_build_outputs"),
+                     "TEST_OUTPUT_STAGE_MISMATCH")
         elif stage == "test_execution":
             _require(fact.get("execution") == {key: value for key, value in verification["test_execution"].items()
                                               if key != "report_ref"}, "TEST_STAGE_MISMATCH")
