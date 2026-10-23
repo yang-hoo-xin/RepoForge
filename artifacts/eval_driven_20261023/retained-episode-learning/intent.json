@@ -1,0 +1,27 @@
+{
+  "schema_version": "retained_episode_learning_intent_v1",
+  "scope": "outer_triggered_single_api_extraction_not_product_terminal_completion",
+  "expected_effect": "A preserved real public compilation counterexample can produce one model-origin proposed conditional strategy through the existing extraction owner.",
+  "baseline": "Original B3 extraction remains dispatch_started with response and usage unknown. This new independently costed attempt is an absolute feasibility observation, not a paired improvement or resumed old attempt.",
+  "verification": "Check actual prepared and sent request references, response provenance, one reservation, observed usage, proposed-only state and immutable original episode/source/store bytes. No trial or activation or task repair claim.",
+  "episode_ref": {
+    "path": "C:/tmp/rfext-polly-v2-b3/runs/dsh_379b036c2fdd40c8a2c7c7fe18843ab6/a/task-agent-execution/public-learning-episode-3fb5b744e21e45459272b9c6d0185756.json",
+    "sha256": "dcd7dd926299d46bbf03b087563e58986ca344c6c7d6fc5ff53a23aaf9ad298c"
+  },
+  "original_store": "C:/tmp/rfext-polly-v2-b3/strategy-memory",
+  "original_run_root": "C:/tmp/rfext-polly-v2-b3",
+  "public_source_count": 25,
+  "model": "qwen3-coder:30b",
+  "digest": "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca",
+  "context_window": 65536,
+  "output_budget": 4096,
+  "request_timeout_seconds": 600,
+  "process_window_seconds": 600,
+  "resource_policy": "meter_only",
+  "automatic_retry": false,
+  "outer_assistance": "Outer Codex selects and triggers extraction of an existing public episode. No model strategy or task-specific solution is supplied.",
+  "human_active_seconds": null,
+  "cost_partition": ["new_extraction_attempt", "original_B3_unknown_extraction_cost_preserved", "platform_development_separate"],
+  "execution_condition": "Main agent reviews preparation and waits for current Serilog B to finish; parent controller supplies UTC deadline and independently enforces process window.",
+  "why": "为什么要有它：U2可用真实保留反例验证提炼，但新试验不能覆盖旧未知调用、伪装自动终态或提前宣称策略收益。"
+}
