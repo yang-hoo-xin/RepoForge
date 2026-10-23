@@ -1151,6 +1151,17 @@ def build_parser(
         help="Explicitly authorize this Build continuation only; Runtime needs its own existing authorization.")
     _add_execution_trace_arguments(apply_parser)
 
+    repository_qualification = subparsers.add_parser("qualify-repository-evaluator",
+        help="Validate retained independent SDK-project control reports; does not execute code or models.")
+    repository_qualification.add_argument("--input-record", required=True)
+    repository_qualification.add_argument("--output-root", required=True)
+    repository_verdict = subparsers.add_parser("evaluate-repository-strategy",
+        help="Verify a retained independent repository report against native candidate evidence.")
+    repository_verdict.add_argument("--evaluator-record", required=True)
+    repository_verdict.add_argument("--execution-record", required=True)
+    repository_verdict.add_argument("--evidence-record", required=True)
+    repository_verdict.add_argument("--output", required=True)
+
     strategy_export_parser = subparsers.add_parser("export-strategy-execution",
         help="Export retained native Task Agent evidence for strategy evaluation without running a model.")
     strategy_export_parser.add_argument("--execution-record", required=True, help="Original native execution.json.")
@@ -2640,6 +2651,36 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
         print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if result.get("status") in {"awaiting_approval", "delivered"} else 2
+
+    if args.command in {"qualify-repository-evaluator", "evaluate-repository-strategy"}:
+        from src.mod_agent.evaluation.independent_preparation import file_ref
+        from src.mod_agent.evaluation.strategy_repository_evaluator import (
+            generate_repository_strategy_verdict,
+            qualify_repository_strategy_evaluator,
+        )
+        from src.mod_agent.model_qualification import read_bound_json as read_repository_record
+
+        try:
+            # 为什么要有它：正常入口只消费已执行原件，资格与判分不能由调用者传入passed摘要或私下执行新代码。
+            if args.command == "qualify-repository-evaluator":
+                document = read_repository_record(file_ref(args.input_record))
+                fields = {"profile_ref", "controls", "production_paths", "target_test_ids", "preservation_test_ids"}
+                if (set(document) != fields | {"schema_version"}
+                        or document["schema_version"] != "repository_strategy_qualification_input_v1"):
+                    raise ValueError("REPOSITORY_QUALIFICATION_INPUT_INVALID")
+                reference = qualify_repository_strategy_evaluator(**{key: document[key] for key in fields},
+                    output_root=args.output_root)
+                result = {"status": "qualified", "evaluator_ref": reference}
+            else:
+                reference = generate_repository_strategy_verdict(evaluator_ref=file_ref(args.evaluator_record),
+                    execution_ref=file_ref(args.execution_record), evidence_bundle_ref=file_ref(args.evidence_record),
+                    output_path=args.output)
+                result = {"status": "recorded", "verdict_ref": reference}
+        except (OSError, ValueError, RuntimeError, TypeError, KeyError) as error:
+            print(json.dumps({"status": "blocked", "reason": str(error)}, ensure_ascii=False))
+            return 2
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
 
     if args.command == "export-strategy-execution":
         from src.mod_agent.evaluation.independent_preparation import file_ref

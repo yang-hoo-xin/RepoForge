@@ -67,6 +67,24 @@ def _evaluator_evidence(verdict):
     )
 
     configuration = read_bound_json(verdict["evaluator_ref"])
+    from src.mod_agent.evaluation.strategy_repository_evaluator import (
+        SCHEMA as REPOSITORY_SCHEMA,
+    )
+    from src.mod_agent.evaluation.strategy_repository_evaluator import (
+        validate_repository_strategy_verdict,
+    )
+
+    if configuration.get("schema_version") == REPOSITORY_SCHEMA:
+        if not verdict.get("evaluator_result_ref"):
+            return {"status": "missing_original_evaluator_evidence", "missing": ["evaluator_result_ref"],
+                "validation_gap": "repository_csharp_original_report_missing"}
+        try:
+            return validate_repository_strategy_verdict(verdict)
+        except (OSError, ModelQualificationError) as error:
+            if isinstance(error, ModelQualificationError) and error.status != "pending":
+                raise
+            return {"status": "missing_original_evaluator_evidence", "missing": ["referenced_original_unavailable"],
+                "validation_gap": "repository_csharp_original_report_unavailable"}
     if configuration.get("schema_version") == SCHEMA:
         if not verdict.get("evaluator_result_ref"):
             return {"status": "missing_original_evaluator_evidence", "missing": ["evaluator_result_ref"],
@@ -216,7 +234,7 @@ def _evaluate(memory, strategy_ref, protocol_ref, result_refs, policy_ref):
                 "unknown_or_missing_pair_count": len(planned) - len(known),
                 "total": sum(known) if len(known) == len(planned) else None}
     # 为什么要有它：只对实际有验真适配且原件合格的范围作采用决定，其他评估器不能凭自述升级。
-    verified = bool(results) and all(row["evaluator_evidence"][arm]["status"] == "verified_restricted_csharp"
+    verified = bool(results) and all(row["evaluator_evidence"][arm]["status"] in {"verified_restricted_csharp", "verified_repository_csharp"}
         for row in results for arm in ("B", "B+"))
     blockers = [] if verified else ["independent_strategy_evaluator_adapter_not_registered_or_evidence_missing"]
     if any(row["native_evidence"][arm]["status"] != "native_execution_verified" for row in results for arm in ("B", "B+")):
@@ -252,7 +270,9 @@ def _evaluate(memory, strategy_ref, protocol_ref, result_refs, policy_ref):
             totals["B+"][field]["total"] - totals["B"][field]["total"]
             if totals["B+"][field]["total"] is not None and totals["B"][field]["total"] is not None else None
             for field in _COST_FIELDS}},
-        "results": results, "claim": "verified_restricted_csharp_paired_evidence" if verified else
+        "results": results, "claim": ("verified_repository_csharp_paired_evidence" if any(
+            row["evaluator_evidence"][arm]["status"] == "verified_repository_csharp" for row in results for arm in ("B", "B+"))
+            else "verified_restricted_csharp_paired_evidence") if verified else
             "paired_receipts_without_independent_evaluator_validation", "protocol_ref": dict(protocol_ref),
         "policy_ref": dict(policy_ref), "result_refs": list(result_refs), "strategy_ref": strategy_ref}
 
