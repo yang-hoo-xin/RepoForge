@@ -20,7 +20,11 @@ from src.mod_agent.task_agent_loop import (
     TaskCandidateRevisionInputError,
     run_task_agent_loop,
 )
-from src.mod_agent.task_agent_v2_state import TaskAgentV2StateError
+from src.mod_agent.task_agent_v2_state import (
+    SOURCE_READ_DEFAULT_LIMIT,
+    SOURCE_READ_MAX_LIMIT,
+    TaskAgentV2StateError,
+)
 
 
 def prepare_v2_contract(state):
@@ -123,15 +127,18 @@ class TaskAgentSessionV2:
             try:
                 state.validate_submission(args["parent_revision_ref"], args["edits"])
             except TaskAgentV2StateError as error:
-                if error.code in {"before_text_not_unique", "explicit_nonempty_before_and_after_required", "candidate_has_no_changes"}:
+                if error.code in {"before_text_not_unique", "explicit_nonempty_before_and_after_required", "candidate_has_no_changes",
+                                  "before_text_outside_read_window"}:
                     raise TaskCandidateRevisionInputError((error.code,)) from error
                 raise
         elif name in {"source_read", "candidate_read", "source_search"}:
             try:
                 state.validate_read_request(args["parent_revision_ref"], root_id=args.get("root_id", "target"),
-                    path=args.get("path"), query=args.get("query"))
+                    path=args.get("path"), query=args.get("query"),
+                    **({"offset": args.get("offset", 0), "limit": args.get("limit", SOURCE_READ_DEFAULT_LIMIT)}
+                       if name in {"source_read", "candidate_read"} else {}))
             except TaskAgentV2StateError as error:
-                if error.code == "source_not_in_snapshot" and name in {"source_read", "candidate_read"}:
+                if error.code in {"source_not_in_snapshot", "invalid_source_read_window"} and name in {"source_read", "candidate_read"}:
                     raise TaskActionInputError((error.code,)) from error
                 raise
         elif name == "binding_add":
@@ -211,7 +218,8 @@ class TaskAgentSessionV2:
         origin = self._origin(name, args)
         operation = origin["call_id"]
         if name in {"source_read", "candidate_read"}:
-            return state.read_source(args["parent_revision_ref"], args["path"], args.get("root_id", "target"))
+            return state.read_source(args["parent_revision_ref"], args["path"], args.get("root_id", "target"),
+                offset=args.get("offset", 0), limit=args.get("limit", SOURCE_READ_DEFAULT_LIMIT))
         if name == "source_search":
             return state.search_source(args["parent_revision_ref"], args["query"], args.get("root_id", "target"))
         if name == "check_feedback_read":
@@ -328,6 +336,9 @@ class TaskAgentSessionV2:
 
     def actions(self):
         text = {"type": "string", "minLength": 1}
+        reading = {"parent_revision_ref": text, "path": text, "root_id": text,
+            "offset": {"type": "integer", "minimum": 0},
+            "limit": {"type": "integer", "minimum": 1, "maximum": SOURCE_READ_MAX_LIMIT}}
         bindings = self.state.validate_registry(self.state.registry_ref)["bindings"]
         binding_schema = {**text, **({"enum": sorted(bindings)} if bindings else {})}
         edit = {"type": "object", "additionalProperties": False,
@@ -335,10 +346,15 @@ class TaskAgentSessionV2:
                            "after_text": {"type": "string"}, "rationale": text},
             "required": ["binding_id", "source_view_ref", "before_text", "after_text"]}
         specs: list[tuple[str, str, dict[str, Any], list[str], str]] = [
-            ("source_read", "source_read", {"parent_revision_ref": text, "path": text, "root_id": text},
-                ["parent_revision_ref", "path"], "Read an authorized file at baseline or a named candidate, returning a version-bound source_view_ref."),
-            ("candidate_read", "source_read", {"parent_revision_ref": text, "path": text, "root_id": text},
-                ["parent_revision_ref", "path"], "Read current candidate bytes; supply its exact reference, not an ambiguous current alias."),
+            ("source_read", "source_read", reading,
+                ["parent_revision_ref", "path"], "Read authorized source at baseline or a named candidate in bounded Unicode character pages "
+                f"(default offset=0, limit={SOURCE_READ_DEFAULT_LIMIT}; maximum {SOURCE_READ_MAX_LIMIT}). "
+                "Use search result offsets to read near matches; follow next_offset for later pages. Returns full-file hash and a "
+                "version-bound source_view_ref recording the actual read window. Edit before_text must occur within that page; "
+                "request an overlapping page when needed. File-level binding authority is unchanged."),
+            ("candidate_read", "source_read", reading,
+                ["parent_revision_ref", "path"], "Read a candidate with the same bounded offset/limit and next_offset paging as source_read. "
+                "Supply its exact reference, not an ambiguous current alias. Read the edit preimage in one page before submitting."),
             ("source_search", "source_search", {"parent_revision_ref": text, "query": text, "root_id": text},
                 ["parent_revision_ref", "query"], "Search authorized source at the chosen revision. Results grant no edit authority."),
             ("check_feedback_read", "source_read", {"feedback_ref": text, "offset": {"type": "integer", "minimum": 0},

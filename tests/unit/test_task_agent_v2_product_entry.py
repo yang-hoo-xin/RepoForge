@@ -26,12 +26,16 @@ from tests.unit.test_csharp_repository_product_entry import (
 def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_workspace, monkeypatch, capsys, real_sdk,
                                                                  exercise_experiments=False, exercise_discovery=False,
                                                                  exercise_correction=False, exercise_stale_view=False,
-                                                                 exercise_feedback=False, expect_postcheck_failure=False):
+                                                                 exercise_feedback=False, expect_postcheck_failure=False,
+                                                                 exercise_paging=False):
     short_workspace = repository_workspace
     if real_sdk and os.environ.get("REPOFORGE_REAL_REPOSITORY_CLI_INTEGRATION") != "1":
         pytest.skip("Explicit SDK integration; decisions remain scripted.")
     profile, source = _profile(short_workspace, real=real_sdk)
     (source / "Library/Unused.cs").write_bytes(b"public static class Unused { public const int Marker = 0; }\n")
+    if exercise_paging:
+        (source / "Library/Unused.cs").write_text("// " + "padding " * 750 + "\n"
+            + "public static class Unused { public const int Marker = 0; }\n", encoding="utf-8")
     (source / "Library/Factor.cs").write_bytes(b"public static class Factor { public const int Multiplier = 1; }\n")
     profile_path = Path(profile.reference["path"])
     data = json.loads(profile_path.read_text())
@@ -118,6 +122,18 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         tool_outputs = [json.loads(x["content"]) for x in payload["messages"] if x["role"] == "tool"]
         observed = [row.get("value", row) for row in tool_outputs]
         last = observed[-1] if observed else None
+        if exercise_paging and last and last.get("path") == "Library/Unused.cs":
+            assert len(last["text"]) <= 2000 and last["text_scope"] == "read_window"
+            assert last["parent_revision_ref"] == memory["parent"]
+            if last["next_offset"] is not None:
+                assert "Marker =" not in last["text"]
+                memory["page_requests"] = memory.get("page_requests", 0) + 1
+                return httpx.Response(200, request=request, json={"model": model,
+                    "message": {"role": "assistant", "content": "", "tool_calls": [{"function": {
+                        "name": "candidate_read", "arguments": {"parent_revision_ref": memory["parent"],
+                            "path": last["path"], "offset": last["next_offset"]}}}]}, "done": True,
+                    "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
+            assert "Marker =" in last["text"]
         if exercise_feedback and len(requests) == 6:
             assert "check_feedback_read" in tools
             assert last["candidate_ref"] == memory["parent"]
@@ -188,6 +204,7 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                     {"function": {"name": name, "arguments": args}}]}, "done": True,
                 "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
         turn = (len(requests) - (3 if exercise_experiments else 0) - int(exercise_discovery)
+                - memory.get("page_requests", 0)
                 - int(exercise_correction and len(requests) > 4)
                 - (2 if exercise_stale_view and len(requests) > 12 else 0)
                 - int(exercise_feedback and len(requests) > 6))
@@ -309,6 +326,7 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         "result_file": str(short_workspace / "v2-entry-result.json"), "status": pending.get("status"),
         "reason": pending.get("reason"), "outcome": pending.get("task_agent_outcome")}
     assert len(requests) == (13 + (3 if exercise_experiments else 0) + int(exercise_discovery)
+                             + memory.get("page_requests", 0)
                              + int(exercise_correction) + (2 if exercise_stale_view else 0) + int(exercise_feedback))
     if exercise_feedback:
         assert pending["model_call_budget"]["consumed"] == 14
@@ -397,6 +415,11 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
 def test_normal_cli_probe_unavailable_preserves_task_path(repository_workspace, monkeypatch, capsys):
     test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
         repository_workspace, monkeypatch, capsys, False, exercise_experiments=True)
+
+
+def test_normal_cli_source_pages_preserve_read_edit_recheck_and_handoff(repository_workspace, monkeypatch, capsys):
+    test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
+        repository_workspace, monkeypatch, capsys, False, exercise_paging=True)
 
 
 def test_normal_cli_discovery_before_edit_preserves_actual_failed_execution(repository_workspace, monkeypatch, capsys):

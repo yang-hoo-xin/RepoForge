@@ -1,0 +1,502 @@
+{
+  "schema": "serilog-v2-development-comparison-result.v1",
+  "frozen_product_commit": "f56e4bdb714ac09fac499cd1fe695b3cf2a9dab0",
+  "frozen_plan_ref": {
+    "path": "C:/tmp/rf-serilog-v2-pair-main/frozen-plan.json",
+    "sha256": "a33ebb667efaf342c5c47225ef8625348d9ffc4ee55934e3eb808e15a10874ed"
+  },
+  "task": "serilog__serilog-2103",
+  "exposure": "exposed development task, not holdout or migration evidence",
+  "question": "Does manual generic conditional investigation experience change v2 decisions and actual repair under shared public feedback conditions?",
+  "model": "qwen3-coder:30b",
+  "model_digest": "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca",
+  "assistance": {
+    "strategy_origin": "external_manual_input_from_user_design_not_product_model_learning",
+    "solver_production_patch_or_task_specific_repair_hint": "not provided by this controller",
+    "outer_codex_platform_and_evaluator_preparation": "present, separate from product-model repair",
+    "human_active_seconds": null,
+    "human_timing_basis": "unknown"
+  },
+  "arms": [
+    {
+      "arm": "B",
+      "run_id": "dsh_877430f56fd74572ad51ce3118cc535c",
+      "execution_ref": {
+        "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\execution.json",
+        "sha256": "ae595ce98a4bb1d30a674e5b9ffa501303b5fe7183fb57f2c30ec71b05822b38"
+      },
+      "process_ref": {
+        "path": "C:/tmp/rf-serilog-v2-pair-main/execution-B/process.json",
+        "sha256": "b8ba4c4685fe346eb177fc84399692a8693c667f00b35f86c415bab360e7ec73"
+      },
+      "wall_seconds": 305.34300000000076,
+      "process_exit_code": 1,
+      "process_timeout": false,
+      "status": "blocked",
+      "responses": 2,
+      "reservations": 3,
+      "known_usage": {
+        "input_tokens": 28689,
+        "output_tokens": 1411,
+        "cached_input_tokens": 6778
+      },
+      "candidate_ref": null,
+      "check_ref": null,
+      "first_actual_request_ref": {
+        "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\model_trace_bodies\\c32e456817b642ac.provider_request.json",
+        "sha256": "81acd75f34a146e90ef7079d1213ad235d06dba4e336aed37a937c563509c744"
+      },
+      "strategy_experience_messages_in_first_actual_request": 0,
+      "whole_task_delivered": false,
+      "executed_actions": [
+        {
+          "name": "source_search",
+          "call_id": "call_1ygboouf",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\model-arguments-734ecd156b7049e98494ad131106c209.json",
+            "sha256": "0d398e0e5c09de5827385afa8b233c70b2f95f139918992f6fdbc3e4eea69102"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\tool-result-20f4bdca8b7741c086286791bcb21406.json",
+            "sha256": "a0ecc02d69fad23f20e7cde05a419bb5583c8c454dc0b04a5099485a0f762254"
+          }
+        },
+        {
+          "name": "source_search",
+          "call_id": "call_opf8xhsd",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\model-arguments-11a226d943c6436b9c5688054b82ad41.json",
+            "sha256": "08e4c3d089025ae2ad682b7a154dac6e519f7a42419abcbef1683b047bb48b5f"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\tool-result-baf7a4c5cecd42ddb622aab412c5a47b.json",
+            "sha256": "975f3f788c245d264e973325fe0077d9b843a332c770b147f94836ba88bb5c01"
+          }
+        },
+        {
+          "name": "source_search",
+          "call_id": "call_7ms4pqca",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\model-arguments-3532e58c2f324d7ebd0dc052d33b55dc.json",
+            "sha256": "b05a3fb89b6a15fc201c48185da72c58b602da75bbba0ed9e585e7fb6d6d051b"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\tool-result-63602eec8495415ba0844a71909e537d.json",
+            "sha256": "6d98be9a7f3475a3040329edca79fc0c5857f3d6ad830acf06e9d5227addb5f1"
+          }
+        },
+        {
+          "name": "source_search",
+          "call_id": "call_197s38oo",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\model-arguments-c9f1c43b291d491b876e90c9b660ac48.json",
+            "sha256": "9032ef8a4945615bb340a0cb42ec4399abe2b63c145973a53f606b8b082de2a4"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\tool-result-ea0839e5ef3d481ab668f97a5ef2bfaa.json",
+            "sha256": "705079d0a8a7b3186d42d3d7d8d9ccf6f333a0c4b624c0ca607ff495f435efd5"
+          }
+        },
+        {
+          "name": "source_search",
+          "call_id": "call_irekk0lg",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\model-arguments-87f2d7f541bf4b7cbb2b38509b8c5e3e.json",
+            "sha256": "e6778004b34373d360d6b9f06c924d361e3054c00d1cc0e72ed0ba588cafd3f2"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\tool-result-92410b8cd3294a49a7331dc770e5d06e.json",
+            "sha256": "7d6d7ed55c4556ec767ccd11d120f805bdb7c4f938fdfe44236521fe7c2b50eb"
+          }
+        },
+        {
+          "name": "source_search",
+          "call_id": "call_pitwiwox",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\model-arguments-9b651aa5bb474e7cb95d067811867588.json",
+            "sha256": "d89918296f5dce9d3f7839394fd5f939d59aaa549ea4226128a3b4f0edea6d16"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\tool-result-cbda147d89514dd7950c2c5f5aca4803.json",
+            "sha256": "a0ecc02d69fad23f20e7cde05a419bb5583c8c454dc0b04a5099485a0f762254"
+          }
+        },
+        {
+          "name": "source_read",
+          "call_id": "call_b5v1ydh4",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\model-arguments-4298e5456467421cbd1e9cfc90d24e27.json",
+            "sha256": "86ada841de62d4d4c73e953cbe65c5df1356ff523b960befada6163c752c0294"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\tool-result-b892dd28c9b7478f8271f59e09f34ebd.json",
+            "sha256": "87fa84cbf93d30167ab11614cef422d27092d6d2bfa25111b1c4f21cc5ea89c7"
+          }
+        },
+        {
+          "name": "source_read",
+          "call_id": "call_m1pvskyo",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\model-arguments-7c023479a07644189e9347c5d81700b9.json",
+            "sha256": "135b45392aad9b3a9e32970cbef738a9ba448dfad39f86c09d2e5c804327431c"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\tool-result-50c825b35d974d6893325bc1597728a1.json",
+            "sha256": "e77f296fb9edd352f9b478297c6901c56b9dc38a43ea3ae2d102d045148e2d18"
+          }
+        },
+        {
+          "name": "source_read",
+          "call_id": "call_u76j282m",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\model-arguments-f741e8d5a48d44d48bc6101fe5453e96.json",
+            "sha256": "7232739a5bc75ec85c283779142158305112248000c321aa15748b39afef6439"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\tool-result-92c6f843dad843a5b23b48da202f4737.json",
+            "sha256": "089a05402da9c7b07d1cb7f4791290ca6502c507e8479f776c9a9e9d867096be"
+          }
+        },
+        {
+          "name": "source_read",
+          "call_id": "call_tmrwszjj",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\model-arguments-36cb2b88fc7c4d19b844a6bf8ad7bbb3.json",
+            "sha256": "b93d85eea2fe4ba6e64aa9f5b8937ee4a2a5315a1012af97b572dfeb0b178585"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\tool-result-2f23a3f136a949fa980edc7d9d8be956.json",
+            "sha256": "ed1620d7fd6a7d9aa7ba88385c727a64af44e6a7b6ea7d1c14d20aef7ce77828"
+          }
+        },
+        {
+          "name": "source_read",
+          "call_id": "call_3unbp1lm",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\model-arguments-95cd78b0026f4825acfa9ecc9b010cae.json",
+            "sha256": "caaf5f9e6f1bbedab8a56a72b7cb6f472d001e366ef417d6b2c8b548332b3cf5"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\tool-result-a6d6c9c3d1d04a94980ad1bef87f234d.json",
+            "sha256": "0c10a498db72d793302709c7bcbfe6afb941d858760cc3822ea4bf76639736fd"
+          }
+        },
+        {
+          "name": "source_read",
+          "call_id": "call_3a0am8pg",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\model-arguments-49917234ee294ab9889c4cfefb7976e7.json",
+            "sha256": "c88a84914e89d2475fa4f61af2d6ac4dcff67d3a13b63003c77fcf7b7b78f8f3"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\tool-result-08c63cbb9b8f4a14b17c7ef83a48415e.json",
+            "sha256": "4048e0640ce9687d19decd32aad490bdf5bb08a6f04c46f9b1fccaecd6c3ece6"
+          }
+        }
+      ],
+      "gate": {
+        "mode": "same_model_observed_prompt_ratio_upper_bound_v1",
+        "exact_prompt_tokens_available_pre_call": false,
+        "provider_body_utf8_bytes": 174809,
+        "configured_num_ctx": 65536,
+        "num_predict": 4096,
+        "observed_calibration_count": 2,
+        "observed_max_prompt_tokens_per_body_byte": 0.36472672754531826,
+        "safety_multiplier": 2,
+        "estimated_prompt_tokens": 127516,
+        "estimated_required_context": 131612,
+        "conservative_fallback_required_context": 178905,
+        "admitted": false
+      },
+      "actual_last_request_ref": {
+        "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\request-003.json",
+        "sha256": "c210508aa9fbe088cef12adfa8ff0e13ca8934a7641f224f4ead7ccc4f2613a7"
+      },
+      "strategy_learning": {
+        "status": "no_information_gain",
+        "model_calls": 0,
+        "receipt_ref": {
+          "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\terminal-learning-receipt-266449d6119842d1ac917911f651c24c.json",
+          "sha256": "30a57ee9fa177fcef24731874c17b7c08a1d9b9e4f938fdf11c25f3b78f0a22b"
+        }
+      },
+      "independent_acceptance": {
+        "status": "not_run_no_candidate",
+        "passed": null
+      },
+      "feedback_revision": {
+        "public_candidate_failure_received": false,
+        "eligible_post_failure_repair_opportunity": false,
+        "reason": "No candidate submitted or checked; pre-send context admission ended investigation."
+      }
+    },
+    {
+      "arm": "B+",
+      "run_id": "dsh_39747f1de5404294bed2c8e4577b2fe6",
+      "execution_ref": {
+        "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\execution.json",
+        "sha256": "9f5d914526256b3aea5cb9726a8c1c560330cb42c0e4869afa50e6e2c6c38959"
+      },
+      "process_ref": {
+        "path": "C:/tmp/rf-serilog-v2-pair-main/execution-Bplus/process.json",
+        "sha256": "e8a5d72b07c4f3740adb60b887e3d104e2e52914056c9ddfc82a8d1d82f78e4a"
+      },
+      "wall_seconds": 265.9380000000001,
+      "process_exit_code": 1,
+      "process_timeout": false,
+      "status": "blocked",
+      "responses": 7,
+      "reservations": 8,
+      "known_usage": {
+        "input_tokens": 119549,
+        "output_tokens": 841,
+        "cached_input_tokens": 93938
+      },
+      "candidate_ref": null,
+      "check_ref": null,
+      "first_actual_request_ref": {
+        "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\model_trace_bodies\\6979874ccc294b99.provider_request.json",
+        "sha256": "3448559f3034508502b58b45b33a2b322c3464bb42cb68d0daaf3afb59cebaae"
+      },
+      "strategy_experience_messages_in_first_actual_request": 1,
+      "whole_task_delivered": false,
+      "executed_actions": [
+        {
+          "name": "source_search",
+          "call_id": "call_qs1ptpjf",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\model-arguments-479ce19a530843c3b950708463b33112.json",
+            "sha256": "ecf4ea5ca984f4f241a78c5b06fa2e2e3461a7848e5e278ed330fb1a16224c94"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\tool-result-22faa4f96f9b4cd7b3e67d8f0f0bf168.json",
+            "sha256": "6b577ab5999b118acf411146a46d69ac33e58d7e7ff7d75b468433ba81e8905f"
+          }
+        },
+        {
+          "name": "source_search",
+          "call_id": "call_s4u5b0p1",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\model-arguments-b42d8310a63445fa998bbb36539feb41.json",
+            "sha256": "9cbbfd0f082158090ff0b8c8830a1bba94364c09809c8e0ced4783bb9b5a150d"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\tool-result-d65ca880c17b4f5e9415db43207c625c.json",
+            "sha256": "9fdd24d6ccbd644c00f7b5558164b9ab67e61d1ce8b89ac46911de2f9d997451"
+          }
+        },
+        {
+          "name": "source_read",
+          "call_id": "call_2so6pxp7",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\model-arguments-05d4e72deda844db9f335971935e2a0b.json",
+            "sha256": "5b8c1edd94d148138397f7ca7c09366dd5baadd7c5180cd47c2017e7dae5a484"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\tool-result-f618c9fc5c414944ba33542acf8dc4bf.json",
+            "sha256": "52e2b0d0bbee88dd21615567220defa3b8cc09aaa629d639728bd87ba4255f55"
+          }
+        },
+        {
+          "name": "plan_update",
+          "call_id": "call_10m5ae6y",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\model-arguments-4fff70ce0f9b4b99958265ccd37f7976.json",
+            "sha256": "c7e9a86512a107cb03b43c5ceac716419d3e7f037f9152dcc411db8e7017f582"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\tool-result-c21ec66cd6fb4c76986722a72e4bf0cb.json",
+            "sha256": "e1886dbfb807533eb9e793e5aa473aa223a3ddf5d9186f8b0aca45c09749b061"
+          }
+        },
+        {
+          "name": "source_read",
+          "call_id": "call_clrwnmix",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\model-arguments-079916d6b3fd4bf68f63faaa34edaa7c.json",
+            "sha256": "3ca4c90f028338b89debe61800335947cdefadd252d4516310c2c461bcfe2a67"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\tool-result-418305d182d6462aa98e51d92bd817cb.json",
+            "sha256": "fda54ce39cca910b8c77c7c24ebde83841eaa56038db0811c004925785a1907a"
+          }
+        },
+        {
+          "name": "source_search",
+          "call_id": "call_0mckppr4",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\model-arguments-893f08ccb7c844deb69dd5ec1db35ff0.json",
+            "sha256": "dcaaacc0477ff3d83ffb293d00cee307e550879a4bb5acd15a93d391c213d8ad"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\tool-result-3e5f97e0f74646b8b3e110078ceb39f8.json",
+            "sha256": "cf46d2398ae4ffb67abd79394a1b8029b6f0352c520a23ae8e1906ab3964e408"
+          }
+        },
+        {
+          "name": "source_read",
+          "call_id": "call_exjt8elx",
+          "arguments_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\model-arguments-de67a8666952495a8482eb9279553d11.json",
+            "sha256": "3a3b2c55b0b2abfb3a0f391a62202b0a2e2a1b229918910db453fce18af9af29"
+          },
+          "result_ref": {
+            "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\tool-result-f38e96ad73cd4601a25d472f6aee173e.json",
+            "sha256": "52e2b0d0bbee88dd21615567220defa3b8cc09aaa629d639728bd87ba4255f55"
+          }
+        }
+      ],
+      "gate": {
+        "mode": "same_model_observed_prompt_ratio_upper_bound_v1",
+        "exact_prompt_tokens_available_pre_call": false,
+        "provider_body_utf8_bytes": 92987,
+        "configured_num_ctx": 65536,
+        "num_predict": 4096,
+        "observed_calibration_count": 7,
+        "observed_max_prompt_tokens_per_body_byte": 0.332708094271339,
+        "safety_multiplier": 2,
+        "estimated_prompt_tokens": 61876,
+        "estimated_required_context": 65972,
+        "conservative_fallback_required_context": 97083,
+        "admitted": false
+      },
+      "actual_last_request_ref": {
+        "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\request-008.json",
+        "sha256": "3d3ac4fc4b248ea0e2891ac43f16a3a18b171eff56daddb81ed9c2658b5655bb"
+      },
+      "strategy_learning": {
+        "status": "no_information_gain",
+        "model_calls": 0,
+        "receipt_ref": {
+          "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\terminal-learning-receipt-c8215f99878b424b82af2240832ef029.json",
+          "sha256": "df7f8be4a170c78c305bdaac35174140c15a3c255a30b70507c302e4238536d3"
+        }
+      },
+      "independent_acceptance": {
+        "status": "not_run_no_candidate",
+        "passed": null
+      },
+      "feedback_revision": {
+        "public_candidate_failure_received": false,
+        "eligible_post_failure_repair_opportunity": false,
+        "reason": "No candidate submitted or checked; pre-send context admission ended investigation."
+      }
+    }
+  ],
+  "conclusion": {
+    "correct_deliveries": 0,
+    "attempts": 2,
+    "business_correctness": "not independently graded: no candidate",
+    "strategy_delivery": "B+ strategy was present in first actual provider request; B had none",
+    "behavior": "B batched six searches then six full reads; B+ made sequential searches/reads and expressed a technical plan. Observed difference is not causal evidence of strategy benefit.",
+    "memory_efficacy": "unknown: neither arm reached candidate, public candidate feedback, repair or independent grading",
+    "automatic_learning": "no_information_gain and zero extraction model calls in both arms",
+    "next_same_configuration_repeat": "not started"
+  },
+  "platform_repair": {
+    "kind": "source/candidate bounded pages and search snippet views",
+    "projection_owner_sha256": {
+      "src/mod_agent/task_agent_v2_state.py": "d775d8949c84fa85785534675ec9d855fdf17d88045ea781c5131f087cb13434",
+      "src/mod_agent/task_agent_v2_tools.py": "1c86c90388a64f15ffcc6a61ebff7badb49a721195c21dd5624b2f1587f4bee4",
+      "artifacts/eval_driven_20261023/serilog-v2-pair/replay_source_pages.py": "e62d932e02a54b898f6934ff3edd6d2c25031608543f0af3e68150bcd5bd53b1"
+    },
+    "default_characters": 2000,
+    "max_characters": 8000,
+    "permissions": "full-file edit authority unchanged; actual read window recorded; exact parent/hash/unique preimage retained; page-external preimages rejected at submit and candidate revalidation",
+    "verification": "controlled normal CLI pages -> edit -> public failure -> retarget/revise -> current check -> product handoff passed; does not count autonomous success",
+    "counterfactual": [
+      {
+        "arm": "B",
+        "request_ref": {
+          "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\1\\runs\\dsh_877430f56fd74572ad51ce3118cc535c\\a\\task-agent-execution\\request-003.json",
+          "sha256": "c210508aa9fbe088cef12adfa8ff0e13ca8934a7641f224f4ead7ccc4f2613a7"
+        },
+        "projected": {
+          "request_identity": {
+            "provider_body_sha256": "f477029ed01de47c1b8e6aaa67465024a094d480b3fc3f75049fb31a805c9ce3",
+            "provider_body_utf8_bytes": 82807,
+            "hash_basis": "httpx_json_body_bytes"
+          },
+          "context_admission": {
+            "mode": "same_model_observed_prompt_ratio_upper_bound_v1",
+            "exact_prompt_tokens_available_pre_call": false,
+            "provider_body_utf8_bytes": 82807,
+            "configured_num_ctx": 65536,
+            "num_predict": 4096,
+            "observed_calibration_count": 2,
+            "observed_max_prompt_tokens_per_body_byte": 0.36472672754531826,
+            "safety_multiplier": 2,
+            "estimated_prompt_tokens": 60404,
+            "estimated_required_context": 64500,
+            "conservative_fallback_required_context": 86903,
+            "admitted": true
+          }
+        },
+        "limits": [
+          "No provider, model, build, test or recovery executed; original files unchanged.",
+          "Archived JSON key ordering may change literal body hash; byte count and full original admission diagnostic must match.",
+          "Counterfactual tool results do not show which pages or edits the model would choose.",
+          "Historical context still accumulates; this does not prove unlimited task continuity.",
+          "Known usage is across requests; cached tokens are a subset of input tokens, not additional usage."
+        ]
+      },
+      {
+        "arm": "B+",
+        "request_ref": {
+          "path": "C:\\tmp\\rf-serilog-v2-pair-main\\paired-inputs\\2\\runs\\dsh_39747f1de5404294bed2c8e4577b2fe6\\a\\task-agent-execution\\request-008.json",
+          "sha256": "3d3ac4fc4b248ea0e2891ac43f16a3a18b171eff56daddb81ed9c2658b5655bb"
+        },
+        "projected": {
+          "request_identity": {
+            "provider_body_sha256": "d2e9fe97ccfac4cd1c7e2e5c5b5e2501872a983197e1ff32b429981b0f65f865",
+            "provider_body_utf8_bytes": 61168,
+            "hash_basis": "httpx_json_body_bytes"
+          },
+          "context_admission": {
+            "mode": "provider_body_utf8_proxy_plus_output_budget_v1",
+            "exact_prompt_tokens_available_pre_call": false,
+            "provider_body_utf8_bytes": 61168,
+            "configured_num_ctx": 65536,
+            "num_predict": 4096,
+            "conservative_required_context": 65264,
+            "admitted": true
+          }
+        },
+        "limits": [
+          "No provider, model, build, test or recovery executed; original files unchanged.",
+          "Archived JSON key ordering may change literal body hash; byte count and full original admission diagnostic must match.",
+          "Counterfactual tool results do not show which pages or edits the model would choose.",
+          "Historical context still accumulates; this does not prove unlimited task continuity.",
+          "Known usage is across requests; cached tokens are a subset of input tokens, not additional usage."
+        ]
+      }
+    ],
+    "historical_context": "still accumulates; unlimited continuity not established",
+    "real_rerun": false
+  },
+  "verification": {
+    "focused_state_admission_binding_recovery_handoff_and_cli": "73 passed; before final default-size change",
+    "final_default_size_paging_and_cli": "9 passed",
+    "final_casefold_offset_counterexamples": "11 passed",
+    "initial_failures": [
+      "Sandbox pytest temp-directory creation denied before fixture execution; retried under approved short temp path.",
+      "Test fixture write_text introduced CRLF while expected LF; fixture corrected to explicit bytes.",
+      "Test exception assertion matched generic exception text rather than argument_errors; corrected.",
+      "Independent review found candidate revalidation omitted page-window condition; fixed with rebound-candidate rejection.",
+      "Independent review found case-insensitive search locating case-sensitive offsets; fixed with Unicode casefold-to-original offset mapping."
+    ],
+    "no_new_model_or_sdk_execution_during_repair": true
+  },
+  "return_point": "Continue U2-U4 remaining integration and bounded runtime validation; U5 stays a frozen later comparison. Do not wait for Serilog/Polly success; no RestSharp third run implied.",
+  "known_costs_total": {
+    "input_tokens": 148238,
+    "output_tokens": 2252,
+    "cached_input_tokens_subset": 100716,
+    "responses": 9,
+    "reservations": 11,
+    "pre_send_rejections": 2,
+    "task_process_wall_seconds": 571.2810000000009,
+    "monetary_cost": null,
+    "scope": "task response tokens only; public preparation, warmup, independent evaluator qualification, platform development, electricity and human active time not included or measured here"
+  }
+}

@@ -15,6 +15,9 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 from uuid import uuid4
 
+SOURCE_READ_DEFAULT_LIMIT = 2000
+SOURCE_READ_MAX_LIMIT = 8000
+
 
 class TaskAgentV2StateError(ValueError):
     @property
@@ -32,6 +35,18 @@ def _hash(value: Any) -> str:
 
 def _text_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _casefold_match_offset(text: str, query: str) -> int:
+    folded_index = text.casefold().find(query.casefold())
+    if folded_index < 0:
+        return -1
+    folded_offset = 0
+    for index, character in enumerate(text):
+        folded_offset += len(character.casefold())
+        if folded_offset > folded_index:
+            return index
+    return len(text)
 
 
 def _path(value: str) -> str:
@@ -295,8 +310,9 @@ class TaskAgentV2State:
         finally:
             lock.unlink(missing_ok=True)
 
-    def read_source(self, parent_revision_ref: str, path: str, root_id: str = "target") -> dict[str, Any]:
-        self.validate_read_request(parent_revision_ref, path=path, root_id=root_id)
+    def read_source(self, parent_revision_ref: str, path: str, root_id: str = "target", *,
+                    offset: int | None = None, limit: int | None = None) -> dict[str, Any]:
+        self.validate_read_request(parent_revision_ref, path=path, root_id=root_id, offset=offset, limit=limit)
         path = _path(path)
         if root_id not in self.contract["read_roots"]:
             raise TaskAgentV2StateError("read_root_denied")
@@ -313,13 +329,24 @@ class TaskAgentV2State:
         data = {"schema": "task-agent-source-view.v2", "contract_ref": self.contract_ref,
             "root_id": root_id, "parent_revision_ref": revision, "path": path,
             "file_sha256": _text_hash(files[path]), "text": files[path]}
-        return {**data, "source_view_ref": self.save("source-view", data)}
+        if offset is None:
+            return {**data, "source_view_ref": self.save("source-view", data)}
+        content = files[path]
+        end = min(len(content), offset + limit)
+        # 为什么要有它：原件保留完整版本及实际返回窗口，分页不把局部文本伪装成整文件，也不允许用未读取部分作为编辑前像。
+        data["read_window"] = {"offset": offset, "end": end}
+        return {**data, "source_view_ref": self.save("source-view", data), "text": content[offset:end],
+            "text_scope": "read_window", "offset": offset, "next_offset": end if end < len(content) else None,
+            "total_chars": len(content), "total_lines": len(content.splitlines()),
+            "start_line": content.count("\n", 0, offset) + 1,
+            "truncated": offset > 0 or end < len(content)}
 
     def _revision(self, ref: str) -> str:
         return self.contract["baseline_manifest_ref"] if ref in ("baseline", "B0") else ref
 
     def validate_read_request(self, parent_revision_ref: str, *, path: str | None = None,
-                              root_id: str = "target", query: str | None = None) -> None:
+                              root_id: str = "target", query: str | None = None,
+                              offset: int | None = None, limit: int | None = None) -> None:
         if root_id not in self.contract["read_roots"]:
             raise TaskAgentV2StateError("read_root_denied")
         if root_id == "target":
@@ -335,6 +362,11 @@ class TaskAgentV2State:
                 raise TaskAgentV2StateError("read_path_denied")
             if path not in files:
                 raise TaskAgentV2StateError("source_not_in_snapshot")
+            if offset is not None or limit is not None:
+                content = files[path] if root_id == "target" else files[path]["text"]
+                if (type(offset) is not int or type(limit) is not int or offset < 0
+                        or offset > len(content) or not 1 <= limit <= SOURCE_READ_MAX_LIMIT):
+                    raise TaskAgentV2StateError("invalid_source_read_window")
         elif not isinstance(query, str) or not query:
             raise TaskAgentV2StateError("invalid_search")
 
@@ -354,15 +386,24 @@ class TaskAgentV2State:
         matches = []
         count = 0
         for path, content in sorted(files.items()):
-            selected = [(i, line) for i, line in enumerate(content.splitlines(), 1) if query.casefold() in line.casefold()]
+            selected, offset = [], 0
+            for number, raw_line in enumerate(content.splitlines(keepends=True), 1):
+                line = raw_line.rstrip("\r\n")
+                if query.casefold() in line.casefold():
+                    selected.append((number, line, offset))
+                offset += len(raw_line)
             if not selected:
                 continue
             count += len(selected)
             if len(matches) >= max_matches:
                 continue
-            view = self.read_source(parent_revision_ref, path, root_id)
-            for number, line in selected[:max_matches - len(matches)]:
-                matches.append({"path": path, "root_id": root_id, "line": number, "text": line,
+            for number, line, offset in selected[:max_matches - len(matches)]:
+                start = max(0, _casefold_match_offset(line, query) - 128)
+                # 为什么要有它：搜索返回的读取凭据也只绑定实际展示的片段，超长单行不能绕过有界读取。
+                view = self.read_source(parent_revision_ref, path, root_id, offset=offset + start,
+                    limit=max(1, min(512, len(line) - start)))
+                matches.append({"path": path, "root_id": root_id, "line": number, "text": view["text"],
+                    "offset": offset + start, "line_offset": offset, "text_truncated": start > 0 or len(line) > 512,
                     "source_view_ref": view["source_view_ref"], "file_sha256": view["file_sha256"]})
         return {"matches": matches, "total_matches": count, "truncated": count > len(matches)}
 
@@ -391,10 +432,12 @@ class TaskAgentV2State:
             if binding is None:
                 raise TaskAgentV2StateError("unknown_binding")
             path = binding["canonical_path"]
-            self._validate_view(self.load(edit.get("source_view_ref", "")), parent, path)
+            view = self.load(edit.get("source_view_ref", ""))
+            self._validate_view(view, parent, path)
             before, after = edit.get("before_text"), edit.get("after_text")
             if not isinstance(before, str) or not before or not isinstance(after, str):
                 raise TaskAgentV2StateError("explicit_nonempty_before_and_after_required")
+            self._validate_visible_preimage(view, before)
             if original[path].count(before) != 1 or working[path].count(before) != 1:
                 raise TaskAgentV2StateError("before_text_not_unique")
             working[path] = working[path].replace(before, after, 1)
@@ -442,6 +485,19 @@ class TaskAgentV2State:
                 or view.get("path") != path or view.get("text") != files.get(path)
                 or view.get("file_sha256") != _text_hash(files.get(path, ""))):
             raise TaskAgentV2StateError("stale_or_invalid_source_view")
+        if "read_window" in view:
+            window = view["read_window"]
+            if (not isinstance(window, dict) or set(window) != {"offset", "end"}
+                    or type(window["offset"]) is not int or type(window["end"]) is not int
+                    or not 0 <= window["offset"] <= window["end"] <= len(view["text"])
+                    or window["end"] - window["offset"] > SOURCE_READ_MAX_LIMIT):
+                raise TaskAgentV2StateError("stale_or_invalid_source_view")
+
+    @staticmethod
+    def _validate_visible_preimage(view: dict[str, Any], before: str) -> None:
+        window = view.get("read_window")
+        if window is not None and before not in view["text"][window["offset"]:window["end"]]:
+            raise TaskAgentV2StateError("before_text_outside_read_window")
 
     def submit(self, parent_revision_ref: str, edits: list[dict[str, Any]], operation_id: str | None = None,
                model_origin: Mapping[str, Any] | None = None, rationale: str = "") -> dict[str, Any]:
@@ -469,6 +525,7 @@ class TaskAgentV2State:
                 before, after = edit.get("before_text"), edit.get("after_text")
                 if not isinstance(before, str) or not before or not isinstance(after, str):
                     raise TaskAgentV2StateError("explicit_nonempty_before_and_after_required")
+                self._validate_visible_preimage(view, before)
                 if original[path].count(before) != 1 or files[path].count(before) != 1:
                     raise TaskAgentV2StateError("before_text_not_unique")
                 previous_text = files[path]
@@ -531,8 +588,10 @@ class TaskAgentV2State:
                     or binding.get("binding_id") != change["binding_id"]
                     or binding.get("binding_id") != "file-" + _hash({k: v for k, v in binding.items() if k != "binding_id"})):
                 raise TaskAgentV2StateError("invalid_candidate_authority")
-            self._validate_view(self.load(change["source_view_ref"]), candidate["parent_revision_ref"], path, parent)
+            view = self.load(change["source_view_ref"])
+            self._validate_view(view, candidate["parent_revision_ref"], path, parent)
             before, after = change["before_text"], change["after_text"]
+            self._validate_visible_preimage(view, before)
             if not before or expected[path].count(before) != 1 or _text_hash(expected[path]) != change["before_sha256"]:
                 raise TaskAgentV2StateError("invalid_candidate_preimage")
             expected[path] = expected[path].replace(before, after, 1)
