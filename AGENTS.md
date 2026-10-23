@@ -73,3 +73,20 @@ they do not freeze an old architecture or override platform permissions.
     developer view out of product-model inputs; their existing public-feedback and
     experience interfaces retain their own visibility and authorization boundaries.
     为什么要有它：共享入口只有进入实际调查流程才能减少错误归因，统一查询也不能扩张产品模型的可见范围。
+
+11. For changes to decisions, tools, feedback, context, retrieval, models,
+    experience or resource policy, state the expected effect, comparison baseline
+    and applicable verification in the existing task record before implementation.
+    Once usable, run that verification within existing authorization and resource
+    policy; do not wait for a resume request. Freeze common conditions and identify
+    the main tested change. Without a comparable baseline, report absolute results.
+    Ordinary refactoring and documentation do not require full model evaluation.
+    Reuse native artifacts, Trace, resource and delivery receipts; retain all
+    attempts, failures, regressions, unknowns and the versions of mid-run fixes.
+    Record external Codex root-cause advice, fixes and patch edits as technical
+    assistance, separately from approval, review and environment repair. Human
+    active time requires measurement or explicit declaration, never waiting-time
+    inference. Separate task, independent-evaluation and platform-development
+    costs. Do not change hidden acceptance, reveal its answers, or expand product
+    authority for measurement. A supported negative result completes an experiment.
+    为什么要有它：工程推进应默认留下可复算的结果与成本，避免漏掉外层救援、失败尝试和未知量，也不为取得漂亮数字延长实验或扩大权限。

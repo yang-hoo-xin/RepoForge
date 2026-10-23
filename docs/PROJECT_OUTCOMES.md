@@ -1,8 +1,73 @@
 # 项目成果、企业问题与待测证据
 
-更新于2026-09-30。目标场景包括自然语言新建Mod、生成过程中的迭代修复，以及既有代码库的需求修改与缺陷修复：让生成的代码经过真实验收、在明确范围内应用，并能查清失败及成本。当前为研发原型；企业部署、人工工时节省及业务收益尚无实测数据。
+更新于2026-10-23；本次新增 RestSharp 原件复算与数据责任接入结论，下方9月结果保留原版本范围，未重新测量。目标场景包括自然语言新建Mod、生成过程中的迭代修复，以及既有代码库的需求修改与缺陷修复：让生成的代码经过真实验收、在明确范围内应用，并能查清失败及成本。当前为研发原型；企业部署、人工工时节省及业务收益尚无实测数据。
 
 用户职责沿用已提供事实：需求定义、架构与技术选型、验收设计，结合AI编码工具推进实现。Astra的开发工作、产品本地模型结果和独立评测分别归因。为什么要有它：平台里存在某个模块或模型做过某项工作，不能直接成为个人独立完成或产品自主交付的表述。
+
+## 2026-10-23 RestSharp 原件复算与待接入项
+
+**本次实际完成：只读调查、已有入口查询及逐响应复算；只更新 AGENTS.md、本表和[主设计的数据责任接入节](AGENT_RELIABILITY_LEARNING_GOAL.md#2026-10-23-增量运行事实的默认汇总与数据责任)。产品代码、测试未改，没有新模型调用、训练、Build、测试执行或恢复；未向开发页发送指令。正常／失败／恢复自动产出同口径摘要仍是交给开发页的实施项，不能写成已完成。** 为什么要有它：设计、只读复算、自动采集通路和业务收益分别成立，不能互相代替。
+
+### 已经复算的数据
+
+来源问题为 `restsharp__restsharp-2241`。两个 run 是同一问题的原始 B 与已曝光诊断，不是两道独立题，也不是同条件前后对照。先调用现有 `inspect_evidence`，再读取两份 native 的 `provider_turns[].response_ref`，核验21份响应 SHA256 及其 usage 与原生记录一致；按请求身份去重，input + output 得总 Token，cache 不重复相加。
+
+| 事实 | 原始 B1 | 已曝光 revision-1 | 合并可支持的结论 |
+| --- | ---: | ---: | --- |
+| 实际模型响应 | 14 | 7 | 21 次；本次检查范围内缺失响应 0，不等于完整任务成本已知 |
+| 输入 Token | 212,520 | 79,762 | 292,282 |
+| 输出 Token | 5,126 | 1,199 | 6,325 |
+| 输入＋输出 Token | 217,646 | 80,961 | **298,607 已知 Token**，全部失败尝试保留 |
+| 已含在输入中的缓存 Token | 145,571 | 62,485 | 208,056；不是额外 Token |
+| 新接受候选 | 1 | 0 | 后一次从前一次候选开始，但没有新增代码候选 |
+| 原生终止状态 | unknown | unknown | 保留执行未知，不能改成已验收成功或确定未执行 |
+| 实际交付 | 无 | 无 | **正确交付成功数 0**；不是预登记任务成功率 |
+| 运行进程耗时 | 1,359.937 秒 | 266.218 秒 | **1,626.155 秒已知进程小计**；不含全部准备、间隔等待、评测或开发成本 |
+| 全任务人工主动时间／费用 | 未知／未知 | 未知／未知 | 不能填 0，也不能计算人分钟节省或账单节省 |
+
+原件：[B1 native](C:/tmp/rfext-restsharp-v2-b1/runs/dsh_7e85b512903f4692a7812b24edeadefe/a/task-agent-execution/execution.json)、[B1 实际进程](C:/tmp/rfext-restsharp-v2-b1/service-resume-1/process/process.json)、[revision native](C:/tmp/rfext-restsharp-v2-revision-1/runs/dsh_1fd7a8c7c3fd491ab5bd30536e18076b/a/task-agent-execution/execution.json)、[revision 进程结果](C:/tmp/rfext-restsharp-v2-revision-1/result.json)、[诊断启动与显式父引用](C:/tmp/rfext-restsharp-v2-revision-1/started.json)。既有索引：[B1](evidence/restsharp-v2-b1-observed.json)、[诊断启动](evidence/restsharp-revision-trial.json)、[诊断结果](evidence/restsharp-revision-result.json)。
+
+两份 native SHA256 分别为 `1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a` 与 `3ebec0e973f0fc792ba80903d527d7203ed726a1c937cfaa69e8aa821634e1eb`。原运行产品提交为 `635011f19428b9779eda69e1a6598fd28892d1af`，诊断为 `b62b67f2e6bca8cd83b3f7a9d0de3b1dfeb79485`；快照包含工作区修改，commit 不能单独代表实际源码。模型记录为 `qwen3-coder:30b`、digest `06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca`；服务版本0.40.7→0.40.8，外部配置及冷启动条件不完整。工具 owner、验收与环境身份继续以各 native／host 原件为准，不用本次查询版本补写。为什么要有它：这些条件已变化，不能把80,961与217,646拼成效率提升。
+
+### 结果、反馈与成本归属
+
+| 来源／事件 | 核实事实 | 统计处理 |
+| --- | --- | --- |
+| B1 前置环境阻塞 | 根目录 `result.json` 是目录服务不可用时的早期结果；`stdout.json` 的 `product.execution` 为2,126.7178 ms。之后 `service-resume-1/start.json` 记录模型调用前为0、未分配新任务 | 环境继续，不是模型会话恢复；早期过程及主动环境修复时间不完整，不覆盖后面的14轮结果 |
+| B1 候选 | 源码身份 `da76ea51f3b966415be4566672fa6c4206a25328cfa4aa0647ce63e9902918da`；`check_ref=null`；参数补充后代码相同 | 只有1个接受候选；补理由、改计划或重交相同代码均不计有效修订 |
+| [公开重放](C:/tmp/rfext-restsharp-v2-b1-check-replay/result.json) | 213检查、2失败；模型调用0；未恢复原任务，也未把重放反馈送入原模型会话 | 单列公开诊断成本和事实；原 B 收到业务失败后的修复分母为0，比例不适用 |
+| [独立诊断的显式口径更正](C:/tmp/rfext-restsharp-v2-b1-independent-diagnostic/result-reporting-v2.json) | 220结果、5失败；业务验收失败；限定的既有行为组通过，含缺陷测试的完整套件未通过；模型调用0、未交付 | 用 `supersedes_aggregate_ref` 保留并更正旧聚合，不重执行或改任务状态；不把5−2当作新增3项回归；不反馈隐藏答案 |
+| revision 首轮实际请求 | [HTTP 请求](C:/tmp/rfext-restsharp-v2-revision-1/runs/dsh_1fd7a8c7c3fd491ab5bd30536e18076b/a/task-agent-execution/model_trace_bodies/5bd4f746237046e6.provider_request.json) 有两个哈希测试 ID 和 Passed/Failed，有匹配响应；没有测试名、断言详情与定位 | 可证明失败状态送达，不能据此证明可诊断反例充分；后续无新候选。当前查询 `feedback_links=[]` 漏掉初始用户消息，不等于没有送达 |
+| 时间观测 | native 入口到返回分别1,357,062 ms、263,421 ms，嵌套于进程耗时；公开重放 build 6,183 ms、test_execution 39,337 ms，后者内含 build 11,878 ms | 保留各观察区间，不将嵌套值叠加，不用阶段时长代替端到端等待 |
+| 独立评测时间 | 两份原 TRX 的测试起止区间分别38.5870228秒、2.1816760秒，合计40.7686988秒；评测进程收据没有计时 | 仅独立测试运行小计，构建／准备／评测开销及完整评测时间未知；不混入上述任务进程小计 |
+| 人工／外层 Codex | 初始合同后的21份封闭输入审计均记录0；带外帮助仍为null。诊断启动明确有保存候选及公开反馈的外层准备 | 局部0不证明全程无人救援。根因、修法、补丁代修、审批、审阅与环境修复的完整事件和主动人分钟缺测；保留未知 |
+
+任务运行、公开诊断、独立评测和平台开发分别列示；上述298,607是已核验模型响应的小计，并非全项目用量。独立评测模型调用0不代表评测耗时0，平台开发成本未由这些运行原件覆盖。成功数为0时，单位成功交付成本没有有限值。为什么要有它：不能通过漏掉失败、辅助工作或外层开发成本制造低成本成果。
+
+独立时间只解析 TRX 元数据，不输出测试内容：[final-0](C:/tmp/rfext-restsharp-v2-b1-independent-diagnostic/evaluation-only/variants/final/results-0/final-0.trx)、[final-1](C:/tmp/rfext-restsharp-v2-b1-independent-diagnostic/evaluation-only/variants/final/results-1/final-1.trx)，SHA256分别为 `34ca52574cb168b21b0f7683b514fb70d3890bbad9d5375678b03d51636a6168`、`9d0edca61bd713a9047f6b0eed0d7e1f6b370c60ce4e746223967236e03e5a36`。独立结果更正的SHA256为 `a6cabc20a2f5ef0ba69ddf16dbcf9e906a5382ef4124d4b0c2de7fbc4abb5136`。两个运行的终态学习均为 `no_information_gain`、额外模型调用0，因此不增加21次响应的小计。
+
+### 现有命令现在能输出什么
+
+在仓库环境执行以下只读命令可复算各次技术决策 Token、关联真实请求和候选原件；本次两项均返回 `partial`，原因包括选定运行目录外的引用。`cost.whole_task_cost_complete=false`、`money=null`、`human_help=not_inferred` 都须保留，不能把索引完整性当成任务正确性。
+
+```powershell
+python -B -m scripts.dsh_run_request --execution-config "C:\tmp\rfext-restsharp-v2-b1\execution.json" --inspect-run "dsh_7e85b512903f4692a7812b24edeadefe" --view evidence --format json
+python -B -m scripts.dsh_run_request --execution-config "C:\tmp\rfext-restsharp-v2-revision-1\execution.json" --inspect-run "dsh_1fd7a8c7c3fd491ab5bd30536e18076b" --view evidence --format json
+```
+
+`--format markdown` 适合阅读，程序复算使用 JSON。现有正常运行已保存 manifest／结果、原生执行、时间／技术输入审计及适用交付收据；现有脚本还会返回 inspection 入口。**这不等于已经自动生成本节的完整合并结果。** `summarize_benchmark_outcomes --ledger ...` 目前核验并汇总预制账本，也不能凭空补齐未采集的人工时间。为什么要有它：使用方法应对应当前可执行能力，不把待实现接口包装成现成功能。
+
+### 五类数据的当前结论与最小补证
+
+| 成果方向 | 当前是否成立 | 下一项真正需要的证据 |
+| --- | --- | --- |
+| 无技术代修的正确交付提升 | 本批没有；已知两个关联运行均未交付 | 原开发页按预登记任务及固定条件产生任务级对照，独立验收和交付引用绑定同一候选；技术提示与代修另分层 |
+| 人分钟与等待改善 | 没有人分钟数据，也没有完整同质量等待对照 | 下一次原定运行开始记录实际审阅／提示／代修／返工时间；失败和超时保留，限时正确交付分母不缩小 |
+| 包含失败的单位成功成本下降 | 已有298,607已知Token及失败小计；没有有限单位成功成本，更无下降结论 | 正确交付数S与全尝试T同批闭合，独立评测和平台开发另报；缺失调用、费用、等待继续显式列出 |
+| 有效反例后的自主修复提升 | 原始B分母0；诊断只有状态反馈且无新候选，不能合成提升率 | 先证明可诊断公开反例、当前候选与有效修改工具进入后续请求，再在固定错误候选上比较修对k／收到有效反例K；没有开始改代码也留在K |
+| 判断／经验的质量、覆盖和成本收益 | 本批未新增训练或经验对照；下方专项历史负结果保留，真实Agent迁移收益未由本批证明 | 沿原定QLoRA／Self-RAG或U2／U5验证，按来源问题组隔离；弃答、格式失败、负迁移和辅助调用不删去 |
+
+当前优先补两项：**第一，可诊断公开失败→真实请求→代码变化→同版本验收的整条证据；第二，同批任务级正确交付、全部尝试成本及实际人工时间。** 前者定位是否仍是平台反馈阻断，后者决定产品是否值得使用。其余数据随相应改动采集，不为了容易取得漂亮数字插队。为什么要有它：补证顺序由正确交付、人工负担和成本的影响决定，负结果同样可以结束比较。
 
 ## 七项待填均保留，按实际问题取得数据
 
