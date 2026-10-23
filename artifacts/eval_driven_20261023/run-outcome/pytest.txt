@@ -1,0 +1,17 @@
+============================= test session starts =============================
+platform win32 -- Python 3.10.20, pytest-9.1.1, pluggy-1.6.0
+rootdir: C:\Users\10160\.codex\worktrees\run-outcome-evidence\rag_capability_mainline
+configfile: pyproject.toml
+plugins: anyio-4.14.2, langsmith-0.12.1, asyncio-1.4.0, cov-7.1.0, mock-3.15.1, xdist-3.8.0
+asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 93 items
+
+tests\unit\test_native_outcome_projection.py ...................         [ 20%]
+tests\unit\test_benchmark_outcome_ledger.py ................             [ 37%]
+tests\unit\test_run_evidence_query.py ..........................         [ 65%]
+tests\unit\test_intervention_trace.py ........                           [ 74%]
+tests\unit\test_execution_trace.py ........                              [ 82%]
+tests\unit\test_run_outcome_finalization.py ...............              [ 98%]
+tests\unit\test_task_agent_v2_delivery.py .                              [100%]
+
+======================= 93 passed in 196.91s (0:03:16) ========================

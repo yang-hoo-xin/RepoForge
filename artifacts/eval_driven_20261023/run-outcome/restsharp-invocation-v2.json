@@ -1,0 +1,77 @@
+{
+  "argv": [
+    "python",
+    "-B",
+    "-m",
+    "scripts.dsh_run_request",
+    "--execution-config",
+    "C:/tmp/rfext-restsharp-v2-revision-1/execution.json",
+    "--inspect-run",
+    "dsh_1fd7a8c7c3fd491ab5bd30536e18076b",
+    "--view",
+    "evidence",
+    "--format",
+    "json",
+    "--evidence-context",
+    "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\docs\\evidence\\restsharp-v2-b1-observed.json",
+    "--evidence-context",
+    "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\docs\\evidence\\restsharp-revision-result.json",
+    "--evidence-context",
+    "C:\\tmp\\rfext-restsharp-v2-revision-1\\started.json",
+    "--evidence-context",
+    "C:\\tmp\\rfext-restsharp-v2-revision-1\\result.json",
+    "--evidence-context",
+    "C:\\tmp\\rfext-restsharp-v2-b1-independent-diagnostic\\result-reporting-v2.json",
+    "--evidence-root",
+    "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\docs\\evidence",
+    "--evidence-root",
+    "C:\\tmp\\rfext-restsharp-v2-b1",
+    "--evidence-root",
+    "C:\\tmp\\rfext-restsharp-v2-revision-1",
+    "--evidence-root",
+    "C:\\tmp\\rfext-restsharp-v2-b1-check-replay",
+    "--evidence-root",
+    "C:\\tmp\\rfext-restsharp-v2-b1-independent-diagnostic"
+  ],
+  "working_directory": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline",
+  "query_status": "partial",
+  "query_effects": {
+    "model_calls": 0,
+    "builds": 0,
+    "tests": 0,
+    "recoveries": 0,
+    "writes": 0
+  },
+  "input_context_refs": [
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\docs\\evidence\\restsharp-v2-b1-observed.json",
+      "sha256": "aab4c2acfbc2b8119832d378b37ba60a8bbf426b5561b1076cfe9ad6a8fe8119"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\docs\\evidence\\restsharp-revision-result.json",
+      "sha256": "b2b8fa9eeab251991f83060a4a056035bc33fa04a3068169c5c6a1d648e7d35e"
+    },
+    {
+      "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\started.json",
+      "sha256": "503a3011c23b79688d40431cfbf9183d8d511e80cb48988623614242dad4fa48"
+    },
+    {
+      "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\result.json",
+      "sha256": "26b1d23c371c29afa5fb93a0eaaa59fa11cdd4316a5fdb3a3f4c5c907c3ace52"
+    },
+    {
+      "path": "C:\\tmp\\rfext-restsharp-v2-b1-independent-diagnostic\\result-reporting-v2.json",
+      "sha256": "a6cabc20a2f5ef0ba69ddf16dbcf9e906a5382ef4124d4b0c2de7fbc4abb5136"
+    }
+  ],
+  "outcome_ref": {
+    "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\artifacts\\eval_driven_20261023\\run-outcome\\restsharp-outcome-v2.json",
+    "sha256": "8b8a7fb89abda1801d35d6ecb3c7708ff69395fa03e9a5bc337c8f3f933cc13b"
+  },
+  "raw_records_unchanged": true,
+  "assertions": "passed: original response totals, explicit task lineage, no delivery, corrected independent result, unknown human time, no model execution",
+  "supersedes_derived_ref": {
+    "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\artifacts\\eval_driven_20261023\\run-outcome\\restsharp-outcome.json",
+    "sha256": "a1abac124ff7e103a0ec3237a3dbb4ddf6d1235dfbdc0c7fabb0d0a2679501c2"
+  }
+}

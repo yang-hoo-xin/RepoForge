@@ -6,7 +6,7 @@
 
 ## 2026-10-23 RestSharp 原件复算与待接入项
 
-**本次实际完成：只读调查、已有入口查询及逐响应复算；只更新 AGENTS.md、本表和[主设计的数据责任接入节](AGENT_RELIABILITY_LEARNING_GOAL.md#2026-10-23-增量运行事实的默认汇总与数据责任)。产品代码、测试未改，没有新模型调用、训练、Build、测试执行或恢复；未向开发页发送指令。正常／失败／恢复自动产出同口径摘要仍是交给开发页的实施项，不能写成已完成。** 为什么要有它：设计、只读复算、自动采集通路和业务收益分别成立，不能互相代替。
+**后续实施更新：用户已授权本页负责代码，隔离分支 `codex/run-outcome-evidence` 已实现共用投影、查询及正常／失败／恢复／交付收尾；主开发分支尚待接入。** 新增验证使用受控模型与构建，没有真实模型调用、训练或历史任务重跑。原始数据不修改，U1—U5 仍归原开发页。接口与分工见[主设计](AGENT_RELIABILITY_LEARNING_GOAL.md#2026-10-23-增量运行事实的默认汇总与数据责任)。为什么要有它：自动采集通路成立不等于产生新的业务收益，也不等于已在另一分支部署。
 
 ### 已经复算的数据
 
@@ -55,7 +55,31 @@ python -B -m scripts.dsh_run_request --execution-config "C:\tmp\rfext-restsharp-
 python -B -m scripts.dsh_run_request --execution-config "C:\tmp\rfext-restsharp-v2-revision-1\execution.json" --inspect-run "dsh_1fd7a8c7c3fd491ab5bd30536e18076b" --view evidence --format json
 ```
 
-`--format markdown` 适合阅读，程序复算使用 JSON。现有正常运行已保存 manifest／结果、原生执行、时间／技术输入审计及适用交付收据；现有脚本还会返回 inspection 入口。**这不等于已经自动生成本节的完整合并结果。** `summarize_benchmark_outcomes --ledger ...` 目前核验并汇总预制账本，也不能凭空补齐未采集的人工时间。为什么要有它：使用方法应对应当前可执行能力，不把待实现接口包装成现成功能。
+`--format markdown` 适合阅读，程序复算使用 JSON。上述不带扩展参数的命令仍是单运行有界查询；本批增加的 `outcome` 可通过 `--evidence-context` 和 `--evidence-root` 纳入明确关联原件。**现已自动复现本表的21响应／298,607 Token／1,626.155秒、无正确交付及独立口径更正**，原件完整范围之外仍是 partial。`summarize_benchmark_outcomes --ledger ...` 保留旧输入语义，不伪造历史预登记。为什么要有它：自动汇总已知值和补造未采集信息是不同事情。
+
+完整可重跑 argv、输入引用与SHA保存在[调用记录](../artifacts/eval_driven_20261023/run-outcome/restsharp-invocation-v2.json)，[派生结果](../artifacts/eval_driven_20261023/run-outcome/restsharp-outcome-v2.json)保留已知、未知及适用范围；前一派生快照保留并由引用关联。在采用本分支代码的仓库环境中，可复用记录执行：
+
+```powershell
+$invocation = Get-Content "artifacts/eval_driven_20261023/run-outcome/restsharp-invocation-v2.json" -Raw | ConvertFrom-Json
+$queryArgs = @($invocation.argv | Select-Object -Skip 1)
+python @queryArgs
+```
+
+本地路径对应当前机器，移动原件后须显式更新查询输入，不猜测“最新目录”。查询不会写回历史；调用记录中 `query_effects` 的模型／构建／测试／恢复／写入均为0，外层仅保存派生输出。为什么要有它：一条可复制命令和准确范围比手填统计表更可复查。
+
+### 正常入口自动产物与本批验证
+
+| 实际变化／验证 | 已成立结果 | 不支持的主张 |
+| --- | --- | --- |
+| 原件投影和查询 | 复算原生响应、学习成本、版本引用、关联尝试、显式更正、反馈送达与未知量；独立／开发成本分区 | 不将状态反馈当作有效反例，也不把临时关联补成预登记比较 |
+| 正常及恢复 CLI，受控模型／构建 | 正常任务自动返回 `outcome_summary_ref`；13次受控响应、390 Token；中断恢复仍为13／390，未重复累计 | 不是13次真实模型推理、不是业务修复率，也不是新任务交付成绩 |
+| 失败、拒绝和交付收尾 | 保存持久边界；原产品状态及旧终态引用保留；摘要失败仅 `summary_unavailable`；精确Apply／Build／重放回归通过 | 统计不能放宽权限；Apply或公开Build不自动算独立正确交付 |
+| Trace介入申报 | `ExecutionTrace.record_intervention` 区分人／外层Codex，审批／审阅／提示／代修／返工／环境修复／执行控制；明示主动时间、按人处理重叠、模型时长排除 | 不会自动监听外层聊天；未明确记录仍未知，不能推出无人技术救援 |
+| [定向集成日志](../artifacts/eval_driven_20261023/run-outcome/pytest.txt) | 93项通过；随后边界小改[32项复验](../artifacts/eval_driven_20261023/run-outcome/pytest-final-boundaries.txt)，工具版本字段等最终小改[58项复验](../artifacts/eval_driven_20261023/run-outcome/pytest-final-fields.txt)；复验有重叠，不累加成独立样本 | 单元／受控通路不是任务成功率，测试时长是平台开发成本，不能混入历史任务运行时间 |
+
+正常入口原件与代码／命令身份集中见[本批验证原件](../artifacts/eval_driven_20261023/run-outcome/validation.json)。正向独立结论没有对应验证器核验时只保留 reported，不能仅凭 `passed=true` 产生 `correct_delivery=true`。为什么要有它：自动统计必须至少保留原有验收强度，不能让汇总成为更宽松的成功出口。
+
+最终还针对“准入拒绝未派发”和manifest首次读取检查完成[15项轻量复验](../artifacts/eval_driven_20261023/run-outcome/pytest-final-admission.txt)，为保留恢复原件精确引用另执行[1项受控恢复](../artifacts/eval_driven_20261023/run-outcome/pytest-recovery-retained.txt)。这些与上表检查有重叠，不累加为业务样本或不同故障次数。
 
 ### 五类数据的当前结论与最小补证
 

@@ -1,0 +1,176 @@
+{
+  "schema_version": "run_outcome_validation_v1",
+  "base_commit": "d97b86f27821b9e2fcc26422089905d21df72c59",
+  "branch": "codex/run-outcome-evidence",
+  "implementation_source_refs": [
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\scripts\\dsh_run_request.py",
+      "sha256": "281cc396febade48e7dbf61c6e7f658161dc051821b19a1dca5c037866bc803b"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\src\\core\\trace\\execution_trace.py",
+      "sha256": "c8f20c5d8872b4dfdb48a3aea3614a30eda66a6265b84b3949c6275dc5bd7606"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\src\\mod_agent\\cli.py",
+      "sha256": "5a0e95abf010246045116da8cae4e27d9519fc97969c673cb395a7eca1122401"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\src\\mod_agent\\evaluation\\benchmark_outcome_ledger.py",
+      "sha256": "c491124eca39d6cbf4f350f74d3af2aafc1fb418a483c4bff2810cc1563d4463"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\src\\mod_agent\\local_entry.py",
+      "sha256": "cca74eb81d228b1b72ae090e339f0353dd47e2041ec1e30f7f4eb93b57b9dc69"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\src\\mod_agent\\run_outcome_finalization.py",
+      "sha256": "57ae01f4080074b3068847b55f29a628436bfff4240d55c4ed9a63085e90ffb6"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\src\\mod_agent\\task_agent_v2_delivery.py",
+      "sha256": "e20476de1bee758714203d1f034e7528d05fae57532f873a6ae70bdd1c4ad5d5"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\src\\mod_agent\\task_agent_v2_recovery.py",
+      "sha256": "7543431c7cedde514053046ce8e37aa411433aaed36d6d9f481516ac3c62dd1b"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\src\\observability\\dashboard\\services\\run_evidence.py",
+      "sha256": "19bf1ff8706b52ea9d7a73f0dc1ff873e6a0e88649ee82927343d98f5043ed57"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\src\\observability\\dashboard\\services\\trace_service.py",
+      "sha256": "547d072ab1a548487b13893a071d3807f2291ef46742d408d5ef723b198f02b6"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\tests\\unit\\test_intervention_trace.py",
+      "sha256": "158940a30c22ea47115ece72e6012650d41eccf2426bf4aa248ef8f9e2d1f61a"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\tests\\unit\\test_native_outcome_projection.py",
+      "sha256": "ae7cc762e577cf660c73619fa778f6c19c86ad3d8ce842d99d3d47d707e569dd"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\tests\\unit\\test_run_evidence_query.py",
+      "sha256": "8fdccbd4aa16e51866ec47cb70f3fd1ff8871adf60ae12768aaf800ccbeafbe8"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\tests\\unit\\test_run_outcome_finalization.py",
+      "sha256": "38702d553d85ea1d6458f61e23f48aa264f45f3617676b00c25cb089b8454336"
+    }
+  ],
+  "historical_recomputation_ref": {
+    "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\artifacts\\eval_driven_20261023\\run-outcome\\restsharp-invocation-v2.json",
+    "sha256": "144ed031dbd1c400d31ab1e2a43ea32cde1affd16005e1fd2ecf58c605fdc25b"
+  },
+  "controlled_entry_records": [
+    {
+      "kind": "normal",
+      "origin": "controlled_model_and_build_not_real_model_success",
+      "descriptor_ref": {
+        "path": "C:\\tmp\\rf-outcome-integrated-final\\test_controlled_normal_cli_aut0\\controlled-cli-artifacts.json",
+        "sha256": "c41f60c0a12b5736cf572150811bd73d3e398ae54c742ec66e138dd5595245e3"
+      },
+      "summary_ref": {
+        "path": "C:\\Users\\10160\\AppData\\Local\\Temp\\rfcscli-ju2n8zgi\\runs\\18ea14f6\\run-outcomes\\12cbe1d7fac853d5d253440eed72e1f4020b85386e53da8f84a7afa5f9f5ca61.json",
+        "sha256": "87feed6bd0105077218d4b6e9660cbab7dc26a2a908eaaef76e748d1b861bfa1"
+      },
+      "run_root": "C:\\Users\\10160\\AppData\\Local\\Temp\\rfcscli-ju2n8zgi\\runs\\18ea14f6",
+      "unique_requests": 13,
+      "total_tokens": 390,
+      "boundary_refs": []
+    },
+    {
+      "kind": "recovery",
+      "origin": "controlled_model_and_build_not_real_model_success",
+      "descriptor_ref": {
+        "path": "C:\\tmp\\rf-outcome-recovery-retained\\test_controlled_recovery_cli_p0\\controlled-recovery-artifacts.json",
+        "sha256": "90808af55a77c851000ac8e8a69bdde209b4c16a2bebb61093a7c45a1851a618"
+      },
+      "summary_ref": {
+        "path": "C:\\Users\\10160\\AppData\\Local\\Temp\\rfcscli-6qfnqgjd\\runs\\159df446\\run-outcomes\\d9bb90d054fe452f85bf7e7a66e81913fcc2a19d803ebdc7483a8ca085273568.json",
+        "sha256": "c1a0100f0f894519b004d158d544eb69e3fd8bcae6cf8955264bac5d204e31c1"
+      },
+      "run_root": "C:\\Users\\10160\\AppData\\Local\\Temp\\rfcscli-6qfnqgjd\\runs\\159df446",
+      "unique_requests": 13,
+      "total_tokens": 390,
+      "boundary_refs": [
+        {
+          "path": "C:\\Users\\10160\\AppData\\Local\\Temp\\rfcscli-6qfnqgjd\\runs\\159df446\\run-continuations\\25a223977baeb41c77789bbc055c2452c8f8a8ee97dd47a2cc7acd93d375a780.json",
+          "sha256": "149e09179e84e921a6af4333a9ffc285ce7f2a48a02f3e8d7d383dfdd876f745"
+        },
+        {
+          "path": "C:\\Users\\10160\\AppData\\Local\\Temp\\rfcscli-6qfnqgjd\\runs\\159df446\\run-continuations\\f1d84a30f1314fae07841f16b79cc0d2a02cf2f5746f51bc02798b9ba998a9a3.json",
+          "sha256": "ad0039dc2e44b61a2c2cc5f4c4d58aad21aa504559b9b69b87c8490ee54c606c"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "scope": "selected integration tests including controlled CLI/recovery and exact delivery replay",
+      "passed": 93,
+      "seconds": 196.91,
+      "ref": {
+        "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\artifacts\\eval_driven_20261023\\run-outcome\\pytest.txt",
+        "sha256": "4597742ec80f56ea89cf042faf5e0d8f9944a1b3e6c993e0a4dd48b88287a05b"
+      }
+    },
+    {
+      "scope": "affected projection and finalization recheck, overlapping integration selection",
+      "passed": 32,
+      "seconds": 4.29,
+      "ref": {
+        "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\artifacts\\eval_driven_20261023\\run-outcome\\pytest-final-boundaries.txt",
+        "sha256": "eee928252eb6fda7263f95ab8d03812521570680481781d151f2ac5eade0bbdb"
+      }
+    },
+    {
+      "scope": "final field and query recheck, overlapping integration selection",
+      "passed": 58,
+      "seconds": 7.26,
+      "ref": {
+        "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\artifacts\\eval_driven_20261023\\run-outcome\\pytest-final-fields.txt",
+        "sha256": "7247ec4a0822b552dfcaee4ba8ae83c57dbf2e769d430d25c22a0e5f4c1281b3"
+      }
+    },
+    {
+      "scope": "final admission and pre-read boundary cases, overlapping selection plus two new cases",
+      "passed": 15,
+      "seconds": 4.76,
+      "ref": {
+        "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\artifacts\\eval_driven_20261023\\run-outcome\\pytest-final-admission.txt",
+        "sha256": "03a03acff15fc584ba418c5cabd2269a61dea9ca2d07cc66270a4aab037535af"
+      }
+    },
+    {
+      "scope": "retain precise controlled recovery output reference",
+      "passed": 1,
+      "seconds": 51.12,
+      "ref": {
+        "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\artifacts\\eval_driven_20261023\\run-outcome\\pytest-recovery-retained.txt",
+        "sha256": "0ea6597a59fb7cfc88da55c283c867953ef6369fb024a5655366c4cede45c7d6"
+      }
+    }
+  ],
+  "model_calls_for_historical_queries": 0,
+  "new_real_model_or_training_runs": 0,
+  "cost_scope": "verification costs are platform_development; 390 controlled fixture tokens are not real-provider usage; historical task cost remains separate",
+  "platform_development_cost_complete": false,
+  "platform_development_model_usage": null,
+  "human_active_seconds": null,
+  "first_failure_notes": [
+    "Implementation agents reported Trace fixture reuse after finish; corrected to one activation scope and reran affected checks. These are development test errors, not product-task failures. Initial child command output remains in chat history; no whole-development cost is claimed."
+  ],
+  "limitations": [
+    "No statistical improvement or new business success established.",
+    "Unknown historical human time, fees and unobserved calls remain unknown.",
+    "Generic independent pass booleans remain reported unless a bound evaluator verification is supplied.",
+    "Changes are isolated; main development branch integration is owned by the receiving task."
+  ],
+  "implementation_commits": [
+    "7b4b656",
+    "076f674"
+  ]
+}

@@ -1,0 +1,1121 @@
+{
+  "conditions": [
+    {
+      "expected_model_identity": {
+        "base_url": "http://127.0.0.1:11434",
+        "capabilities": [
+          "completion",
+          "tools"
+        ],
+        "details": {
+          "context_length": 262144,
+          "embedding_length": 2048,
+          "families": [
+            "qwen3moe"
+          ],
+          "family": "qwen3moe",
+          "format": "gguf",
+          "parameter_size": "30.5B",
+          "parent_model": "",
+          "quantization_level": "Q4_K_M",
+          "runner": "ggml"
+        },
+        "digest": "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca",
+        "model": "qwen3-coder:30b",
+        "modified_at": "2026-09-04T19:15:01.3509384+08:00",
+        "name": "qwen3-coder:30b",
+        "size": 18556700761
+      },
+      "expected_verification_identity": {
+        "deterministic_reuse_allowed": false,
+        "environment_sha256": "414f1fe71c239f068a31e57b8468d152c570e433e69844b1790704978e297397",
+        "inputs_sha256": "814a0e64dd6d31377da180fe00c1a15b6fcc77060dd9b84363bfd821c2e211ff",
+        "validator_sha256": "779965ce4616cf9b2864d25b84ea88f320047a68c4bd6b78afdb45b18c3064c0"
+      },
+      "freeze_status": "not_established",
+      "model_profile": {
+        "automatic_provider_fallback": false,
+        "automatic_retry": false,
+        "base_url": "http://127.0.0.1:11434",
+        "context_window": 65536,
+        "execution_locality": "local",
+        "model": "qwen3-coder:30b",
+        "native_json_schema": true,
+        "output_budget": 4096,
+        "profile_version": "local_ollama_initial_patch_profile_v1",
+        "provider": "ollama",
+        "temperature": 0.0,
+        "timeout_seconds": 600.0
+      },
+      "protocol": "v2",
+      "ref": {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\execution.json",
+        "sha256": "3ebec0e973f0fc792ba80903d527d7203ed726a1c937cfaa69e8aa821634e1eb"
+      },
+      "run_id": "dsh_1fd7a8c7c3fd491ab5bd30536e18076b",
+      "source_identity": {
+        "pointer": "/source_before",
+        "recorded": true,
+        "ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\execution.json",
+          "sha256": "3ebec0e973f0fc792ba80903d527d7203ed726a1c937cfaa69e8aa821634e1eb"
+        }
+      },
+      "tool_definition_request_ref": {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\request-001.json",
+        "sha256": "2c911e012b2108081d1e178cbe5653bd61cb81591053f9c0c5ea9bb0ce2461a0"
+      },
+      "worker_binding": {
+        "configuration_ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\repository-worker.json",
+          "sha256": "2af6d2c5b474e00068c283f7b3f6b7c9299aac57a41c6af4a0fb091f2d18d230"
+        },
+        "factory_name": "make_csharp_repository_evaluator",
+        "factory_ref": {
+          "path": "C:\\tmp\\rfcode-restsharp-v2-revision-1\\src\\mod_agent\\domain\\csharp_repository_backend.py",
+          "sha256": "3665c9150ee5b1dee7f1a426e6b355c0f50bbf8e8f58b9f876bcc92f542bd7e3"
+        },
+        "kwargs_sha256": "17535bce4e658834c75ebe704540edb5bbcabcccb003921a88bf3ec5b8b22b48"
+      }
+    },
+    {
+      "expected_model_identity": {
+        "base_url": "http://127.0.0.1:11434",
+        "capabilities": [
+          "completion",
+          "tools"
+        ],
+        "details": {
+          "context_length": 262144,
+          "embedding_length": 2048,
+          "families": [
+            "qwen3moe"
+          ],
+          "family": "qwen3moe",
+          "format": "gguf",
+          "parameter_size": "30.5B",
+          "parent_model": "",
+          "quantization_level": "Q4_K_M",
+          "runner": "ggml"
+        },
+        "digest": "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca",
+        "model": "qwen3-coder:30b",
+        "modified_at": "2026-09-04T19:15:01.3509384+08:00",
+        "name": "qwen3-coder:30b",
+        "size": 18556700761
+      },
+      "expected_verification_identity": {
+        "deterministic_reuse_allowed": false,
+        "environment_sha256": "414f1fe71c239f068a31e57b8468d152c570e433e69844b1790704978e297397",
+        "inputs_sha256": "ac11769358f8461d922e7c05a76ff2c4107074b4d7b03480a41ef0083a39509b",
+        "validator_sha256": "9e65de3c661a20cb3861703db6d757ea6ea57a97a33862a1b9bd75ad090cf863"
+      },
+      "freeze_status": "not_established",
+      "model_profile": {
+        "automatic_provider_fallback": false,
+        "automatic_retry": false,
+        "base_url": "http://127.0.0.1:11434",
+        "context_window": 65536,
+        "execution_locality": "local",
+        "model": "qwen3-coder:30b",
+        "native_json_schema": true,
+        "output_budget": 4096,
+        "profile_version": "local_ollama_initial_patch_profile_v1",
+        "provider": "ollama",
+        "temperature": 0.0,
+        "timeout_seconds": 600.0
+      },
+      "protocol": "v2",
+      "ref": {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\execution.json",
+        "sha256": "1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a"
+      },
+      "run_id": "dsh_7e85b512903f4692a7812b24edeadefe",
+      "source_identity": {
+        "pointer": "/source_before",
+        "recorded": true,
+        "ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\execution.json",
+          "sha256": "1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a"
+        }
+      },
+      "tool_definition_request_ref": {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\request-001.json",
+        "sha256": "e91e209d02992050fbbd731e989393c694ec3d057ecc06a393110737d4b84746"
+      },
+      "worker_binding": {
+        "configuration_ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\repository-worker.json",
+          "sha256": "9ce15d94978614803c27346a23d07a58dff6b37f47483b5af481950448cefeca"
+        },
+        "factory_name": "make_csharp_repository_evaluator",
+        "factory_ref": {
+          "path": "C:\\tmp\\rfcode-restsharp-v2-b1\\src\\mod_agent\\domain\\csharp_repository_backend.py",
+          "sha256": "cb8c5969a848e0d7c295a891f51a663370c80dfabf101acfaa9390151cb94811"
+        },
+        "kwargs_sha256": "1a902fd2ed0aa30d62d0ce58ae7eb1cff85e8bd4fe8709e62f7ec44c2dfb654a"
+      }
+    },
+    {
+      "binding": "recorded_context_relation_not_current_checkout_version",
+      "code_snapshot_ref": {
+        "path": "C:\\tmp\\rfcode-restsharp-v2-revision-1\\snapshot.json",
+        "sha256": "a00e04f97db8e666613e9293f36af324c63fcee25dd5467447a32d08952b35d5"
+      },
+      "kind": "explicit_version_record",
+      "native_execution_ref": null,
+      "new_task": true,
+      "owner_refs": null,
+      "product_commit": null,
+      "ref": {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\started.json",
+        "sha256": "503a3011c23b79688d40431cfbf9183d8d511e80cb48988623614242dad4fa48"
+      }
+    },
+    {
+      "binding": "recorded_context_relation_not_current_checkout_version",
+      "code_snapshot_ref": null,
+      "kind": "explicit_version_record",
+      "native_execution_ref": null,
+      "new_task": null,
+      "owner_refs": [
+        {
+          "path": "C:\\tmp\\rfcode-restsharp-v2-revision-1\\src\\mod_agent\\task_agent_execution.py",
+          "sha256": "35172408802bcd63e3d177881059ca5cc978f8e21aff468a3fff688c68c51ec7"
+        },
+        {
+          "path": "C:\\tmp\\rfcode-restsharp-v2-revision-1\\src\\mod_agent\\task_agent_loop.py",
+          "sha256": "2d5848425f3ec8703e13b52d153aeb212abed010e29abb8f78c4157d50e6598b"
+        },
+        {
+          "path": "C:\\tmp\\rfcode-restsharp-v2-revision-1\\src\\mod_agent\\task_agent_v2_execution.py",
+          "sha256": "f70956a0eeef6ab0e1fcbf965376dc402308403ebaa0d2f465b0b8d8b9c9fcc5"
+        },
+        {
+          "path": "C:\\tmp\\rfcode-restsharp-v2-revision-1\\src\\mod_agent\\task_agent_v2_tools.py",
+          "sha256": "5496f4b924d116f0b25728988a0b5a6aa64470087f4bb9dc19f38f26558b1b0c"
+        },
+        {
+          "path": "C:\\tmp\\rfcode-restsharp-v2-revision-1\\src\\mod_agent\\task_agent_v2_state.py",
+          "sha256": "6f507f43f0f3be72b83af04c1b6bc661654b4d268b4642587a1ec5c406fda44d"
+        },
+        {
+          "path": "C:\\tmp\\rfcode-restsharp-v2-revision-1\\src\\mod_agent\\task_agent_v2_experience.py",
+          "sha256": "2b38bd3288b5d7cc4531dd4a8abb74d7da009edfe0318b43411665a99deaf5f6"
+        },
+        {
+          "path": "C:\\tmp\\rfcode-restsharp-v2-revision-1\\src\\mod_agent\\task_agent_v2_experiments.py",
+          "sha256": "4e7c845a09e12b1a01d9ed706d51f8603e11061d940e75c87543ce6d464effa4"
+        },
+        {
+          "path": "C:\\tmp\\rfcode-restsharp-v2-revision-1\\src\\mod_agent\\task_agent_v2_experiment_tools.py",
+          "sha256": "4af133b5d51bfba6e71a483275bec970443a060ea3ff107ac08ad02e4c645607"
+        },
+        {
+          "path": "C:\\tmp\\rfcode-restsharp-v2-revision-1\\src\\mod_agent\\task_agent_v2_recovery.py",
+          "sha256": "9ab52ad3fe20ab32245f415e28d54205d9c707e3e89963b46c90a2fe7bf2cd1c"
+        }
+      ],
+      "product_commit": null,
+      "ref": {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\v2\\host-recovery-config\\4bf439ec9aae81bca7a114483e7d742ade3496b4e6841abbf635b661d8a21f53.json",
+        "sha256": "4bf439ec9aae81bca7a114483e7d742ade3496b4e6841abbf635b661d8a21f53"
+      }
+    },
+    {
+      "binding": "recorded_context_relation_not_current_checkout_version",
+      "code_snapshot_ref": null,
+      "kind": "explicit_version_record",
+      "native_execution_ref": {
+        "path": "C:/tmp/rfext-restsharp-v2-b1/runs/dsh_7e85b512903f4692a7812b24edeadefe/a/task-agent-execution/execution.json",
+        "sha256": "1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a"
+      },
+      "new_task": null,
+      "owner_refs": null,
+      "product_commit": "635011f19428b9779eda69e1a6598fd28892d1af",
+      "ref": {
+        "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\docs\\evidence\\restsharp-v2-b1-observed.json",
+        "sha256": "aab4c2acfbc2b8119832d378b37ba60a8bbf426b5561b1076cfe9ad6a8fe8119"
+      }
+    },
+    {
+      "binding": "recorded_context_relation_not_current_checkout_version",
+      "code_snapshot_ref": {
+        "path": "C:\\tmp\\rfcode-restsharp-v2-b1\\snapshot.json",
+        "sha256": "7ae15276950329b9a181b4b8589727820561fc2408f0aed818b45344e8f05acc"
+      },
+      "kind": "explicit_version_record",
+      "native_execution_ref": null,
+      "new_task": null,
+      "owner_refs": null,
+      "product_commit": null,
+      "ref": {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1\\started.json",
+        "sha256": "c1f50a0aa7c70df2d0959668f86ce4a6295f5a2576a4d433eb6f4466066ca6ca"
+      }
+    }
+  ],
+  "costs": {
+    "independent_evaluation": {
+      "complete": false,
+      "model_calls": 0,
+      "money": null,
+      "observations": [
+        {
+          "model_calls": 0,
+          "outcomes": {
+            "Failed": 5,
+            "NotExecuted": 0,
+            "Passed": 215
+          },
+          "purpose": "independent_acceptance",
+          "ref": {
+            "path": "C:\\tmp\\rfext-restsharp-v2-b1-independent-diagnostic\\result-reporting-v2.json",
+            "sha256": "a6cabc20a2f5ef0ba69ddf16dbcf9e906a5382ef4124d4b0c2de7fbc4abb5136"
+          },
+          "status": "failed",
+          "tests_executed": true,
+          "total_results": 220
+        },
+        {
+          "model_calls": 0,
+          "outcomes": null,
+          "purpose": "public_diagnostic_not_independent_acceptance",
+          "ref": {
+            "path": "C:\\tmp\\rfext-restsharp-v2-b1-check-replay\\result.json",
+            "sha256": "7494107b9cffb62b0c41f1b710d861dec12cd9c7a1acfe3aac66575c88049dd6"
+          },
+          "status": "behavior_failed",
+          "tests_executed": null,
+          "total_results": null
+        }
+      ],
+      "unknown": [
+        "full_evaluation_cost"
+      ]
+    },
+    "per_successful_delivery": {
+      "confirmed_successes": 0,
+      "reason": "zero_confirmed_success_no_finite_estimate",
+      "value": null
+    },
+    "platform_development": {
+      "complete": false,
+      "model_calls": null,
+      "money": null,
+      "unknown": [
+        "platform_development_cost"
+      ]
+    },
+    "task_runtime": {
+      "cached_input_included_in_input": true,
+      "cached_input_tokens": {
+        "known_sum": 208056,
+        "unknown_calls": 0
+      },
+      "complete": false,
+      "included_run_ids": [
+        "dsh_1fd7a8c7c3fd491ab5bd30536e18076b",
+        "dsh_7e85b512903f4692a7812b24edeadefe"
+      ],
+      "input_tokens": {
+        "known_sum": 292282,
+        "unknown_calls": 0
+      },
+      "known_learning_responses": 0,
+      "known_process_wall_seconds": 1626.1550000000018,
+      "money": null,
+      "observed_processes": [
+        {
+          "finished_at": "2026-10-23T04:55:02.342797+00:00",
+          "ref": {
+            "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\result.json",
+            "sha256": "26b1d23c371c29afa5fb93a0eaaa59fa11cdd4316a5fdb3a3f4c5c907c3ace52"
+          },
+          "run_id": "dsh_1fd7a8c7c3fd491ab5bd30536e18076b",
+          "started_at": "2026-10-23T04:50:36.125655+00:00",
+          "wall_seconds": 266.2180000000001
+        },
+        {
+          "finished_at": "2026-10-22T12:47:40.142458+00:00",
+          "ref": {
+            "path": "C:\\tmp\\rfext-restsharp-v2-b1\\service-resume-1\\result.json",
+            "sha256": "cd8a6ac2592445f6b5bd5fcf56e37cdfe50dfc9f802a444bedf6333206fae055"
+          },
+          "run_id": "dsh_7e85b512903f4692a7812b24edeadefe",
+          "started_at": "2026-10-22T12:25:00.210706+00:00",
+          "wall_seconds": 1359.9370000000017
+        }
+      ],
+      "observed_responses": 21,
+      "output_tokens": {
+        "known_sum": 6325,
+        "unknown_calls": 0
+      },
+      "refs": [
+        {
+          "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\execution.json",
+          "sha256": "3ebec0e973f0fc792ba80903d527d7203ed726a1c937cfaa69e8aa821634e1eb"
+        },
+        {
+          "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\execution.json",
+          "sha256": "1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a"
+        },
+        {
+          "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\terminal-learning-receipt-08a766a36ce7471592ff44b1fe191034.json",
+          "sha256": "96ca7a85556b76e370700fd5d7d2d40c0002096f6a2fe5a5e982ded2cd041a0c"
+        },
+        {
+          "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\terminal-learning-receipt-4ad74c5751a040bc965b150652855b72.json",
+          "sha256": "36d0350bf74d49a86e24f93390a6daee936b432005770e80d5106cf20c12eb83"
+        }
+      ],
+      "reserved_budget_calls": 21,
+      "scope": "observed_related_runs_native_requests_and_bound_learning_not_whole_task",
+      "selected_run_id": "dsh_1fd7a8c7c3fd491ab5bd30536e18076b",
+      "selected_run_request_cost": {
+        "cached_input_tokens": {
+          "known_sum": 62485,
+          "unknown_requests": 0
+        },
+        "human_help": "not_inferred",
+        "identity_basis": "request_path_sha256_and_reservation_id_not_content_only",
+        "input_tokens": {
+          "known_sum": 79762,
+          "unknown_requests": 0
+        },
+        "money": null,
+        "output_tokens": {
+          "known_sum": 1199,
+          "unknown_requests": 0
+        },
+        "recorded_run_budget": {
+          "by_stage": {
+            "initial_patch": {
+              "consumed": 7,
+              "maximum": null,
+              "remaining": null
+            },
+            "planning": {
+              "consumed": 0,
+              "maximum": null,
+              "remaining": null
+            },
+            "repair": {
+              "consumed": 0,
+              "maximum": null,
+              "remaining": null
+            },
+            "requirement_findings": {
+              "consumed": 0,
+              "maximum": null,
+              "remaining": null
+            },
+            "requirement_projection": {
+              "consumed": 0,
+              "maximum": null,
+              "remaining": null
+            }
+          },
+          "consumed": 7,
+          "count_basis": "reserved_provider_invocations_not_transport_proof",
+          "maximum": null,
+          "policy": "meter_only",
+          "remaining": null
+        },
+        "requests": 7,
+        "scope": "unique_v2_technical_requests_only_not_whole_task_or_single_context",
+        "whole_task_cost_complete": false
+      },
+      "send_attempts": 21,
+      "time_observations": [
+        {
+          "claim": "recorded_boundary_not_added_to_process_or_human_time",
+          "clock_basis": "same_process_monotonic",
+          "event": "native_execution_return",
+          "native_execution_ref": null,
+          "observation_sequence": 1,
+          "observed_elapsed_ms": 263421,
+          "origin_ref": {
+            "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\entry-timing.json",
+            "sha256": "7ffd452d4a9580a8a6c0be5f96ec1fc658e396844d6193adb2e9c2d8116fd5c9"
+          },
+          "ref": {
+            "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\task-observation-aa1126c0a0b84159a0b6c76b24a2a0f9.json",
+            "sha256": "7144091c2f8bf02f3a8fcecfcd750e5642d8fb48fd9d94a1b61f454dba146f02"
+          },
+          "resource_event_ref": "v2/operation/0189cc4cfce927fbca2402aeeed25212694f574c6ef575c9ab9bb460590a0f49.json",
+          "scope": "entry_received_to_observed_boundary_including_recovery_wait",
+          "status": "unknown",
+          "timing_status": "observed",
+          "whole_task_finished": false
+        },
+        {
+          "claim": "recorded_boundary_not_added_to_process_or_human_time",
+          "clock_basis": "same_process_monotonic",
+          "event": "product_return",
+          "native_execution_ref": {
+            "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\execution.json",
+            "sha256": "3ebec0e973f0fc792ba80903d527d7203ed726a1c937cfaa69e8aa821634e1eb"
+          },
+          "observation_sequence": 3,
+          "observed_elapsed_ms": 263671,
+          "origin_ref": {
+            "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\entry-timing.json",
+            "sha256": "7ffd452d4a9580a8a6c0be5f96ec1fc658e396844d6193adb2e9c2d8116fd5c9"
+          },
+          "ref": {
+            "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\task-observation-69291f46b6ff406d924680eaabd7cd90.json",
+            "sha256": "6d5fad8c1c4b2f17472e0cf12149c44a271257d52c05b07f229502d7a7a300cf"
+          },
+          "resource_event_ref": "v2/operation/0189cc4cfce927fbca2402aeeed25212694f574c6ef575c9ab9bb460590a0f49.json",
+          "scope": "entry_received_to_observed_boundary_including_recovery_wait",
+          "status": "domain_blocked",
+          "timing_status": "observed",
+          "whole_task_finished": false
+        },
+        {
+          "claim": "recorded_boundary_not_added_to_process_or_human_time",
+          "clock_basis": "same_process_monotonic",
+          "event": "terminal_learning_return",
+          "native_execution_ref": {
+            "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\execution.json",
+            "sha256": "3ebec0e973f0fc792ba80903d527d7203ed726a1c937cfaa69e8aa821634e1eb"
+          },
+          "observation_sequence": 2,
+          "observed_elapsed_ms": 263609,
+          "origin_ref": {
+            "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\entry-timing.json",
+            "sha256": "7ffd452d4a9580a8a6c0be5f96ec1fc658e396844d6193adb2e9c2d8116fd5c9"
+          },
+          "ref": {
+            "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\task-observation-2978e73b1da141bbbfffad2639e4349e.json",
+            "sha256": "219a687c729f664963c34c886c6b49956d50759275ac226f927e0b8e089a5f62"
+          },
+          "resource_event_ref": "v2/operation/0189cc4cfce927fbca2402aeeed25212694f574c6ef575c9ab9bb460590a0f49.json",
+          "scope": "entry_received_to_observed_boundary_including_recovery_wait",
+          "status": "no_information_gain",
+          "timing_status": "observed",
+          "whole_task_finished": false
+        },
+        {
+          "claim": "recorded_boundary_not_added_to_process_or_human_time",
+          "clock_basis": "same_process_monotonic",
+          "event": "native_execution_return",
+          "native_execution_ref": null,
+          "observation_sequence": 1,
+          "observed_elapsed_ms": 1357062,
+          "origin_ref": {
+            "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\entry-timing.json",
+            "sha256": "1c3ba808ef93510e226c126b7dad0cacc128c1e82edc8caebc7d0687d6b8c7b1"
+          },
+          "ref": {
+            "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\task-observation-f06b88f3047b439f97b3387c9d75eaaf.json",
+            "sha256": "42c65e5a29d6de4baa6a6d44b5478d1557545f6db0522f8247438039289c841d"
+          },
+          "resource_event_ref": "v2/operation/aad4b666644afaf5814aa6c6089025795f0950edd5612d6bf2cc6e9c71d2e440.json",
+          "scope": "entry_received_to_observed_boundary_including_recovery_wait",
+          "status": "unknown",
+          "timing_status": "observed",
+          "whole_task_finished": false
+        },
+        {
+          "claim": "recorded_boundary_not_added_to_process_or_human_time",
+          "clock_basis": "same_process_monotonic",
+          "event": "terminal_learning_return",
+          "native_execution_ref": {
+            "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\execution.json",
+            "sha256": "1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a"
+          },
+          "observation_sequence": 2,
+          "observed_elapsed_ms": 1357265,
+          "origin_ref": {
+            "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\entry-timing.json",
+            "sha256": "1c3ba808ef93510e226c126b7dad0cacc128c1e82edc8caebc7d0687d6b8c7b1"
+          },
+          "ref": {
+            "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\task-observation-b54bde4a41b441e5b01383888f18b70d.json",
+            "sha256": "787baa6c905ca7f14304714d458bc47ddceb635fd02086e5ddb372cfc4c8790c"
+          },
+          "resource_event_ref": "v2/operation/aad4b666644afaf5814aa6c6089025795f0950edd5612d6bf2cc6e9c71d2e440.json",
+          "scope": "entry_received_to_observed_boundary_including_recovery_wait",
+          "status": "no_information_gain",
+          "timing_status": "observed",
+          "whole_task_finished": false
+        }
+      ],
+      "total_tokens": 298607,
+      "total_tokens_is_known_subtotal": true,
+      "unique_requests": 21,
+      "unknown": [
+        "money",
+        "whole_task_cost"
+      ],
+      "unknown_learning_calls": 0,
+      "unknown_reserved_calls": 0
+    }
+  },
+  "coverage": {
+    "complete": false,
+    "issues": [
+      {
+        "expected_sha256": "3665c9150ee5b1dee7f1a426e6b355c0f50bbf8e8f58b9f876bcc92f542bd7e3",
+        "path": "[outside_selected_run]",
+        "reason": "Reference does not grant access outside selected run",
+        "status": "forbidden"
+      },
+      {
+        "expected_sha256": "c6e330c1e3895deab7b47b725822a4453e50dd0b79a148dceaf8ba3a749f8412",
+        "path": "[outside_selected_run]",
+        "reason": "Reference does not grant access outside selected run",
+        "status": "forbidden"
+      },
+      {
+        "expected_sha256": "9ab52ad3fe20ab32245f415e28d54205d9c707e3e89963b46c90a2fe7bf2cd1c",
+        "path": "[outside_selected_run]",
+        "reason": "Reference does not grant access outside selected run",
+        "status": "forbidden"
+      },
+      {
+        "expected_sha256": "4af133b5d51bfba6e71a483275bec970443a060ea3ff107ac08ad02e4c645607",
+        "path": "[outside_selected_run]",
+        "reason": "Reference does not grant access outside selected run",
+        "status": "forbidden"
+      },
+      {
+        "expected_sha256": "4e7c845a09e12b1a01d9ed706d51f8603e11061d940e75c87543ce6d464effa4",
+        "path": "[outside_selected_run]",
+        "reason": "Reference does not grant access outside selected run",
+        "status": "forbidden"
+      },
+      {
+        "expected_sha256": "2b38bd3288b5d7cc4531dd4a8abb74d7da009edfe0318b43411665a99deaf5f6",
+        "path": "[outside_selected_run]",
+        "reason": "Reference does not grant access outside selected run",
+        "status": "forbidden"
+      },
+      {
+        "expected_sha256": "6f507f43f0f3be72b83af04c1b6bc661654b4d268b4642587a1ec5c406fda44d",
+        "path": "[outside_selected_run]",
+        "reason": "Reference does not grant access outside selected run",
+        "status": "forbidden"
+      },
+      {
+        "expected_sha256": "5496f4b924d116f0b25728988a0b5a6aa64470087f4bb9dc19f38f26558b1b0c",
+        "path": "[outside_selected_run]",
+        "reason": "Reference does not grant access outside selected run",
+        "status": "forbidden"
+      },
+      {
+        "expected_sha256": "f70956a0eeef6ab0e1fcbf965376dc402308403ebaa0d2f465b0b8d8b9c9fcc5",
+        "path": "[outside_selected_run]",
+        "reason": "Reference does not grant access outside selected run",
+        "status": "forbidden"
+      },
+      {
+        "expected_sha256": "2d5848425f3ec8703e13b52d153aeb212abed010e29abb8f78c4157d50e6598b",
+        "path": "[outside_selected_run]",
+        "reason": "Reference does not grant access outside selected run",
+        "status": "forbidden"
+      },
+      {
+        "expected_sha256": "35172408802bcd63e3d177881059ca5cc978f8e21aff468a3fff688c68c51ec7",
+        "path": "[outside_selected_run]",
+        "reason": "Reference does not grant access outside selected run",
+        "status": "forbidden"
+      },
+      {
+        "expected_sha256": "7910101010101010101010101010101010101010101010101010101010101010",
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\v2\\test-catalog\\7910101010101010101010101010101010101010101010101010101010101010.json",
+        "reason": "Recorded file or directory is missing",
+        "status": "missing"
+      },
+      {
+        "message": "[WinError 3] 系统找不到指定的路径。: 'C:\\\\tmp\\\\rfext-restsharp-v2-revision-1\\\\runs\\\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\\\baseline_source\\\\RestSharp\\\\src\\\\RestSharp\\\\obj\\\\Release\\\\net8.0\\\\generated\\\\System.Text.RegularExpressions.Generator\\\\System.Text.RegularExpressions.Generator.RegexGenerator\\\\RegexGenerator.g.cs'",
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\baseline_source\\RestSharp\\src\\RestSharp\\obj\\Release\\net8.0\\generated\\System.Text.RegularExpressions.Generator\\System.Text.RegularExpressions.Generator.RegexGenerator\\RegexGenerator.g.cs",
+        "status": "read_error"
+      },
+      {
+        "reason": "Reference edge limit reached",
+        "status": "truncated"
+      },
+      {
+        "expected_sha256": "a00e04f97db8e666613e9293f36af324c63fcee25dd5467447a32d08952b35d5",
+        "path": "[outside_selected_run]",
+        "reason": "Reference does not grant access outside selected run",
+        "status": "forbidden"
+      },
+      {
+        "expected_sha256": "7ae15276950329b9a181b4b8589727820561fc2408f0aed818b45344e8f05acc",
+        "path": "[outside_selected_run]",
+        "reason": "Reference does not grant access outside selected run",
+        "status": "forbidden"
+      }
+    ],
+    "meaning": "reference_consistency_not_external_authenticity_or_business_acceptance",
+    "missing": [
+      "registered_comparison",
+      "complete_human_history",
+      "whole_task_cost"
+    ],
+    "query_complete": false,
+    "refs": [
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\execution.json",
+        "sha256": "3ebec0e973f0fc792ba80903d527d7203ed726a1c937cfaa69e8aa821634e1eb"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\execution.json",
+        "sha256": "1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\run_result.json",
+        "sha256": "3d8a1eb6efe2cb7b9be04978c5d9d29f4331af8d87bb94bd7a9d64bed4f31522"
+      },
+      {
+        "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\docs\\evidence\\restsharp-revision-result.json",
+        "sha256": "b2b8fa9eeab251991f83060a4a056035bc33fa04a3068169c5c6a1d648e7d35e"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\started.json",
+        "sha256": "503a3011c23b79688d40431cfbf9183d8d511e80cb48988623614242dad4fa48"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\result.json",
+        "sha256": "26b1d23c371c29afa5fb93a0eaaa59fa11cdd4316a5fdb3a3f4c5c907c3ace52"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\entry-timing.json",
+        "sha256": "7ffd452d4a9580a8a6c0be5f96ec1fc658e396844d6193adb2e9c2d8116fd5c9"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\task-observation-aa1126c0a0b84159a0b6c76b24a2a0f9.json",
+        "sha256": "7144091c2f8bf02f3a8fcecfcd750e5642d8fb48fd9d94a1b61f454dba146f02"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\terminal-learning-receipt-08a766a36ce7471592ff44b1fe191034.json",
+        "sha256": "96ca7a85556b76e370700fd5d7d2d40c0002096f6a2fe5a5e982ded2cd041a0c"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\task-observation-69291f46b6ff406d924680eaabd7cd90.json",
+        "sha256": "6d5fad8c1c4b2f17472e0cf12149c44a271257d52c05b07f229502d7a7a300cf"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\task-observation-2978e73b1da141bbbfffad2639e4349e.json",
+        "sha256": "219a687c729f664963c34c886c6b49956d50759275ac226f927e0b8e089a5f62"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\v2\\host-recovery-config\\4bf439ec9aae81bca7a114483e7d742ade3496b4e6841abbf635b661d8a21f53.json",
+        "sha256": "4bf439ec9aae81bca7a114483e7d742ade3496b4e6841abbf635b661d8a21f53"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\technical-input-audit-0a8cc55b3d6a47418999275229d51824.json",
+        "sha256": "4c140aa4c752cc301d067cc2c0e2eec76c2429bc3bfe1c618e554ec576af9c94"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\technical-input-audit-c08996004d324415bc79d6ccd8fe01ce.json",
+        "sha256": "dbb7cda28f5df873da2e37897445aed651ed6c89512d03ade88a866e2e582f01"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\technical-input-audit-c8ab3ae6a2fe4bb8963a5a68b054132f.json",
+        "sha256": "6ea3ceb7b119bcfa32e096843c06ab8193f10207bcd1d0b153163ba3088d42b4"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\technical-input-audit-540757af83bf40778e427dba2bc8b320.json",
+        "sha256": "3a6b1213496a3519829daa6c16b687b96db15bd8e58c020a7d025dbe7f0430dc"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\technical-input-audit-b1a53ae6c2e3495c841514740179c18d.json",
+        "sha256": "d4caa06b4c9a3360d76f6ecdeae04eed82164ce60d563e2c09d071231a1b3b02"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\technical-input-audit-03a5aa70824940b1b0122afcfbda9cb4.json",
+        "sha256": "4a9e38c769b5c65c64c0884a1c2b8439ffa981410ce5db988857095701eba8c8"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\technical-input-audit-7333f170b8f547ccb1fe2595bb67dc75.json",
+        "sha256": "f4c70eed8818e90a47113692f132be699ae57ef216e7e471b79ff56e34b41428"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1-check-replay\\checks\\664e48e0f25e4aefb68f7fed748e7715\\report.json",
+        "sha256": "2609e02a4555b60c0662fd9d6bc1d826affdd85701bffb68927848df1bee2656"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1-independent-diagnostic\\result-reporting-v2.json",
+        "sha256": "a6cabc20a2f5ef0ba69ddf16dbcf9e906a5382ef4124d4b0c2de7fbc4abb5136"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\terminal-learning-receipt-4ad74c5751a040bc965b150652855b72.json",
+        "sha256": "36d0350bf74d49a86e24f93390a6daee936b432005770e80d5106cf20c12eb83"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\entry-timing.json",
+        "sha256": "1c3ba808ef93510e226c126b7dad0cacc128c1e82edc8caebc7d0687d6b8c7b1"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\task-observation-f06b88f3047b439f97b3387c9d75eaaf.json",
+        "sha256": "42c65e5a29d6de4baa6a6d44b5478d1557545f6db0522f8247438039289c841d"
+      },
+      {
+        "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\docs\\evidence\\restsharp-v2-b1-observed.json",
+        "sha256": "aab4c2acfbc2b8119832d378b37ba60a8bbf426b5561b1076cfe9ad6a8fe8119"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1\\service-resume-1\\process\\process.json",
+        "sha256": "f2533c10c7bcc40ad91154aa5eb5ef572484e0abb31b5753ce81af11343da89b"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1\\service-resume-1\\start.json",
+        "sha256": "8cd46e30f96bcb6931b8fde3745d6436ad5e661d56dd95a09d8f975764f67645"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1\\service-resume-1\\result.json",
+        "sha256": "cd8a6ac2592445f6b5bd5fcf56e37cdfe50dfc9f802a444bedf6333206fae055"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\task-observation-b54bde4a41b441e5b01383888f18b70d.json",
+        "sha256": "787baa6c905ca7f14304714d458bc47ddceb635fd02086e5ddb372cfc4c8790c"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1-check-replay\\result.json",
+        "sha256": "7494107b9cffb62b0c41f1b710d861dec12cd9c7a1acfe3aac66575c88049dd6"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1\\started.json",
+        "sha256": "c1f50a0aa7c70df2d0959668f86ce4a6295f5a2576a4d433eb6f4466066ca6ca"
+      }
+    ]
+  },
+  "derived": true,
+  "feedback_revision": {
+    "candidate_source_ids": [
+      "da76ea51f3b966415be4566672fa6c4206a25328cfa4aa0647ce63e9902918da"
+    ],
+    "counting_rule": "plan_updates_and_identical_source_resubmissions_are_not_code_revision",
+    "distinct_candidate_sources": 1,
+    "effective_repairs": null,
+    "eligible_attempts": null,
+    "observed_feedback_links": [
+      {
+        "candidate_ref": "v2/candidate/a4482a1c0af63743993e3067399a6a21ce7b468efae7a293ce196eceb6112bfd.json",
+        "candidate_source_id": "da76ea51f3b966415be4566672fa6c4206a25328cfa4aa0647ce63e9902918da",
+        "diagnostic_details": "incomplete",
+        "feedback_ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-b1-check-replay\\checks\\664e48e0f25e4aefb68f7fed748e7715\\report.json",
+          "sha256": "2609e02a4555b60c0662fd9d6bc1d826affdd85701bffb68927848df1bee2656"
+        },
+        "included_in_provider_request": true,
+        "launch_ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\started.json",
+          "sha256": "503a3011c23b79688d40431cfbf9183d8d511e80cb48988623614242dad4fa48"
+        },
+        "missing_fields": [
+          "test_name",
+          "assertion_details",
+          "location"
+        ],
+        "name": "initial_public_check",
+        "provider_request_ref": {
+          "binding": "expected_byte_hash",
+          "expected_sha256": "996ee2b2a00e3871d354bc306f5e5a6cc013ae7218bed4eba845c3083bd0ba05",
+          "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\model_trace_bodies\\5bd4f746237046e6.provider_request.json",
+          "record_id": "WyJjMTE4MmM5MzRiNmI5OGViMzIxZmUwZTciLCJhL3Rhc2stYWdlbnQtZXhlY3V0aW9uL21vZGVsX3RyYWNlX2JvZGllcy81YmQ0Zjc0NjIzNzA0NmU2LnByb3ZpZGVyX3JlcXVlc3QuanNvbiJd",
+          "sha256": "996ee2b2a00e3871d354bc306f5e5a6cc013ae7218bed4eba845c3083bd0ba05",
+          "size_bytes": 24541,
+          "status": "verified"
+        },
+        "request_ref": {
+          "binding": "expected_byte_hash",
+          "expected_sha256": "2c911e012b2108081d1e178cbe5653bd61cb81591053f9c0c5ea9bb0ce2461a0",
+          "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\request-001.json",
+          "record_id": "WyJjMTE4MmM5MzRiNmI5OGViMzIxZmUwZTciLCJhL3Rhc2stYWdlbnQtZXhlY3V0aW9uL3JlcXVlc3QtMDAxLmpzb24iXQ",
+          "sha256": "2c911e012b2108081d1e178cbe5653bd61cb81591053f9c0c5ea9bb0ce2461a0",
+          "size_bytes": 31651,
+          "status": "verified"
+        },
+        "response_observed": true,
+        "turn": 1
+      }
+    ],
+    "unknown": [
+      "feedback_presence_not_diagnostic_sufficiency",
+      "code_change_not_business_repair"
+    ]
+  },
+  "identity": {
+    "attempts": [
+      {
+        "identity_basis": "explicit_run_request_not_registered_trial_repeat",
+        "native_execution_refs": [
+          {
+            "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\execution.json",
+            "sha256": "3ebec0e973f0fc792ba80903d527d7203ed726a1c937cfaa69e8aa821634e1eb"
+          }
+        ],
+        "request_id": "request_1fd7a8c7c3fd491ab5bd30536e18076b",
+        "run_id": "dsh_1fd7a8c7c3fd491ab5bd30536e18076b"
+      },
+      {
+        "identity_basis": "explicit_run_request_not_registered_trial_repeat",
+        "native_execution_refs": [
+          {
+            "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\execution.json",
+            "sha256": "1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a"
+          }
+        ],
+        "request_id": "request_7e85b512903f4692a7812b24edeadefe",
+        "run_id": "dsh_7e85b512903f4692a7812b24edeadefe"
+      }
+    ],
+    "native_segments": [
+      {
+        "candidate_ref": null,
+        "ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\execution.json",
+          "sha256": "3ebec0e973f0fc792ba80903d527d7203ed726a1c937cfaa69e8aa821634e1eb"
+        },
+        "request_id": "request_1fd7a8c7c3fd491ab5bd30536e18076b",
+        "run_id": "dsh_1fd7a8c7c3fd491ab5bd30536e18076b",
+        "status": "unknown",
+        "task_contract_ref": "v2/contract/d6ba18babdc6f6086d0e5c6a2ba24dc4627e714fbf182769a917e2ee27d616b0.json"
+      },
+      {
+        "candidate_ref": "v2/candidate/a4482a1c0af63743993e3067399a6a21ce7b468efae7a293ce196eceb6112bfd.json",
+        "ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\execution.json",
+          "sha256": "1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a"
+        },
+        "request_id": "request_7e85b512903f4692a7812b24edeadefe",
+        "run_id": "dsh_7e85b512903f4692a7812b24edeadefe",
+        "status": "unknown",
+        "task_contract_ref": "v2/contract/2995418f017f0365d653f7c919351763c5e1efccfaa68229718a0638abe189b0.json"
+      }
+    ],
+    "recovery": [
+      {
+        "claim": "checkpoint_presence_does_not_prove_resume",
+        "fields": [
+          "checkpoint_ref",
+          "host_config_ref"
+        ],
+        "kind": "recovery_or_delivery_reference",
+        "ref": {
+          "binding": "current_bytes_only_not_authenticity",
+          "expected_sha256": null,
+          "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\v2\\session-checkpoints\\7a8904fe0b5cd863488fd2259096e551601f3f7201ec9d8d299315d0cf308d41.json",
+          "record_id": "WyJjMTE4MmM5MzRiNmI5OGViMzIxZmUwZTciLCJhL3YyL3Nlc3Npb24tY2hlY2twb2ludHMvN2E4OTA0ZmUwYjVjZDg2MzQ4OGZkMjI1OTA5NmU1NTE2MDFmM2Y3MjAxZWM5ZDhkMjk5MzE1ZDBjZjMwOGQ0MS5qc29uIl0",
+          "sha256": "ab557b2adb34a9da8d43c4ad1afcd9fbca57d905c6286c0368e45565351f483f",
+          "size_bytes": 229,
+          "status": "indexed_unbound"
+        }
+      }
+    ],
+    "refs": [
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\execution.json",
+        "sha256": "3ebec0e973f0fc792ba80903d527d7203ed726a1c937cfaa69e8aa821634e1eb"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\execution.json",
+        "sha256": "1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a"
+      }
+    ],
+    "registered_task_denominator": null,
+    "registration": "historical_or_unregistered",
+    "related_run_count": 2,
+    "related_run_ids": [
+      "dsh_1fd7a8c7c3fd491ab5bd30536e18076b",
+      "dsh_7e85b512903f4692a7812b24edeadefe"
+    ],
+    "relations": [
+      {
+        "exposure": "exposed_development_revision_diagnostic",
+        "kind": "new_exposed_diagnostic",
+        "original_native_ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\execution.json",
+          "sha256": "1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a"
+        },
+        "ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\started.json",
+          "sha256": "503a3011c23b79688d40431cfbf9183d8d511e80cb48988623614242dad4fa48"
+        },
+        "starting_candidate_ref": "v2/candidate/a4482a1c0af63743993e3067399a6a21ce7b468efae7a293ce196eceb6112bfd.json",
+        "starting_candidate_source_id": "da76ea51f3b966415be4566672fa6c4206a25328cfa4aa0647ce63e9902918da"
+      }
+    ],
+    "selected_run_id": "dsh_1fd7a8c7c3fd491ab5bd30536e18076b",
+    "source_problem_count": 1,
+    "source_problem_ids": [
+      "restsharp__restsharp-2241"
+    ]
+  },
+  "interventions": {
+    "by_cost_scope": {},
+    "coverage": "observed_events_only_not_complete_history",
+    "declared_seconds_by_person": {},
+    "events": [],
+    "human_active_seconds": null,
+    "human_active_time_scope": "observed_explicit_events_only_not_whole_task",
+    "measured_interval_union_seconds": null,
+    "observed_event_count": 0,
+    "refs": [],
+    "technical_assistance_observed": false,
+    "total_technical_assistance": null,
+    "unknown": [
+      "unobserved_human_history",
+      "unstructured_developer_assistance_requires_event_classification"
+    ]
+  },
+  "read_only": true,
+  "result": {
+    "boundaries": [],
+    "confirmed_correct_deliveries": 0,
+    "confirmed_related_candidate_deliveries": 0,
+    "correct_delivery": false,
+    "delivery": [
+      {
+        "basis": "explicit_not_delivered_at_native_boundary",
+        "candidate_source_id": null,
+        "delivered": false,
+        "native_execution_ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\execution.json",
+          "sha256": "3ebec0e973f0fc792ba80903d527d7203ed726a1c937cfaa69e8aa821634e1eb"
+        },
+        "ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\execution.json",
+          "sha256": "3ebec0e973f0fc792ba80903d527d7203ed726a1c937cfaa69e8aa821634e1eb"
+        },
+        "run_id": "dsh_1fd7a8c7c3fd491ab5bd30536e18076b"
+      },
+      {
+        "basis": "explicit_not_delivered_at_native_boundary",
+        "candidate_source_id": null,
+        "delivered": false,
+        "native_execution_ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\execution.json",
+          "sha256": "1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a"
+        },
+        "ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\execution.json",
+          "sha256": "1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a"
+        },
+        "run_id": "dsh_7e85b512903f4692a7812b24edeadefe"
+      },
+      {
+        "basis": "reported_not_delivery_validation",
+        "candidate_source_id": null,
+        "delivered": false,
+        "native_execution_ref": {
+          "path": "C:/tmp/rfext-restsharp-v2-revision-1/runs/dsh_1fd7a8c7c3fd491ab5bd30536e18076b/a/task-agent-execution/execution.json",
+          "sha256": "3ebec0e973f0fc792ba80903d527d7203ed726a1c937cfaa69e8aa821634e1eb"
+        },
+        "ref": {
+          "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\docs\\evidence\\restsharp-revision-result.json",
+          "sha256": "b2b8fa9eeab251991f83060a4a056035bc33fa04a3068169c5c6a1d648e7d35e"
+        }
+      },
+      {
+        "basis": "reported_not_delivery_validation",
+        "candidate_source_id": "da76ea51f3b966415be4566672fa6c4206a25328cfa4aa0647ce63e9902918da",
+        "delivered": false,
+        "native_execution_ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\execution.json",
+          "sha256": "1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a"
+        },
+        "ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-b1-independent-diagnostic\\result-reporting-v2.json",
+          "sha256": "a6cabc20a2f5ef0ba69ddf16dbcf9e906a5382ef4124d4b0c2de7fbc4abb5136"
+        }
+      },
+      {
+        "basis": "reported_not_delivery_validation",
+        "candidate_source_id": "da76ea51f3b966415be4566672fa6c4206a25328cfa4aa0647ce63e9902918da",
+        "delivered": false,
+        "native_execution_ref": {
+          "path": "C:/tmp/rfext-restsharp-v2-b1/runs/dsh_7e85b512903f4692a7812b24edeadefe/a/task-agent-execution/execution.json",
+          "sha256": "1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a"
+        },
+        "ref": {
+          "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\docs\\evidence\\restsharp-v2-b1-observed.json",
+          "sha256": "aab4c2acfbc2b8119832d378b37ba60a8bbf426b5561b1076cfe9ad6a8fe8119"
+        }
+      }
+    ],
+    "independent_acceptance": [
+      {
+        "aggregation_script_ref": {
+          "bytes": 18939,
+          "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261022\\evaluate_restsharp_v2_candidate.py",
+          "sha256": "59fa8d39b2a1a02b37f48f625f954c40ac917585a99c30a8607be37d2646ba25"
+        },
+        "candidate_ref": "v2/candidate/a4482a1c0af63743993e3067399a6a21ce7b468efae7a293ce196eceb6112bfd.json",
+        "candidate_source_id": "da76ea51f3b966415be4566672fa6c4206a25328cfa4aa0647ce63e9902918da",
+        "full_selected_suite_passed": false,
+        "independent_acceptance_passed": false,
+        "judge_conditions": null,
+        "judge_ref": null,
+        "native_execution_ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\execution.json",
+          "sha256": "1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a"
+        },
+        "outcomes": {
+          "Failed": 5,
+          "NotExecuted": 0,
+          "Passed": 215
+        },
+        "preservation_scope": "qualified_existing_behavior_group",
+        "preservation_suite_passed": true,
+        "qualification_ref": {
+          "path": "C:/tmp/rfext-restsharp-2241-public-qualification-v2/qualification.json",
+          "sha256": "28ff3f2c1802ed8c8a0e32bb9a102b001ca545c3002f40b74e9806bd70630d07"
+        },
+        "ref": {
+          "path": "C:\\tmp\\rfext-restsharp-v2-b1-independent-diagnostic\\result-reporting-v2.json",
+          "sha256": "a6cabc20a2f5ef0ba69ddf16dbcf9e906a5382ef4124d4b0c2de7fbc4abb5136"
+        },
+        "supersedes_aggregate_ref": {
+          "bytes": 3479,
+          "path": "C:\\tmp\\rfext-restsharp-v2-b1-independent-diagnostic\\result.json",
+          "sha256": "c92dc94b4c23d7def0805cd249567227d2a9d78d1e64e6ab1559010dda178539"
+        },
+        "tests_executed": true,
+        "total_results": 220,
+        "verification_status": "reported_acceptance_not_judge_verified",
+        "verified_judge_ref": null
+      }
+    ],
+    "refs": [
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1-independent-diagnostic\\result-reporting-v2.json",
+        "sha256": "a6cabc20a2f5ef0ba69ddf16dbcf9e906a5382ef4124d4b0c2de7fbc4abb5136"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-revision-1\\runs\\dsh_1fd7a8c7c3fd491ab5bd30536e18076b\\a\\task-agent-execution\\execution.json",
+        "sha256": "3ebec0e973f0fc792ba80903d527d7203ed726a1c937cfaa69e8aa821634e1eb"
+      },
+      {
+        "path": "C:\\tmp\\rfext-restsharp-v2-b1\\runs\\dsh_7e85b512903f4692a7812b24edeadefe\\a\\task-agent-execution\\execution.json",
+        "sha256": "1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a"
+      },
+      {
+        "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\docs\\evidence\\restsharp-revision-result.json",
+        "sha256": "b2b8fa9eeab251991f83060a4a056035bc33fa04a3068169c5c6a1d648e7d35e"
+      },
+      {
+        "path": "C:\\Users\\10160\\.codex\\worktrees\\run-outcome-evidence\\rag_capability_mainline\\docs\\evidence\\restsharp-v2-b1-observed.json",
+        "sha256": "aab4c2acfbc2b8119832d378b37ba60a8bbf426b5561b1076cfe9ad6a8fe8119"
+      }
+    ],
+    "scope": "selected_run_not_parent_diagnostic_outcome",
+    "terminal": {
+      "completion_classification": {},
+      "current_stage": "blocked",
+      "delivery_ref": null,
+      "run_id": "dsh_1fd7a8c7c3fd491ab5bd30536e18076b",
+      "status": null,
+      "whole_task_delivered": null
+    },
+    "unknown": []
+  },
+  "schema_version": "native_run_outcome_v1"
+}

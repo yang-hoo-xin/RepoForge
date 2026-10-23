@@ -305,27 +305,30 @@ B/B+ 共同冻结：平台提交与相关源码 hash、模型 digest 和推理�
 
 ## 2026-10-23 增量：运行事实的默认汇总与数据责任
 
-**状态与分工：本节是给开发页的实施决定，尚未实现。** 调查开始基线为 `13be7692ad2aa12f94f525e14f598cc8dc405d08`；调查期间开发页继续提交，收尾时 HEAD 为 `f56e4bdb714ac09fac499cd1fe695b3cf2a9dab0`。本页保留其修改，只做只读复算及现有文档更新，不修改产品代码、不启动模型或训练、不发送开发页指令。U1—U5 仍由原开发页推进。本批范围止于历史复算、共用投影和收尾接入，不另设统计平台。为什么要有它：数据工作应随原工程收口，不能抢占执行所有权或成为新的长期主线。
+**状态与分工：用户后续已授权本页实施，代码位于隔离分支 `codex/run-outcome-evidence`，基线 `d97b86f27821b9e2fcc26422089905d21df72c59`；主开发分支尚待接入。** 历史原件复算、共用结果投影、正常／失败／恢复及交付收尾已实现并经受控入口验证；U1—U5 仍由原开发页推进。没有新真实模型、训练或业务评测。本批目标是五类成果具备数据出口，未知和负结果都保留，不要求产生正收益。具体原件及验证见[证据表](PROJECT_OUTCOMES.md#2026-10-23-restsharp-原件复算与待接入项)。为什么要有它：隔离分支实现、主分支采用和真实业务收益是不同状态，统计工作不应抢占原工程所有权。
 
 普通修复任务的目标过程是：登记需求与条件 → 模型调查和提交候选 → 公开失败实际进入请求 → 模型修改源码并复验 → 独立验收与实际交付分别落盘。失败、等待审批和恢复也保存各自事实；同一投影自动给出结果、全部已知成本、介入及缺口。文案仅从已成立结果提取。为什么要有它：用户关心正确交付、人工负担和总成本，模块数量、JSON 数量及测试检查项数量不能替代这些结果。
 
 ### 已有能力与最小变更位置
 
-| 当前文件／函数 | 已实现且可复用 | 开发页拟补的职责 | 完成验证及理由 |
+| 当前文件／函数 | 原有可复用能力 | 本批补齐的职责 | 完成验证及理由 |
 | --- | --- | --- | --- |
 | `services/run_evidence.py::query_run_evidence`，`TraceService.query_run_evidence`，`scripts/dsh_run_request.py::inspect_evidence` | 按业务 ID 校验引用、关联真实请求／响应、工具回执、候选和阶段事实；现有只读 CLI 可用 | 在现有 JSON 增加共用 `outcome` 投影；显式关联历史启动、进程与评测原件；补初始消息携带公开反馈的来源核验 | RestSharp 两次查询与逐响应复算一致；缺失、越界或冲突显示 unknown/partial。为什么要有它：有统一查询不等于已有完整任务结果及成本汇总。 |
 | `evaluation/benchmark_outcome_ledger.py`，`scripts/summarize_benchmark_outcomes.py` | 预制严格账本的任务族汇总、未知值、失败成本和单位成功成本 | 在现有模块增加纯函数 `project_native_outcome(facts)`，供查询及收尾共用；保持旧 v1 账本含义；原件投影不要求伪造预登记记录 | 不手填历史成功字段；派生数据能回到原件；旧账本回归通过。为什么要有它：当前 CLI 消费已有账本，不能宣称已经自动采集，也不应再造平行账本。 |
 | `evaluation/strategy_native_export.py` 的 `_actual_conditions`、`_timing`、`_technical_inputs`、`_delivery` | 实际条件、资源对账、时间边界、局部输入审计、交付收据核验 | 复用通用校验；策略导出继续要求自己的协议／臂／动作；普通早期失败走事实投影 | 无模型、无候选、无 trial 协议仍可报告事实；不降低既有策略比较校验。为什么要有它：当前 exporter 依赖试验协议和实际工具调用，不能强套所有任务。 |
 | `local_entry.py::_persist_graph_terminal_result`、`_persist_graph_terminal_failure`、`_persist_pre_graph_failure` | 结果／异常原件以及 manifest 的终态引用 | 原件提交后调用同一汇总，保存一个有来源的派生摘要引用 | 正常、待审批、前置失败、图内异常均自动产出；汇总异常不覆盖产品状态。为什么要有它：失败尝试同样承担成本，不能只给成功补报表。 |
 | `task_agent_v2_recovery.py::resume_v2_task_agent`，`task_agent_v2_delivery.py::_finish`，`cli.py` 恢复异常分支 | 原任务身份、累计资源、检查点及不可变交付收据；恢复失败目前可只打印 stdout | 补持久恢复收尾引用，成功、拒绝及失败均接共用汇总；Apply／Build 收据按真实阶段投影 | 恢复不重获预算、不重复累计请求；Apply 或公开 Build 通过不自动成为独立正确交付。为什么要有它：恢复结果不能留在另一路终端输出，也不能通过统计改变执行边界。 |
+| `run_outcome_finalization.py`，`core/trace/execution_trace.py::ExecutionTrace.record_intervention` | 复用既有 manifest、不可变引用和 Trace 持久化 | 一个收尾辅助函数保存派生摘要及 continuation 引用；Trace 提供明确介入申报入口，未知不补0 | 摘要不可覆盖、原产品终态变化不被覆盖；真实 Trace 经同一查询投影读出，模型时长不当人分钟。为什么要有它：新增代码只补既有生命周期缺口，不建设平行统计服务。 |
 
 ### 共用投影的确定接口
 
-保留现有 `query_run_evidence(allowed_roots, run_id)`；拟增加可选 `evidence_context`，只包含显式绑定的历史启动／进程／独立结果／介入引用及关系。正常任务从已登记收尾引用取得这些信息，旧任务允许用户指定既有证据索引；不自动搜索整个临时盘。该参数与 `outcome` 均为计划采用，当前命令尚不提供它们。为什么要有它：历史原件跨目录，目录相邻、同名和文件时间不能代替任务关联或读取授权。
+保留 `query_run_evidence(allowed_roots, run_id)`，已增加可选 `evidence_context`、`evidence_roots` 和结果中的 `outcome`。输入只包含显式绑定的历史启动／进程／独立结果／介入引用及关系。正常任务从已登记收尾引用取得这些信息，旧任务允许用户指定既有证据索引；不自动搜索整个临时盘。为什么要有它：历史原件跨目录，目录相邻、同名和文件时间不能代替任务关联或读取授权。
 
-历史 CLI 首版确定增加可重复的 `--evidence-context <既有索引或启动／更正原件的绝对路径>` 与 `--evidence-root <额外允许只读的目录>`，仅允许与 `--inspect-run --view evidence` 同用。前者只授权读取显式选定文件；其引用仍须落在配置 workspace 或显式额外根内并通过原件 hash／关系核验。额外根只供引用读取，不加入运行 ID 自动发现；磁盘根、网络路径和重解析绕出继续拒绝。RestSharp 指定既有 B1 索引、revision 的 started.json、独立 result-reporting-v2.json，并分别显式允许 B1、revision、公开重放和独立诊断目录；不由索引内容自行扩权。上述均为待实现参数。为什么要有它：当前入口只允许配置 workspace，不接通这个有界输入就无法复算跨目录历史；查询权限也不能变成产品运行权限。
+历史 CLI 已增加可重复的 `--evidence-context <既有索引或启动／更正原件的绝对路径>` 与 `--evidence-root <额外允许只读的目录>`，仅允许与 `--inspect-run --view evidence` 同用。context 文件及其引用都须落在选定运行或显式额外根内；索引自身在仓库外／运行外时也须显式允许其目录。引用经过原件 hash／关系核验，额外根只供引用读取，不加入运行 ID 自动发现；磁盘根、网络路径和重解析绕出继续拒绝。RestSharp 的完整 argv 保存在[实际调用原件](../artifacts/eval_driven_20261023/run-outcome/restsharp-invocation-v2.json)，无需另建输入账本。为什么要有它：显式索引不能自行扩权，查询权限也不能变成产品运行权限。
 
 `project_native_outcome(facts) -> outcome` 只计算派生值，不调用模型、不执行测试、不写资源账本。`facts` 来自现有有界读取与引用校验，每项必须保留原件引用、覆盖范围和未知原因。投影最少包含下表内容；写盘由既有收尾 owner 负责。为什么要有它：计算职责共用，事实的真实性及副作用仍归原 owner。
+
+当前实现边界：普通独立聚合保留为 reported；正向 `correct_delivery` 还要求同原生执行、候选及判定器绑定的已核验独立事实，以及现有交付验证器通过。通用历史查询没有为任意独立报告增加自动认证适配器，缺少核验则为 unknown。当前 ArtifactStore、时间观察和终态学习可复用的事实进入投影；完整人时、带外开发调用或费用缺失仍未知，冻结试验登记仍沿既有策略 exporter／batch 校验，不因关联到任务而补写预登记。为什么要有它：自动汇总只能使用已成立证据，不能成为比原验收更宽松的成功出口。
 
 | 投影内容 | 明确语义 |
 | --- | --- |
@@ -334,7 +337,7 @@ B/B+ 共同冻结：平台提交与相关源码 hash、模型 digest 和推理�
 | `result` | 终止状态、独立验收、实际交付、最终源码身份分别保存。`correct_delivery` 只有同一候选的业务与保持行为验收通过且交付证据成立才为 true；缺证据为 unknown，明确未交付为 false。 |
 | `feedback_revision` | 公开失败原件 → 实际请求／响应 → 当前候选 → 子候选源码差异 → 同版本复验。另列测试名、输入、期望／实际、详情、定位与原件引用是否送达。状态送达、可诊断内容、代码变化和最终修对不合并为一个布尔值。 |
 | `costs` | 按任务运行、独立评测、平台开发分区；各自记录已知 input/output/cache、预留／发送／响应数、工具及辅助调用、观察区间、未知调用与未知费用。缓存是输入子集，嵌套计时不相加；各分区可报告已知小计，但不能拼成完整成本。 |
-| `interventions` | 引用现有 Trace／申报事实：稳定 event_id、person_id（可为匿名稳定ID或unknown）、actor（human / outer_codex）、kind（approval / review / technical_hint / patch_edit / rework / environment_repair）、作用对象、相关请求／补丁、计时原件及区间、active_seconds、timing_basis（measured / declared / unknown）。未观察到不是 0；无计时不计算人分钟。 |
+| `interventions` | 引用现有 Trace／申报事实：稳定 event_id、person_id（可为匿名稳定ID或unknown）、actor（human / outer_codex）、kind（approval / review / technical_hint / patch_edit / rework / environment_repair / execution_control）、作用对象、相关请求／补丁、计时原件及区间、active_seconds、timing_basis（measured / declared / unknown）。未观察到不是 0；无计时不计算人分钟。 |
 | `coverage` | 来源是否完整、哪些值缺失、歧义、越界、未执行或执行未知；汇总完整性不等于验收通过。 |
 
 以上字段的共同约束：每个有意义的结果保留原件引用，派生摘要不复制请求正文、测试详情或逐调用账本；摘要只供开发、Dashboard 和评测程序使用。为什么要有它：一个可重算视图足够，第二份事实存储会产生漂移，也可能把隐藏材料泄露给求解模型。
@@ -363,7 +366,9 @@ B/B+ 共同冻结：平台提交与相关源码 hash、模型 digest 和推理�
 
 有效反例与有效决策机会的判定在观察修复结果前固定：核对失败对应当前候选、所需公开诊断内容确实送达、平台允许后续请求及适用的读取／编辑／复验能力。模型自行选错工具、不修订或重复相同代码不能据此剔出 K；平台阻断及判定缺证据单列。为什么要有它：不能在看到失败后缩小修复率分母。
 
-### 交给开发页的三步收口
+### 收尾接入与后续职责
+
+以下前两项已在隔离分支完成；开发页接入时保留其同期上下文／恢复修改，重点合并 `resume_v2_task_agent` 外层收尾包装，不用本分支旧函数正文覆盖新实现。`outcome_summary_ref` 仅指向开发摘要，不进入求解请求；`summary_unavailable` 不改变执行终态。第三项仍随原 U1—U5 推进，本批不启动新的真实比较。为什么要有它：交接必须说明已经做了什么、如何接入和仍未证明什么，而不是把实现分支当作主分支已经上线。
 
 1. **第一项代码变化：打通原件到共用投影。** 在现有 evidence 查询与 benchmark 汇总之间接 `project_native_outcome`，复用 native exporter 的校验；用保存的 RestSharp 原件得到与[证据表](PROJECT_OUTCOMES.md#2026-10-23-restsharp-原件复算与待接入项)一致的值。测试覆盖未知、初始消息反馈、同代码重交、跨目录拒绝和重复累计。不调用新模型。为什么要有它：先证明当前事实能自动复算，不以增加字段名称作为完成。
 2. **接入所有收尾。** 修改上表现有正常／失败／恢复／交付出口，受控正常入口分别验证成功、无候选失败、恢复成功及恢复失败；相同来源集合得到同一摘要，恢复旧调用不重复，摘要异常不改变产品结果。通路测试登记为受控，不能记成自主业务成功。为什么要有它：用户不再需要在任务完成后手工拼数据，失败和恢复也不能漏记。
