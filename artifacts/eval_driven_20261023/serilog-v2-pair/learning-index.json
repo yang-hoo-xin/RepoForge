@@ -11,6 +11,14 @@
   "model_load_seconds_separate_from_task_window": 22.93800000000192,
   "experience_ref": {"path": "C:/tmp/rf-serilog-v2-learning-main/experience.json", "sha256": "2e8d05a4cb04b89dc6e2f8d5cca5f70048b54a6f2937ddb7d0ec019e042bcf20"},
   "independent_evaluator_ref": {"path": "C:/tmp/rf-serilog-v2-pair-eval/qualification-final/evaluator.json", "sha256": "4b6f85bd95d7ed30a555f4ffb58f207b618f413a4c941b1cf8788014ac9f3bef"},
+  "independent_candidate_consumer_ref": {"path": "C:/Users/10160/.codex/visualizations/2026/08/11/019ff15f-9eac-7b13-aad5-faffde4b36b7/rag_capability_mainline/artifacts/eval_driven_20261023/serilog-v2-pair/evaluation/evaluate_learning.py", "sha256": "2cf4e4bebe21e098414de3d967bdc8ad793da1f90d7b13bc39dce34d9173f8f3"},
+  "consumer_verification": {
+    "normal_preflight": "waiting_for_terminal_process; task_success=null; preservation_passed=null; model_calls=0; build_calls=0",
+    "pure_test_command": ".venv/Scripts/python.exe -m pytest artifacts/eval_driven_20261023/serilog-v2-pair/evaluation/test_evaluate_learning.py -q --disable-warnings --basetemp C:/tmp/rf-serilog-learning-eval-tests",
+    "pure_test_result": "12 passed; no model or SDK",
+    "review_correction": "Normalized request is not actual provider request. The final submit now reuses retained live-transport/Trace verification and its specific execution receipt, with the two request references kept distinct.",
+    "business_evaluation": "not executed; pure source/identity counterexamples do not establish model or business success"
+  },
   "inspection_argv": ["python", "-m", "scripts.dsh_run_request", "--execution-config", "C:/tmp/rf-serilog-v2-learning-main/runs/.dsh-inputs/dsh_c04b4e7d2c1b44fe9a1e3519987b0b12/execution.json", "--inspect-run", "dsh_c04b4e7d2c1b44fe9a1e3519987b0b12", "--view", "evidence", "--format", "json"],
   "boundaries": [
     "New exposed-task absolute run, no strategy injected, automatic terminal extraction enabled; original attempts and unknown costs untouched.",
