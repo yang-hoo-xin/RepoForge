@@ -41,7 +41,7 @@
   },
   "schema": "polly-context-diagnostic-index.v1",
   "observation": "process timed_out after its original1800-second window; immutable model candidate exists, public check lacks final receipt and original task is not delivered. Independent checkpoint candidate diagnostic is separate and does not complete the original task.",
-  "completion_observation_ref": {"path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261023\\polly-context-result.json", "sha256": "ae9587b5ce8a8c9851ec60b060b11d66d3509d17fda01bfa17ed88b8735ad553"},
+  "completion_observation_ref": {"path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261023\\polly-context-result.json", "sha256": "cbdb2bb0834e2ca82635e737305d341955b3f6cab0a90db2cd8353dfbb316a75"},
   "inspect_argv": [
     "python",
     "-m",

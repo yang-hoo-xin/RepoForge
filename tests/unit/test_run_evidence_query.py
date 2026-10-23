@@ -75,6 +75,32 @@ def test_untrustworthy_references_never_claim_complete(tmp_path, capsys, kind):
         assert "forbidden" in statuses
 
 
+@pytest.mark.parametrize("record", ["terminal", "response"])
+@pytest.mark.parametrize("value", [[], None, "not a record"])
+def test_non_object_json_record_never_claims_complete(tmp_path, capsys, record, value):
+    config, root = _fixture(tmp_path)
+    if record == "terminal":
+        ref = _save(root / "run_result.json", value)
+        _save(root / "run_manifest.json", {"run_id": "one", "terminal_record": ref})
+    else:
+        response = _save(root / "response.json", value)
+        native = {"schema_version": "task-agent-product-execution.v2", "run_id": "one",
+            "provider_turns": [{"turn": 1, "reservation_id": "r-1",
+                "request_ref": _save(root / "request.json", {"task": "investigate"}),
+                "response_ref": response}],
+            "completed_tool_records": [], "loop_result_ref": _save(root / "loop.json", {"call_records": {}})}
+        native_ref = _save(root / "native" / "execution.json", native)
+        terminal = _save(root / "run_result.json", {"run_id": "one", "status": "unknown", "execution_ref": native_ref})
+        _save(root / "run_manifest.json", {"run_id": "one", "terminal_record": terminal})
+    report = _query(config, capsys)
+    assert report["complete"] is False
+    assert report["status"] == "partial"
+    assert any(row["status"] == "unreadable" and "JSON object" in row.get("reason", "")
+        for row in report["issues"])
+    if record == "response":
+        assert not report["executions"][0]["turns"][0]["response_observed"]
+
+
 def test_duplicate_business_id_is_ambiguous_and_bound_config_conflicts(tmp_path, capsys):
     config, root = _fixture(tmp_path)
     _save(root.parent / "copy" / "run_manifest.json", {"run_id": "one"})
@@ -308,6 +334,7 @@ def test_actual_trace_intervention_is_consumed_without_inferring_active_time(tmp
 
 def test_learning_usage_follows_semantically_verified_response_not_copied_usage(tmp_path, capsys):
     from dataclasses import asdict
+
     from src.mod_agent.artifacts import ArtifactStore
 
     config, root = _fixture(tmp_path, status="unknown")

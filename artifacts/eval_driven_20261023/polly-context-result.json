@@ -151,5 +151,29 @@
     "hypothesis": "Product-local awareness of the actual remaining window may support better allocation and graceful receipts; no causal benefit established by this attempt.",
     "scope": "Existing deadline/resource contract and normal caller, not larger budgets or new approval caps."
   },
-  "diagnostic_plan": "Only the immutable candidate can be independently evaluated via explicit checkpoint diagnostic after origin validation; original timeout/non-delivery unchanged."
+  "diagnostic_plan": "Only the immutable candidate can be independently evaluated via explicit checkpoint diagnostic after origin validation; original timeout/non-delivery unchanged.",
+  "subsequent_independent_candidate_diagnostic": {
+    "evaluator_ref": {
+      "path": "C:/Users/10160/.codex/visualizations/2026/08/11/019ff15f-9eac-7b13-aad5-faffde4b36b7/rag_capability_mainline/artifacts/eval_driven_20261023/polly_context_evaluation.py",
+      "sha256": "c25d22a36150fb218c190eb738dc34b70a094636a579c4b25cff3557e5ef9837"
+    },
+    "result_ref": {
+      "path": "C:/tmp/rf-polly-v2-context-independent-diagnostic/result.json",
+      "sha256": "22006d6ab8eaeb271cba8a5a1c5fc4e6991f83d4392a85238565d5517ca46362"
+    },
+    "scope": "checkpoint_candidate_diagnostic",
+    "status": "evaluated",
+    "candidate_source_id": "9bc542ef53307233f0aa266054f189cb75936f21683aa092dcdcf945cd6bc074",
+    "target_label_count": 4,
+    "target_cases_passed": 28,
+    "executed_test_cases": 703,
+    "failed_test_cases": 0,
+    "preservation_passed": null,
+    "preservation_scope": "no_registered_preservation_labels",
+    "additional_observed_cases_passed": 675,
+    "model_calls": 0,
+    "independent_evaluation_wall_seconds": 197.96899999999732,
+    "meaning": "Exact candidate originating from the real model passed the independent target and executed net8.0 owning-project suite. Original task still timed out, never received this private result and did not deliver; this is not post-feedback effective revision, U5 migration or experience benefit.",
+    "qualification_scope": "Historical baseline/reference controls only; no equivalent control and not U2 adoption qualification."
+  }
 }

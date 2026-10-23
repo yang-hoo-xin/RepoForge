@@ -172,5 +172,36 @@
   "implementation_commits": [
     "7b4b656",
     "076f674"
-  ]
+  ],
+  "mainline_integration": {
+    "base_before_final_query_fix": "5a40acc",
+    "adopted_commits": ["61f0f45", "81f4a64", "12e8d13"],
+    "evidence_query_changes": [
+      "Reject JSON arrays, null and scalar values as unreadable evidence records; retain partial status instead of reporting complete.",
+      "Preserve the existing TraceService two-keyword calling shape when optional external context is absent; explicitly supplied context still uses shared access controls."
+    ],
+    "first_failures": [
+      {"scope": "default sandbox temp directory", "result": "19 passed; 36 setup errors before evidence access", "cause": "pytest could not create its sandbox temporary directory; rerun with a new short explicit basetemp"},
+      {"scope": "non-object terminal and response originals", "result": "6 failed before production fix", "cause": "Non-object JSON was discarded without recording the structural gap; terminal could be reported complete"},
+      {"scope": "CLI, query and selected Dashboard consumers", "result": "64 passed; 1 failed", "cause": "TraceService forwarded empty optional kwargs to the existing two-keyword consumer contract"}
+    ],
+    "verification": [
+      {"command": ".venv/Scripts/python.exe -m pytest tests/unit/test_dsh_evidence_entry.py tests/unit/test_run_evidence_query.py tests/unit/test_run_record_browser_ui.py -k 'evidence or trace_service_evidence' -q --disable-warnings --basetemp C:/tmp/rf-evidence-shape-after", "result": "64 passed; wrapper compatibility failure subsequently fixed", "scope": "61 CLI/query cases and four selected UI consumers; controlled evidence, not real-model success"},
+      {"command": ".venv/Scripts/python.exe -m pytest tests/unit/test_run_record_browser_ui.py -k 'evidence or trace_service_evidence' -q --disable-warnings --basetemp C:/tmp/rf-evidence-consumers-final", "result": "4 passed after wrapper fix; overlapping selection, not additional business samples"},
+      {"command": "ruff check run_evidence.py test_run_evidence_query.py", "result": "passed; TraceService retains the same 20 pre-existing typing warnings as HEAD; no unrelated rewrite"}
+    ],
+    "historical_normal_cli_query": {
+      "invocation_record": "artifacts/eval_driven_20261023/run-outcome/restsharp-invocation-v2.json",
+      "result": "partial",
+      "related_runs": 2,
+      "observed_responses": 21,
+      "known_input_tokens": 292282,
+      "known_output_tokens": 6325,
+      "known_total_tokens": 298607,
+      "correct_delivery": false,
+      "effects": {"model_calls": 0, "builds": 0, "tests": 0, "recoveries": 0, "writes": 0},
+      "boundary": "Historical originals retained; truncated or out-of-scope references remain explicit gaps, and context does not expand product-model visibility."
+    },
+    "return_to": "U1-U5 remaining integration and real-task verification; no automatic RestSharp rerun or new memory/training module"
+  }
 }

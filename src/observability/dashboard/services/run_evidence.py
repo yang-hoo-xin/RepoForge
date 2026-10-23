@@ -82,6 +82,7 @@ class EvidenceReader:
                 value = json.loads(raw)
                 if not isinstance(value, dict):
                     value = None
+                    raise ValueError("Evidence record must contain a JSON object")
             row["binding"] = "expected_byte_hash" if expected else "current_bytes_only_not_authenticity"
         except (OSError, ValueError, UnicodeError) as error:
             row.update(status=getattr(error, "status", "unreadable"), reason=str(error))

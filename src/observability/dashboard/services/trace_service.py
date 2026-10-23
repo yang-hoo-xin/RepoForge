@@ -80,8 +80,12 @@ class TraceService:
         为什么要有它：Dashboard 与命令入口应共用关联和权限检查，不能自行选择同名运行或复制证据解析。
         """
         from .run_evidence import query_run_evidence
-        return query_run_evidence(allowed_roots=allowed_roots, run_id=run_id,
-            evidence_context=evidence_context, evidence_roots=evidence_roots)
+        extra = {}
+        if evidence_context:
+            extra["evidence_context"] = evidence_context
+        if evidence_roots:
+            extra["evidence_roots"] = evidence_roots
+        return query_run_evidence(allowed_roots=allowed_roots, run_id=run_id, **extra)
 
     def read_record(self, *, allowed_roots, record_id, offset=0, limit=65536, expected_sha256=None):
         from .run_records import RunRecordBrowser
