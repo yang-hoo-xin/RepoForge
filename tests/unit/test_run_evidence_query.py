@@ -171,3 +171,167 @@ def test_duplicate_response_alias_is_ambiguous_not_guessed_turn(tmp_path, capsys
     report = _query(config, capsys)
     assert report["executions"][0]["actions"][0]["turn"] is None
     assert any(row["status"] == "ambiguous" and row.get("call_id") == "call-1" for row in report["issues"])
+
+
+def test_context_roots_do_not_expand_business_run_discovery(tmp_path, capsys):
+    config, root = _fixture(tmp_path)
+    extra = tmp_path / "external"
+    _save(extra / "duplicate" / "run_manifest.json", {"run_id": "one"})
+    context = _save(extra / "context.json", {"run_id": "one", "model_calls": 0})
+    assert bridge.main(["--execution-config", str(config), "--inspect-run", "one", "--view", "evidence",
+        "--evidence-root", str(extra), "--evidence-context", context["path"]]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] != "ambiguous"
+    assert any(row.get("sha256") == context["sha256"] for row in report["records"])
+    assert not any("duplicate" in row.get("path", "") for row in report["records"])
+
+
+def test_context_native_pointer_cannot_be_overridden_by_run_id_label(tmp_path, capsys):
+    config, root = _fixture(tmp_path)
+    other = _save(root / "other-native.json", {"schema_version": "task-agent-product-execution.v2", "run_id": "other"})
+    context = _save(root / "wrong-context.json", {"run_id": "one", "native_execution_ref": other,
+        "independent_acceptance_passed": True})
+    assert bridge.main(["--execution-config", str(config), "--inspect-run", "one", "--view", "evidence",
+        "--evidence-context", context["path"]]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert any(issue["status"] == "unrelated_context" for issue in report["issues"])
+    assert report["linked_executions"] == []
+    assert report["outcome"]["result"]["confirmed_correct_deliveries"] == 0
+
+
+def test_context_does_not_authorize_its_directory_or_hidden_references(tmp_path, capsys):
+    config, root = _fixture(tmp_path)
+    extra = tmp_path / "external"
+    private = _save(extra / "private.json", {"hidden_answer": "DO_NOT_READ"})
+    context = _save(extra / "context.json", {"run_id": "one", "private_result_ref": private})
+    args = ["--execution-config", str(config), "--inspect-run", "one", "--view", "evidence",
+        "--evidence-context", context["path"]]
+    assert bridge.main(args) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert any(row["status"] == "forbidden" for row in report["issues"])
+    assert bridge.main([*args, "--evidence-root", str(extra)]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert not any(row.get("path") == private["path"] for row in report["records"])
+    assert "DO_NOT_READ" not in json.dumps(report)
+
+
+def test_unrelated_context_and_derived_summary_are_not_adopted(tmp_path, capsys):
+    config, root = _fixture(tmp_path)
+    unrelated = _save(root / "unrelated.json", {"run_id": "other", "delivered": True})
+    derived = _save(root / "run-outcomes" / "old.json", {"schema_version": "run_outcome_summary_v1",
+        "run_id": "one", "native_execution_ref": {"path": "C:/forbidden/old.json", "sha256": "a" * 64}})
+    manifest = json.loads((root / "run_manifest.json").read_text())
+    _save(root / "run_manifest.json", {**manifest, "outcome_summary_ref": derived})
+    assert bridge.main(["--execution-config", str(config), "--inspect-run", "one", "--view", "evidence",
+        "--evidence-context", unrelated["path"]]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert any(row["status"] == "unrelated_context" for row in report["issues"])
+    assert not any(row.get("path") == derived["path"] for row in report["records"])
+    assert not any("C:/forbidden" in str(row) for row in report["issues"])
+
+
+@pytest.mark.parametrize("other_args", [[], ["--new-task"], ["--inspect-run", "one"]])
+def test_context_flags_require_evidence_view_without_actions(tmp_path, capsys, other_args):
+    config, root = _fixture(tmp_path)
+    assert bridge.main(["--execution-config", str(config), "--evidence-context", str(root / "run_result.json"),
+        *other_args]) == 2
+    assert "INSPECTION" in json.loads(capsys.readouterr().out)["reason"]
+
+
+@pytest.mark.parametrize("mismatch", [None, "candidate", "provider"])
+def test_initial_feedback_requires_launch_candidate_and_actual_provider_match(tmp_path, capsys, mismatch):
+    config, root = _fixture(tmp_path, status="unknown")
+    parent = tmp_path / "parent"
+    candidate = {"schema": "task-agent-candidate.v2", "candidate_source_id": "code-A"}
+    raw = json.dumps(candidate, sort_keys=True).encode()
+    candidate_ref = "v2/candidate/" + hashlib.sha256(raw).hexdigest() + ".json"
+    _save(parent / "a" / candidate_ref, candidate)
+    previous = _save(parent / "a" / "task-agent-execution" / "execution.json",
+        {"schema_version": "task-agent-product-execution.v2", "run_id": "parent", "candidate_ref": candidate_ref,
+         "provider_turns": [], "completed_tool_records": [], "loop_result_ref": _save(parent / "loop.json", {})})
+    public = {"verification_summary": {"checks": 1, "failed_checks": 1},
+        "observations": [{"check_id": "opaque", "expected": "Passed", "observed": {"actual": "Failed"}}]}
+    feedback = _save(parent / "public.json", public)
+    payload = {"public_check": {"summary": public["verification_summary"], "observations": public["observations"]}}
+    content = {"task_requirements": {"original_request": "Investigate\n" + json.dumps(payload)}}
+    provider = {"messages": [{"role": "user", "content": json.dumps(content)}]}
+    if mismatch == "provider":
+        provider = {"messages": [{"role": "user", "content": "public_check Failed"}]}
+    turn = {"turn": 1, "reservation_id": "new-call", "request_ref": _save(root / "request.json", content),
+        "provider_request_ref": _save(root / "http.json", provider),
+        "provider_request_capture_boundary": "loopback_httpx_request_event",
+        "response_ref": _save(root / "response.json", {"usage": {"input_tokens": 10, "output_tokens": 2}})}
+    native = _save(root / "native" / "execution.json", {"schema_version": "task-agent-product-execution.v2",
+        "run_id": "one", "provider_turns": [turn], "completed_tool_records": [], "loop_result_ref": _save(root / "loop.json", {})})
+    terminal = _save(root / "run_result.json", {"run_id": "one", "status": "unknown", "execution_ref": native})
+    _save(root / "run_manifest.json", {"run_id": "one", "terminal_record": terminal})
+    launch = _save(root / "launch.json", {"run_id": "one", "new_task": True, "original_task_resumed": False,
+        "original_native_ref": previous, "starting_candidate_ref": candidate_ref,
+        "starting_candidate_source_id": "wrong" if mismatch == "candidate" else "code-A", "public_feedback_ref": feedback})
+    assert bridge.main(["--execution-config", str(config), "--inspect-run", "one", "--view", "evidence",
+        "--evidence-context", launch["path"], "--evidence-root", str(parent)]) == 0
+    report = json.loads(capsys.readouterr().out)
+    links = report["executions"][0]["feedback_links"]
+    assert bool(links) is (mismatch is None)
+    if links:
+        assert links[0]["missing_fields"] == ["test_name", "assertion_details", "location"]
+        assert links[0]["included_in_provider_request"] and not links[0]["adoption_or_repair_proven"]
+    assert report["terminal"]["status"] == "unknown"
+    assert len(report["linked_executions"]) == 1
+
+
+@pytest.mark.parametrize("shape", ["stages", "execution_observations"])
+def test_actual_trace_intervention_is_consumed_without_inferring_active_time(tmp_path, capsys, shape):
+    from src.core.trace.execution_trace import ExecutionTrace
+
+    config, root = _fixture(tmp_path, status="unknown")
+    trace = ExecutionTrace("trace", "session", "test")
+    with trace.activate():
+        trace.record_intervention(event_id="rescue-1", run_id="one", actor="outer_codex",
+            kind="technical_hint", cost_scope="task_runtime", subject_ref="request-1")
+        trace.record_intervention(event_id="review-1", run_id="one", actor="human",
+            kind="review", cost_scope="task_runtime", subject_ref="candidate-1", person_id="person-1",
+            active_seconds=90, timing_basis="declared")
+    document = trace.context.to_dict() if shape == "stages" else {
+        "execution_observations": {row["data"]["id"]: row["data"] for row in trace.context.stages}}
+    ref = _save(root / "trace.json", document)
+    assert bridge.main(["--execution-config", str(config), "--inspect-run", "one", "--view", "evidence",
+        "--evidence-context", ref["path"]]) == 0
+    report = json.loads(capsys.readouterr().out)
+    interventions = report["outcome"]["interventions"]
+    assert interventions["observed_event_count"] == 2
+    assert interventions["technical_assistance_observed"] is True
+    assert interventions["human_active_seconds"] == 90
+    assert interventions["total_technical_assistance"] is None
+    assert interventions["human_active_time_scope"] == "observed_explicit_events_only_not_whole_task"
+
+
+def test_learning_usage_follows_semantically_verified_response_not_copied_usage(tmp_path, capsys):
+    from dataclasses import asdict
+    from src.mod_agent.artifacts import ArtifactStore
+
+    config, root = _fixture(tmp_path, status="unknown")
+    native_ref = _save(root / "native" / "execution.json", {"schema_version": "task-agent-product-execution.v2",
+        "run_id": "one", "status": "unknown", "provider_turns": [], "completed_tool_records": [],
+        "loop_result_ref": _save(root / "loop.json", {})})
+    terminal = _save(root / "run_result.json", {"run_id": "one", "status": "unknown", "execution_ref": native_ref})
+    _save(root / "run_manifest.json", {"run_id": "one", "terminal_record": terminal})
+    usage = {"input_tokens": 40, "output_tokens": 3, "cached_input_tokens": 10}
+    response = ArtifactStore(root / "memory").write(feature_id="learning_response", artifact_type="strategy_experience",
+        payload={"kind": "response", "schema_version": "1.0", "response": {"usage": usage}})
+    _save(root / "native" / "terminal-learning-receipt-unit.json", {
+        "original_execution_ref": native_ref, "model_calls": 1, "budget_after": {"consumed": 1},
+        "call_receipts": [{"response_ref": asdict(response), "usage": usage}]})
+    report = _query(config, capsys)
+    cost = report["outcome"]["costs"]["task_runtime"]
+    assert cost["known_learning_responses"] == 1
+    assert cost["unknown_learning_calls"] == 0
+    assert cost["total_tokens"] == 43
+    # A forged receipt cannot turn absent or altered response bytes into known usage.
+    _save(root / "native" / "terminal-learning-receipt-unit.json", {
+        "original_execution_ref": native_ref, "model_calls": 1, "budget_after": {"consumed": 1},
+        "call_receipts": [{"response_ref": {**asdict(response), "artifact_hash": "f" * 64}, "usage": usage}]})
+    report = _query(config, capsys)
+    cost = report["outcome"]["costs"]["task_runtime"]
+    assert cost["known_learning_responses"] == 0
+    assert cost["unknown_learning_calls"] == 1

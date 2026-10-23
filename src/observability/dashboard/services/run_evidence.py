@@ -27,12 +27,20 @@ def _preview(value, limit=2000):
 class EvidenceReader:
     """Reuse browser path/byte checks; references never expand selected roots."""
 
-    def __init__(self, root):
+    def __init__(self, root, evidence_roots=()):
         self.root = root
-        self.browser = RunRecordBrowser([root])
+        self.browser = RunRecordBrowser([root, *evidence_roots])
         self.records, self.values, self.links, self.issues = {}, {}, [], []
+        self.issues.extend(self.browser.issues)
         self.expanded = set()
         self.total_bytes = 0
+
+    def store_for(self, path):
+        for root in self.browser.roots.values():
+            store = _store_for(path, root)
+            if store is not None:
+                return store
+        return None
 
     def read(self, path, expected=None):
         path = Path(path)
@@ -84,6 +92,19 @@ class EvidenceReader:
     def reference(self, ref, origin, store=None):
         if isinstance(ref, str) and _V2.fullmatch(ref) and store is not None:
             path, expected = store / ref, _V2.fullmatch(ref).group(1)
+        elif isinstance(ref, dict) and isinstance(ref.get("path"), str) and "artifact_hash" in ref:
+            path = Path(ref["path"])
+            path = path if path.is_absolute() else origin.parent / path
+            value, row = self.read(path)
+            if value is not None:
+                relations = self.browser._references(ref, source_id=self.browser._locator(origin),
+                    source_path=origin, run_root=self.root)
+                verified = next((r for r in relations if r.get("integrity") == "verified_artifact_semantics"), None)
+                if verified:
+                    return self.read(path, verified["actual_sha256"])
+            issue = {"status": "unconfirmed", "reason": "Artifact context semantic identity not verified", "path": row.get("path")}
+            self.issues.append(issue)
+            return None, issue
         elif isinstance(ref, dict) and isinstance(ref.get("path"), str) and isinstance(ref.get("sha256"), str):
             path = Path(ref["path"])
             path = path if path.is_absolute() else origin.parent / path
@@ -96,9 +117,10 @@ class EvidenceReader:
         return self.read(path, expected)
 
     def expand(self, value, origin, store=None):
-        store = store or _store_for(origin, self.root)
+        store = store or self.store_for(origin)
         identity = (str(origin), str(store) if store else None)
-        if not isinstance(value, dict) or identity in self.expanded:
+        if (not isinstance(value, dict) or identity in self.expanded
+                or value.get("schema_version", value.get("schema")) == "run_outcome_summary_v1"):
             return
         self.expanded.add(identity)
         pending = [(value, "")]
@@ -146,7 +168,9 @@ class EvidenceReader:
                     children.append((child, Path(row["path"]), store))
                 continue
             if isinstance(item, dict):
-                pending.extend((v, pointer + "/" + str(k).replace("~", "~0").replace("/", "~1")) for k, v in item.items())
+                pending.extend((v, pointer + "/" + str(k).replace("~", "~0").replace("/", "~1"))
+                    for k, v in item.items() if not k.startswith("outcome_summary_")
+                    and k not in {"private_result_ref", "trx_refs"})
             elif isinstance(item, list):
                 pending.extend((v, pointer + "/" + str(i)) for i, v in enumerate(item))
         for child, path, child_store in children:
@@ -209,7 +233,7 @@ def _provider_contains(provider, name, output):
 
 
 def _native_chain(reader, native, path):
-    store = _store_for(path, reader.root)
+    store = reader.store_for(path)
     reader.expand(native, path, store)
     loop, _ = reader.reference(native.get("loop_result_ref"), path, store)
     calls = (loop or {}).get("call_records", {})
@@ -290,10 +314,225 @@ def _native_chain(reader, native, path):
             "claim": "not_a_confirmed_execution"} for key, row in calls.items() if row.get("status") != "completed"]}
 
 
-def query_run_evidence(*, allowed_roots, run_id):
+_CONTEXT_REFS = {"native_execution_ref", "original_native_ref", "original_execution_ref",
+    "repaired_checker_replay_ref", "independent_diagnostic_ref", "supersedes_aggregate_ref",
+    "started_ref", "original_started_ref", "public_feedback_ref", "report_ref", "process_receipt_ref",
+    "service_start_ref", "service_result_ref", "code_snapshot_ref", "task_timing_origin_ref",
+    "timing_observation_ref", "task_timing_ref", "original_terminal_ref", "receipt_ref", "delivery_receipt_ref",
+    "resumed_from_checkpoint_ref", "input_checkpoint_ref", "resumed_from_delivery_receipt_ref", "execution_trace_ref"}
+
+
+def _bound_ref(row):
+    return {"path": row["path"], "sha256": row["sha256"]}
+
+
+def _ref_identity(ref):
+    if not isinstance(ref, dict) or not isinstance(ref.get("path"), str):
+        return None
+    return (str(Path(ref["path"]).absolute()).casefold(), ref.get("sha256"))
+
+
+def _context_references(value):
+    # 为什么要有它：开发汇总只消费明确的元数据引用，不把隐藏测试或原文递归装入输出。
+    for key, child in value.items():
+        if key in _CONTEXT_REFS and isinstance(child, dict):
+            yield child
+        elif key in {"diagnostic_process_evidence", "result", "process"} and isinstance(child, dict):
+            yield from _context_references(child)
+        elif key == "call_receipts" and isinstance(child, list):
+            for receipt in child:
+                if isinstance(receipt, dict) and isinstance(receipt.get("response_ref"), dict):
+                    yield receipt["response_ref"]
+
+
+def _collect_context(reader, inputs, native_facts, selected_run):
+    facts, linked = [], []
+    seen, pending = set(), [(item, reader.root / "run_manifest.json", False) for item in inputs]
+    known = {_ref_identity(row["ref"]) for row in native_facts}
+    run_ids = {selected_run}
+    configurations = set()
+    for native in native_facts:
+        path = Path(native["ref"]["path"])
+        pending.extend((ref, path, True) for ref in _context_references(native["value"])
+                       if _ref_identity(ref) not in known)
+        pending.extend((str(p), path, True) for p in path.parent.glob("terminal-learning-receipt-*.json"))
+    for key, value in list(reader.values.items()):
+        row = reader.records[key]
+        if (isinstance(value, dict) and row.get("status") == "verified"
+                and value.get("schema", value.get("schema_version")) in
+                {"task-agent-delivery-receipt.v2", "run_outcome_boundary_v1", "task-agent-technical-input-audit.v2", "task-agent-host-recovery-config.v2",
+                 "task-agent-time-observation.v2"}):
+            pending.append((_bound_ref(row), Path(row["path"]), True))
+        elif (isinstance(value, dict) and row.get("status") == "verified"
+                and (isinstance(value.get("execution_observations"), dict) or isinstance(value.get("stages"), list))):
+            pending.append((_bound_ref(row), Path(row["path"]), True))
+    deferred = []
+    while pending:
+        item, origin, inherited = pending.pop(0)
+        if isinstance(item, str):
+            if not Path(item).is_absolute():
+                reader.issues.append({"status": "forbidden", "reason": "Evidence context must be an absolute path"})
+                continue
+            value, row = reader.read(item)
+            if value is not None and row.get("sha256"):
+                value, row = reader.read(item, row["sha256"])
+        else:
+            value, row = reader.reference(item, origin, reader.store_for(origin))
+        if not value or row.get("status") != "verified":
+            continue
+        identity = _ref_identity(_bound_ref(row))
+        if identity in seen or value.get("schema_version", value.get("schema")) == "run_outcome_summary_v1":
+            continue
+        native_refs = [value.get(k) for k in ("native_execution_ref", "original_native_ref", "original_execution_ref")
+                       if isinstance(value.get(k), dict)]
+        related = inherited or value.get("run_id") in run_ids or any(_ref_identity(ref) in known for ref in native_refs)
+        if not related and isinstance(value.get("allocated_config"), str):
+            configuration, configuration_ref = reader.read(value["allocated_config"])
+            args = (configuration or {}).get("arguments", [])
+            if "--run-id" in args and args.index("--run-id") + 1 < len(args):
+                configured_id = args[args.index("--run-id") + 1]
+                related = configured_id in run_ids
+                if related:
+                    reader.links.append({"source": row["path"], "target": configuration_ref.get("path"),
+                        "relation": "explicit_allocated_configuration_identity", "status": configuration_ref.get("status")})
+        process = value.get("process", value)
+        argv = process.get("argv", []) if isinstance(process, dict) else []
+        related = related or ("--execution-config" in argv and argv.index("--execution-config") + 1 < len(argv)
+            and str(Path(argv[argv.index("--execution-config") + 1]).absolute()).casefold() in configurations)
+        observations = value.get("execution_observations", value.get("observations", {}))
+        if isinstance(observations, dict):
+            related = related or any(isinstance(obs, dict) and (obs.get("attributes", {}).get("product_run_id") in run_ids
+                or obs.get("attributes", {}).get("intervention", {}).get("run_id") in run_ids)
+                for obs in observations.values())
+        if isinstance(value.get("stages"), list):
+            related = related or any(isinstance(stage, dict) and stage.get("data", {}).get("attributes", {})
+                .get("intervention", {}).get("run_id") in run_ids for stage in value["stages"])
+        if isinstance(value.get("native_execution_ref"), dict) and _ref_identity(value["native_execution_ref"]) not in known:
+            related = False
+        if not related:
+            deferred.append((item, origin, inherited))
+            continue
+        seen.add(identity)
+        schema = value.get("schema_version", value.get("schema"))
+        if schema == "task-agent-product-execution.v2":
+            if identity not in known:
+                native_facts.append({"ref": _bound_ref(row), "value": value})
+                known.add(identity)
+                run_ids.add(value.get("run_id"))
+                linked.append(_native_chain(reader, value, Path(row["path"])))
+                pending.extend((str(p), Path(row["path"]), True)
+                               for p in Path(row["path"]).parent.glob("terminal-learning-receipt-*.json"))
+        else:
+            fact_ref = dict(item) if isinstance(item, dict) and "artifact_hash" in item else _bound_ref(row)
+            fact = {"ref": fact_ref, "value": value}
+            if schema == "task-agent-delivery-receipt.v2":
+                fact["verification"] = {"status": "unconfirmed"}
+                store = reader.store_for(Path(row["path"]))
+                # 为什么要有它：字节校验不能代替交付验收，且校验器不得越过本次允许读取范围。
+                reader.expand(value, Path(row["path"]), store)
+                source_root = Path(value.get("applied_source_root", "."))
+                source_locator = reader.browser._locator(source_root)
+                if source_locator:
+                    try:
+                        reader.browser._decode(source_locator)
+                        for index, (source_path, directory, problem) in enumerate(reader.browser._walk(source_root)):
+                            if index >= MAX_ENTRIES or problem:
+                                raise ValueError("DELIVERY_SOURCE_INSPECTION_INCOMPLETE")
+                            if not directory and not any(part in {".git", "bin", "obj", ".idea"}
+                                for part in source_path.relative_to(source_root).parts):
+                                reader.read(source_path)
+                    except (OSError, ValueError):
+                        source_locator = None
+                checkpoint, _ = reader.reference(value.get("checkpoint_ref"), Path(row["path"]), store)
+                execution_ref = (checkpoint or {}).get("handoff", {}).get("execution_ref")
+                if store and not reader.issues:
+                    from src.mod_agent.task_agent_v2_delivery import read_completed_v2_delivery
+                    for native in native_facts:
+                        if not source_locator or _ref_identity(native["ref"]) != _ref_identity(execution_ref):
+                            continue
+                        try:
+                            verified = read_completed_v2_delivery(artifact_store_root=store,
+                                receipt_ref=str(Path(row["path"]).relative_to(store)).replace("\\", "/"),
+                                native_execution_ref=native["ref"])
+                            fact["verification"] = {"status": "verified_delivery", "value": verified}
+                            break
+                        except (OSError, ValueError, KeyError) as error:
+                            fact["verification"] = {"status": "unconfirmed", "reason": str(error)}
+            facts.append(fact)
+            if isinstance(value.get("allocated_config"), str):
+                configurations.add(str(Path(value["allocated_config"]).absolute()).casefold())
+        pending.extend((ref, Path(row["path"]), True) for ref in _context_references(value)
+                       if _ref_identity(ref) != identity)
+        if deferred:
+            pending.extend(deferred)
+            deferred = []
+    for item, _, _ in deferred:
+        reader.issues.append({"status": "unrelated_context", "reason": "Context has no verified relation to the selected run",
+            "context": item if isinstance(item, str) else item.get("path")})
+    return facts, linked
+
+
+def _initial_public_feedback(reader, executions, native_facts, contexts):
+    for fact in contexts:
+        launch = fact["value"]
+        if not (launch.get("new_task") is True and launch.get("original_task_resumed") is False
+                and launch.get("public_feedback_ref") and launch.get("original_native_ref")
+                and launch.get("starting_candidate_source_id")):
+            continue
+        original = next((row for row in native_facts if _ref_identity(row["ref"]) == _ref_identity(launch["original_native_ref"])), None)
+        if not original or original["value"].get("candidate_ref") != launch.get("starting_candidate_ref"):
+            continue
+        candidate, candidate_ref = reader.reference(original["value"]["candidate_ref"], Path(original["ref"]["path"]),
+            reader.store_for(Path(original["ref"]["path"])))
+        if not candidate or candidate_ref.get("status") != "verified" or candidate.get("candidate_source_id") != launch["starting_candidate_source_id"]:
+            continue
+        source, source_ref = reader.reference(launch["public_feedback_ref"], Path(fact["ref"]["path"]))
+        if not source or source_ref.get("status") != "verified":
+            continue
+        expected = {"public_check": {"summary": source.get("verification_summary"), "observations": source.get("observations")}}
+        for execution in executions:
+            if not execution.get("turns") or execution["native_ref"]["path"] == original["ref"]["path"]:
+                continue
+            turn = execution["turns"][0]
+            provider, _ = reader.reference(_bound_ref(turn["provider_request_ref"]), Path(fact["ref"]["path"])) if turn["provider_request_ref"].get("sha256") else (None, None)
+            if not provider or not turn.get("send_attempt_observed") or not turn.get("response_observed"):
+                continue
+            matched = False
+            for message in provider.get("messages", []):
+                if message.get("role") != "user":
+                    continue
+                content = message.get("content")
+                try:
+                    content = json.loads(content) if isinstance(content, str) else content
+                    text = content.get("task_requirements", {}).get("original_request", "")
+                    tail = text[text.rfind('\n{"public_check":'):].strip()
+                    matched = matched or _json_equal(json.loads(tail), expected)
+                except (ValueError, TypeError, AttributeError):
+                    continue
+            if matched:
+                observations = expected["public_check"]["observations"] or []
+                fields = {"test_name": ("name", "test_name"), "assertion_details": ("details", "assertion_details"),
+                    "location": ("location", "source_location")}
+                missing = [field for field, aliases in fields.items() if not observations or not all(
+                    isinstance(obs, dict) and any(obs.get(key) or (obs.get("observed") or {}).get(key)
+                        for key in aliases) for obs in observations)]
+                execution["feedback_links"].append({"turn": turn["turn"], "name": "initial_public_check",
+                    "origin": "explicit_exposed_diagnostic_launch", "launch_ref": fact["ref"],
+                    "feedback_ref": launch["public_feedback_ref"], "candidate_ref": launch["starting_candidate_ref"],
+                    "candidate_source_id": launch["starting_candidate_source_id"], "request_ref": turn["request_ref"],
+                    "provider_request_ref": turn["provider_request_ref"], "included_in_provider_request": True,
+                    "response_observed": True, "observation_count": len(observations),
+                    "diagnostic_details": "incomplete" if missing else "fields_present_not_semantic_sufficiency",
+                    "missing_fields": missing,
+                    "adoption_or_repair_proven": False})
+
+
+def query_run_evidence(*, allowed_roots, run_id, evidence_context=(), evidence_roots=()):
     """Developer/CI read-only view. Not a product-model tool or authorization."""
     if not isinstance(run_id, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", run_id) is None:
         raise ValueError("EVIDENCE_RUN_ID_INVALID")
+    if not all(isinstance(items, (tuple, list)) for items in (evidence_context, evidence_roots)):
+        raise ValueError("EVIDENCE_CONTEXT_AND_ROOTS_REQUIRE_EXPLICIT_LISTS")
     browser = RunRecordBrowser(allowed_roots)
     matches, issues = _resolve(browser, run_id)
     report = {"schema_version": "run_evidence_v1", "run_id": run_id, "view": "developer_evidence",
@@ -309,7 +548,7 @@ def query_run_evidence(*, allowed_roots, run_id):
             matches=matches)
         return _sanitize(report, [])
     root = Path(matches[0]["run_root"])
-    reader = EvidenceReader(root)
+    reader = EvidenceReader(root, evidence_roots)
     manifest, manifest_ref = reader.read(root / "run_manifest.json")
     terminal = (manifest or {}).get("terminal_record")
     result, result_ref = reader.reference(terminal, root / "run_manifest.json") if terminal else reader.read(root / "run_result.json")
@@ -334,7 +573,7 @@ def query_run_evidence(*, allowed_roots, run_id):
                 or path.parent.name in {"session-checkpoints", "delivery-receipts"}
                 or path.name.startswith("provider-outcome-")):
             selected.append(path)
-    executions, facts, lineage = [], [], []
+    executions, facts, lineage, native_facts = [], [], [], []
     for key in ("resumed_from_checkpoint_ref", "resumed_from_delivery_receipt_ref", "resumed_from_rebase_ref", "original_execution_ref", "parent_run_ref"):
         if (result or {}).get(key):
             value, ref = reader.reference(result[key], root / "run_result.json", root / "a")
@@ -350,6 +589,9 @@ def query_run_evidence(*, allowed_roots, run_id):
                 lineage.append({"kind": "separate_run_not_merged", "run_id": value.get("run_id"), "ref": ref})
                 continue
             executions.append(_native_chain(reader, value, path))
+            bound = reader.read(path)[1]
+            if bound.get("status") == "verified":
+                native_facts.append({"ref": _bound_ref(bound), "value": value})
         elif schema in {"csharp_repository_stage_fact_v1", "csharp_repository_integrity_v1"}:
             reader.expand(value, path, _store_for(path, root))
             facts.append({"ref": ref, "schema": schema, "stage": value.get("stage"), "status": value.get("status"),
@@ -361,6 +603,10 @@ def query_run_evidence(*, allowed_roots, run_id):
             reader.expand(value, path, _store_for(path, root))
             lineage.append({"kind": "recovery_or_delivery_reference", "ref": ref,
                 "claim": "checkpoint_presence_does_not_prove_resume", "fields": list(value)})
+    terminal_context = [_bound_ref(result_ref)] if result_ref.get("status") == "verified" else []
+    contexts, linked = _collect_context(reader, [*terminal_context, *evidence_context, *((manifest or {}).get("outcome_boundaries") or [])],
+        native_facts, run_id)
+    _initial_public_feedback(reader, executions, native_facts, contexts)
     # 为什么要有它：恢复的累计原件可能重复包含旧调用，只按准确请求引用去重，不把预算或缓存输入再加一次。
     unique = {}
     for execution in executions:
@@ -395,9 +641,12 @@ def query_run_evidence(*, allowed_roots, run_id):
         reader.issues.append({"status": "missing", "reason": "No v2 native execution indexed; legacy manifest references remain available"})
     report.update(status="partial" if reader.issues else "ok", complete=not reader.issues,
         run_root=str(root), manifest_ref=manifest_ref, result_ref=result_ref,
-        terminal={key: _preview((result or {}).get(key)) for key in ("status", "current_stage", "completion_classification", "task_agent_outcome", "delivery_ref")},
+        terminal={key: _preview((result or {}).get(key)) for key in ("run_id", "status", "whole_task_delivered", "current_stage", "completion_classification", "task_agent_outcome", "delivery_ref")},
         executions=executions, stage_facts=facts, lineage=lineage, artifacts=projections, cost=cost,
         records=list(reader.records.values()), links=reader.links, issues=reader.issues)
+    report["linked_executions"] = linked
+    from src.mod_agent.evaluation.benchmark_outcome_ledger import project_native_outcome
+    report["outcome"] = project_native_outcome({"report": report, "native_facts": native_facts, "context_facts": contexts})
     return _sanitize(report, [])
 
 
@@ -415,7 +664,7 @@ def render_evidence_markdown(report):
             "公开反馈进入请求（不证明采纳）：", "```json", json.dumps([
                 {key: row.get(key) for key in ("turn", "call_id", "matches_recorded_tool_result", "included_in_provider_request", "request_ref")}
                 for row in execution["feedback_links"]], ensure_ascii=False, indent=2), "```", ""]
-    for title, key in (("累计成本与口径", "cost"), ("阶段事实", "stage_facts"), ("恢复或另开诊断", "lineage"),
+    for title, key in (("任务结果与已知成本", "outcome"), ("累计成本与口径", "cost"), ("阶段事实", "stage_facts"), ("恢复或另开诊断", "lineage"),
                        ("缺口", "issues"), ("原件索引", "records"), ("精确引用关联", "links")):
         value = report.get(key)
         if isinstance(value, list) and len(value) > 30:

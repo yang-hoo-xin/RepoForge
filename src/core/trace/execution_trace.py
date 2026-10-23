@@ -6,6 +6,7 @@ through nested calls and copied contexts; arbitrary threads require explicit bin
 """
 from __future__ import annotations
 
+import math
 import time
 from collections import Counter
 from collections.abc import Callable, Mapping
@@ -144,6 +145,72 @@ class ExecutionTrace:
         if self._root is not None:
             self._root.update(**attributes)
         return self
+
+    def record_intervention(self, *, event_id, run_id, actor, kind, cost_scope,
+                            subject_ref, person_id=None, active_seconds=None,
+                            timing_basis="unknown", started_at=None, finished_at=None,
+                            evidence_refs=()):
+        """Retain an explicit intervention declaration using the existing trace.
+
+        为什么要有它：外层救援和人工作业必须有来源；事件的记录耗时不是人的主动工作时间。
+        """
+        if not all(isinstance(value, str) and value.strip() for value in (event_id, run_id)):
+            raise ValueError("INTERVENTION_IDENTITY_REQUIRED")
+        if actor not in {"human", "outer_codex"} or kind not in {
+            "approval", "review", "technical_hint", "patch_edit", "rework", "environment_repair", "execution_control"
+        } or cost_scope not in {"task_runtime", "independent_evaluation", "platform_development"}:
+            raise ValueError("INTERVENTION_CLASSIFICATION_INVALID")
+        if not isinstance(subject_ref, (str, Mapping)) or not subject_ref:
+            raise ValueError("INTERVENTION_SUBJECT_REQUIRED")
+        if person_id is not None and (not isinstance(person_id, str) or not person_id.strip()):
+            raise ValueError("INTERVENTION_PERSON_INVALID")
+        if timing_basis not in {"unknown", "declared", "measured"}:
+            raise ValueError("INTERVENTION_TIMING_BASIS_INVALID")
+        if active_seconds is not None and (type(active_seconds) not in {int, float}
+                or not math.isfinite(active_seconds) or active_seconds < 0):
+            raise ValueError("INTERVENTION_ACTIVE_TIME_INVALID")
+        if actor != "human" and (active_seconds is not None or timing_basis != "unknown"):
+            raise ValueError("MODEL_DURATION_IS_NOT_HUMAN_ACTIVE_TIME")
+        if timing_basis == "unknown" and (active_seconds is not None
+                or started_at is not None or finished_at is not None):
+            raise ValueError("INTERVENTION_UNKNOWN_TIME_CANNOT_HAVE_VALUE")
+        if (started_at is None) != (finished_at is None):
+            raise ValueError("INTERVENTION_INTERVAL_INCOMPLETE")
+        interval_seconds = None
+        if started_at is not None:
+            try:
+                start, finish = (datetime.fromisoformat(value) for value in (started_at, finished_at))
+                if start.tzinfo is None or finish.tzinfo is None:
+                    raise ValueError("timezone required")
+                interval_seconds = (finish - start).total_seconds()
+                if interval_seconds < 0:
+                    raise ValueError("negative interval")
+            except (ValueError, TypeError) as error:
+                raise ValueError("INTERVENTION_INTERVAL_INVALID") from error
+        if timing_basis == "measured":
+            if interval_seconds is None or not evidence_refs:
+                raise ValueError("INTERVENTION_MEASUREMENT_EVIDENCE_REQUIRED")
+            if active_seconds is not None and not math.isclose(active_seconds, interval_seconds):
+                raise ValueError("INTERVENTION_MEASUREMENT_MISMATCH")
+            active_seconds = interval_seconds
+        if timing_basis == "declared" and active_seconds is None:
+            raise ValueError("INTERVENTION_DECLARED_TIME_REQUIRED")
+        if interval_seconds is not None and active_seconds > interval_seconds:
+            raise ValueError("INTERVENTION_ACTIVE_TIME_EXCEEDS_INTERVAL")
+        value = {"event_id": event_id, "run_id": run_id, "person_id": person_id,
+                 "actor": actor, "kind": kind, "cost_scope": cost_scope,
+                 "subject_ref": deepcopy(subject_ref), "active_seconds": active_seconds,
+                 "timing_basis": timing_basis, "started_at": started_at, "finished_at": finished_at,
+                 "evidence_refs": deepcopy(list(evidence_refs)),
+                 "provenance": "explicit_declaration_not_inferred_from_span_duration"}
+        if current_trace() is not self:
+            with self.activate():
+                return self._record_intervention(value)
+        return self._record_intervention(value)
+
+    def _record_intervention(self, value):
+        with self._operation("task.intervention", attributes={"intervention": value}) as span:
+            return span.observation_id
 
     def _publish(self, observation):
         with self._lock:

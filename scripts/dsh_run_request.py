@@ -722,15 +722,17 @@ def inspect_run(*, execution_config: str, run_id: str) -> dict:
     return record
 
 
-def evidence_locator(*, execution_config: str, run_id: str) -> dict:
+def evidence_locator(*, execution_config: str, run_id: str, evidence_context=(), evidence_roots=()) -> dict:
     """Describe a read-only invocation; do not create a report or execution config."""
     config = str(Path(execution_config).resolve())
     return {"execution_config_path": config, "run_id": run_id,
             "argv": ["python", "-m", "scripts.dsh_run_request", "--execution-config", config,
-                     "--inspect-run", run_id, "--view", "evidence", "--format", "json"]}
+                     "--inspect-run", run_id, "--view", "evidence", "--format", "json",
+                     *[arg for path in evidence_context for arg in ("--evidence-context", str(path))],
+                     *[arg for path in evidence_roots for arg in ("--evidence-root", str(path))]]}
 
 
-def inspect_evidence(*, execution_config: str, run_id: str) -> dict:
+def inspect_evidence(*, execution_config: str, run_id: str, evidence_context=(), evidence_roots=()) -> dict:
     """Resolve the business identity using the fixed config, then query shared evidence."""
     if not isinstance(run_id, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", run_id) is None:
         raise ValueError("DSH_RUN_INSPECTION_IDENTITY_INVALID")
@@ -743,8 +745,10 @@ def inspect_evidence(*, execution_config: str, run_id: str) -> dict:
         raise ValueError("DSH_RUN_CONFIGURATION_PATH_MUST_BE_ABSOLUTE: --workspace-root")
     from src.observability.dashboard.services.trace_service import TraceService
 
-    result = TraceService().query_run_evidence(allowed_roots=[str(Path(workspace))], run_id=run_id)
-    return {**result, "inspection": evidence_locator(execution_config=execution_config, run_id=run_id)}
+    result = TraceService().query_run_evidence(allowed_roots=[str(Path(workspace))], run_id=run_id,
+        evidence_context=evidence_context, evidence_roots=evidence_roots)
+    return {**result, "inspection": evidence_locator(execution_config=execution_config, run_id=run_id,
+        evidence_context=evidence_context, evidence_roots=evidence_roots)}
 
 
 def _with_inspection(result: dict, execution_config: str) -> dict:
@@ -855,6 +859,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--inspect-run")
     parser.add_argument("--view", choices=["evidence"])
     parser.add_argument("--format", choices=["json", "markdown"])
+    parser.add_argument("--evidence-context", action="append", default=[])
+    parser.add_argument("--evidence-root", action="append", default=[])
     parser.add_argument("--new-task", action="store_true")
     parser.add_argument("--route-request", action="store_true")
     parser.add_argument("--route-preview", action="store_true")
@@ -876,14 +882,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         # 为什么要有它：只读查询必须在任何执行分支之前拒绝混用，不能由分支顺序决定副作用。
-        if args.inspect_run is not None or args.view is not None or args.format is not None:
-            if args.inspect_run is None or (args.format is not None and args.view != "evidence"):
+        if (args.inspect_run is not None or args.view is not None or args.format is not None
+                or args.evidence_context or args.evidence_root):
+            if args.inspect_run is None or ((args.format is not None or args.evidence_context or args.evidence_root) and args.view != "evidence"):
                 raise ValueError("DSH_RUN_EVIDENCE_INSPECTION_REQUIRED")
-            allowed = {"execution_config", "inspect_run", "view", "format"}
+            allowed = {"execution_config", "inspect_run", "view", "format", "evidence_context", "evidence_root"}
             if any(value not in (None, False) for name, value in vars(args).items() if name not in allowed):
                 raise ValueError("DSH_RUN_INSPECTION_OPERATION_CONFLICT")
             if args.view == "evidence":
-                result = inspect_evidence(execution_config=args.execution_config, run_id=args.inspect_run)
+                result = inspect_evidence(execution_config=args.execution_config, run_id=args.inspect_run,
+                    evidence_context=args.evidence_context, evidence_roots=args.evidence_root)
                 if args.format == "markdown":
                     from src.observability.dashboard.services.run_evidence import (
                         render_evidence_markdown,
