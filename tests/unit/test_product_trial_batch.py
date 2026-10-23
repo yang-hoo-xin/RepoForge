@@ -459,9 +459,46 @@ def test_owned_process_deadline_stops_launcher_tree_and_records_timeout(monkeypa
     monkeypatch.setattr(os, "killpg", lambda *args: stops.append(args), raising=False)
     result = _run_command(["controlled-launcher"], timeout=7)
     assert result.deadline_exceeded is True and result.returncode == 124
-    assert waits == [7, 30] and len(stops) == 1
+    assert 0 < waits[0] <= 7 and waits[1:] == [30] and len(stops) == 1
     if os.name == "nt":
         assert stops[0] == ["taskkill", "/PID", "42317", "/T", "/F"]
+
+
+@pytest.mark.parametrize('inherited,timeout,expected', [(None, 200, 1200), ('1050', 200, 1050),
+    ('1400', 200, 1200), ('1050', None, 1050), (None, None, None)])
+def test_trial_launcher_forwards_effective_deadline(monkeypatch, inherited, timeout, expected):
+    from src.mod_agent.evaluation import product_trial_batch as batch
+
+    if inherited is None:
+        monkeypatch.delenv('REPOFORGE_TASK_DEADLINE_UTC', raising=False)
+    else:
+        monkeypatch.setenv('REPOFORGE_TASK_DEADLINE_UTC', inherited)
+    monkeypatch.setattr(batch.time, 'time', lambda: 1000)
+    monkeypatch.setattr(batch.time, 'monotonic', lambda: 100)
+    received = {}
+
+    def start(_command, **kwargs):
+        received.update(kwargs)
+        def wait(timeout):
+            received['timeout'] = timeout
+            return 0
+        return SimpleNamespace(wait=wait)
+
+    monkeypatch.setattr(subprocess, 'Popen', start)
+    result = batch._run_command(['controlled'], timeout=timeout)
+    assert result.deadline_utc == expected
+    actual = received['env'].get('REPOFORGE_TASK_DEADLINE_UTC')
+    assert (float(actual) if actual is not None else None) == expected
+    assert received['timeout'] == (expected - 1000 if expected is not None else None)
+
+
+def test_expired_trial_window_does_not_launch(monkeypatch):
+    from src.mod_agent.evaluation.product_trial_batch import _run_command
+
+    monkeypatch.setenv('REPOFORGE_TASK_DEADLINE_UTC', '0')
+    monkeypatch.setattr(subprocess, 'Popen', lambda *_a, **_k: pytest.fail('Expired window launched a process'))
+    result = _run_command(['controlled'], timeout=200)
+    assert result.deadline_exceeded and result.returncode == 124
 
 
 def test_cli_adapter_load_failure_is_retained_without_launching_models(tmp_path, monkeypatch):

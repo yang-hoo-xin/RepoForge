@@ -5,6 +5,7 @@ import argparse
 import ctypes
 import hashlib
 import json
+import math
 import os
 import stat
 import subprocess
@@ -124,20 +125,37 @@ class WindowsJob:
 def execute(argv, *, cwd, stdin_path, output, deadline, environment=None):
     if os.name != "nt":
         raise ValueError("BENCHMARK_RUNNER_CURRENTLY_VERIFIED_FOR_WINDOWS_ONLY")
+    if type(deadline) not in (int, float) or not math.isfinite(deadline):
+        raise ValueError("BENCHMARK_DEADLINE_INVALID")
+    child_environment = dict(os.environ if environment is None else environment)
+    clock, utc = time.monotonic(), time.time()
+    deadline_utc = utc + (deadline - clock)
+    for inherited in (os.environ.get("REPOFORGE_TASK_DEADLINE_UTC"),
+                      child_environment.get("REPOFORGE_TASK_DEADLINE_UTC")):
+        if inherited is not None:
+            inherited = float(inherited)
+            if not math.isfinite(inherited):
+                raise ValueError("BENCHMARK_INHERITED_DEADLINE_INVALID")
+            deadline_utc = min(deadline_utc, inherited)
+            deadline = min(deadline, clock + (deadline_utc - utc))
+    # 为什么要有它：正常入口与恢复需要原截止事实，嵌套进程不得重新取得更长执行窗口。
+    child_environment["REPOFORGE_TASK_DEADLINE_UTC"] = str(deadline_utc)
     remaining = deadline - time.monotonic()
     if remaining <= 0:
-        return {"status": "deadline_exhausted_before_start", "started": False, "argv": argv}
+        return {"status": "deadline_exhausted_before_start", "started": False, "argv": argv,
+                "deadline_utc": deadline_utc}
     output.mkdir(parents=True, exist_ok=False)
     started = datetime.now(timezone.utc).isoformat()
     clock = time.monotonic()
     job, process = WindowsJob(), None
-    result = {"argv": argv, "cwd": str(cwd), "started_at": started, "timeout": False, "started": False}
+    result = {"argv": argv, "cwd": str(cwd), "started_at": started, "timeout": False, "started": False,
+        "deadline_utc": deadline_utc, "deadline_scope": "owned_process_tree; inherited_earlier_deadline_retained"}
     try:
         with (output / "stdout.bin").open("xb") as stdout, (output / "stderr.bin").open("xb") as stderr:
             with Path(stdin_path).open("rb") if stdin_path else open(os.devnull, "rb") as stdin:
                 # 为什么要有它：600秒截止必须覆盖整棵自有进程树；先加入Job再运行，不能只杀父CLI却让编译或工具继续修改。
                 process = subprocess.Popen(argv, cwd=cwd, stdin=stdin, stdout=stdout, stderr=stderr,
-                    env=environment, creationflags=subprocess.CREATE_NO_WINDOW | 0x00000004)
+                    env=child_environment, creationflags=subprocess.CREATE_NO_WINDOW | 0x00000004)
                 job.start(process)
                 result.update(started=True, process_id=process.pid, process_tree_ownership="Windows Job Object")
                 try:

@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import math
 import os
 import time
 from contextlib import nullcontext
@@ -13,7 +14,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import uuid4
 
-from src.libs.llm.agent_turn import AgentMessage, AgentTurnResponse
+from src.libs.llm.agent_turn import AgentMessage, AgentTurnProviderError, AgentTurnResponse
 from src.mod_agent.artifacts import ArtifactRef
 from src.mod_agent.model_call_budget import validate_budget
 from src.mod_agent.model_qualification import canonical_hash, read_bound_json
@@ -31,6 +32,22 @@ from src.mod_agent.task_agent_v2_state import TaskAgentV2State, save_v2_artifact
 from src.mod_agent.task_agent_v2_tools import TaskAgentSessionV2
 
 _PROCESS_INSTANCE = uuid4().hex
+
+
+def task_deadline_utc_from_environment():
+    """Read a host-supplied limiting fact, not authority to extend resources."""
+    value = os.environ.get("REPOFORGE_TASK_DEADLINE_UTC")
+    if value is None:
+        return None
+    value = float(value)
+    _require(math.isfinite(value), "WALL_DEADLINE_INVALID")
+    return value
+
+
+def earliest_task_deadline_utc(*values):
+    selected = [value for value in values if value is not None]
+    _require(all(type(value) in (int, float) and math.isfinite(value) for value in selected), "WALL_DEADLINE_INVALID")
+    return min(selected) if selected else None
 
 
 def capture_clock():
@@ -102,7 +119,15 @@ def classify_v2_technical_inputs(loop_request, prepared_request, initial_request
 class TaskAgentExecutionV2(TaskAgentExecution):
     protocol = "v2"
 
-    def __init__(self, *, experience_configuration_ref=None, **kwargs):
+    def __init__(self, *, experience_configuration_ref=None, deadline_utc=None, **kwargs):
+        clock, utc = time.monotonic(), time.time()
+        relative = kwargs.get("deadline")
+        if relative is not None:
+            _require(type(relative) in (int, float) and math.isfinite(relative), "DEADLINE_INVALID")
+        self.deadline_utc = earliest_task_deadline_utc(deadline_utc,
+            None if relative is None else utc + (relative - clock))
+        if self.deadline_utc is not None:
+            kwargs["deadline"] = clock + (self.deadline_utc - utc)
         super().__init__(**kwargs)
         self._experience = None
         if experience_configuration_ref is not None:
@@ -138,6 +163,12 @@ class TaskAgentExecutionV2(TaskAgentExecution):
             "technical_plan_ref": state.head["plan_ref"], "baseline_revision_ref": state.contract["baseline_manifest_ref"],
             "model_technical_plan": model_plan_view(state),
             "history_projection": history_projection,
+            "cumulative_resources": deepcopy(state.head["resources"]),
+            "model_call_budget": validate_budget(self.budget_snapshot()),
+            "execution_window": {"deadline_utc": getattr(self, "deadline_utc", None),
+                "remaining_wall_seconds": max(0.0, self.deadline - time.monotonic()) if self.deadline is not None else None,
+                "scope": "host_wall_window_not_tokens_or_success_estimate",
+                "enforcement": "cooperative_between_actions; outer_controller_owns_hard_process_stop"},
             "experiment_capabilities": experiment_configuration_facts(self),
             "baseline_usage": "Historical source reference; editing must name current_revision_ref and a matching source_view_ref."}
         prepared = replace(request, messages=(*request.messages, AgentMessage("user", {"current_task_state": current})))
@@ -178,6 +209,16 @@ class TaskAgentExecutionV2(TaskAgentExecution):
         if self.deadline is not None and time.monotonic() >= self.deadline:
             return {"code": "TASK_AGENT_WALL_BUDGET_EXHAUSTED"}
         return None
+
+    def require_model_send_window(self, purpose):
+        termination = self.stop_v2_check()
+        if termination is not None:
+            receipt = self._save("model-not-sent-" + uuid4().hex + ".json", {
+                "status": "not_sent", "purpose": purpose, "termination": termination,
+                "deadline_utc": getattr(self, "deadline_utc", None),
+                "budget": validate_budget(self.budget_snapshot()), "transport_attempted": False})
+            raise AgentTurnProviderError("Task stopped before model transport", diagnostic={
+                "termination": termination, "transport_attempted": False, "not_sent_receipt_ref": receipt})
 
     def reserve_v2_call(self):
         reservation_id = uuid4().hex
@@ -384,6 +425,7 @@ class TaskAgentExecutionV2(TaskAgentExecution):
                 try:
                     trace = current_trace()
                     if trace is None:
+                        self.require_model_send_window("technical_decision")
                         response = client.complete_turn(request)
                     else:
                         with trace.model_call({"provider": client.provider, "model": client.model,
@@ -391,6 +433,7 @@ class TaskAgentExecutionV2(TaskAgentExecution):
                             bodies = PatchTransportBodyRecorder(record=event, observation=observation, body_root=self.output_root)
                             with observe_transport(observation.transport_started, observation.update,
                                     request_callback=observation.update, local_request_body_callback=bodies.callback):
+                                self.require_model_send_window("technical_decision")
                                 response = client.complete_turn(request)
                             if isinstance(response, AgentTurnResponse):
                                 observation.record_response(usage=response.usage.to_dict(), usage_available=True,

@@ -99,7 +99,9 @@ class TaskAgentRecoveryJournal:
         self.lock_key = "logical-task:" + graph_state["run_id"] + ":" + graph_state["request_id"]
         if host_config_ref is None:
             from src.mod_agent.task_agent_execution import _source_facts
-            deadline = None if owner.deadline is None else time.time() + (owner.deadline - time.monotonic())
+            deadline = getattr(owner, "deadline_utc", None)
+            if deadline is None and owner.deadline is not None:
+                deadline = time.time() + (owner.deadline - time.monotonic())
             host = {"schema": "task-agent-host-recovery-config.v2", "task_contract_ref": self.state.contract_ref,
                 "workspace_root": str(owner.workspace_root), "artifact_store_root": str(owner.store.root),
                 "original_output_root": str(owner.output_root), "model_profile": asdict(owner.profile),
@@ -133,6 +135,8 @@ class TaskAgentRecoveryJournal:
             "task_contract_ref": self.state.contract_ref, "task_head": self.state.head,
             "loop": deepcopy(loop_state), "session": session_snapshot(self.session), "details": deepcopy(self.details),
             "owner": {"output_root": str(owner.output_root), "reads": owner._reads, "observation_bytes": owner._observation_bytes,
+                "deadline_utc": getattr(owner, "deadline_utc", None) if getattr(owner, "deadline_utc", None) is not None
+                    else self.state.load(self.host_config_ref)["deadline_utc"],
                 "turn_count": getattr(owner, "_v2_turn_count", 0), "tool_charge_count": getattr(owner, "_v2_tool_charge_count", 0),
                 "reservation": deepcopy(getattr(owner, "_v2_reservation", None))},
             "terminal_learning_receipt": deepcopy(owner._experience._terminal_receipt) if owner._experience is not None else None,
@@ -310,6 +314,13 @@ def _validate_host_binding(state, checkpoint, host):
 
     registered = state.head["operations"].get("host-recovery-config", {})
     _require(registered.get("result", {}).get("host_config_ref") == checkpoint["host_config_ref"], "HOST_CONFIG_NOT_REGISTERED")
+    if "deadline_utc" in checkpoint["owner"]:
+        from src.mod_agent.task_agent_v2_execution import earliest_task_deadline_utc
+
+        deadline = checkpoint["owner"]["deadline_utc"]
+        previous = state.load(checkpoint["previous_checkpoint_ref"]) if checkpoint.get("previous_checkpoint_ref") else {}
+        prior = previous.get("owner", {}).get("deadline_utc")
+        _require(deadline == earliest_task_deadline_utc(host["deadline_utc"], prior, deadline), "DEADLINE_EXTENDED")
     authority = state.load(state.contract["authority_ref"])
     baseline = state.load(state.contract["baseline_manifest_ref"])
     acceptance = state.load(state.contract["public_acceptance_ref"])
@@ -582,7 +593,11 @@ def _resume_v2_task_agent(*, artifact_store_root, checkpoint_ref):
         validate_ollama_model_identity,
     )
     from src.mod_agent.patch_worker_configuration import PatchWorkerConfiguration
-    from src.mod_agent.task_agent_v2_execution import TaskAgentExecutionV2
+    from src.mod_agent.task_agent_v2_execution import (
+        TaskAgentExecutionV2,
+        earliest_task_deadline_utc,
+        task_deadline_utc_from_environment,
+    )
 
     root = Path(artifact_store_root).resolve(strict=True)
     if Path(checkpoint_ref).is_absolute():
@@ -602,7 +617,9 @@ def _resume_v2_task_agent(*, artifact_store_root, checkpoint_ref):
             checkpoint_ref = _activate_delivery_rebase(root, rebase_ref)
         loaded = load_task_agent_checkpoint(artifact_store_root=artifact_store_root, checkpoint_ref=checkpoint_ref, reconcile=True)
         host, checkpoint = loaded["host"], loaded["checkpoint"]
-        _require(host["deadline_utc"] is None or time.time() < host["deadline_utc"], "DEADLINE_EXPIRED")
+        deadline_utc = earliest_task_deadline_utc(host["deadline_utc"], checkpoint["owner"].get("deadline_utc"),
+            task_deadline_utc_from_environment())
+        _require(deadline_utc is None or time.time() < deadline_utc, "DEADLINE_EXPIRED")
         worker = PatchWorkerConfiguration.load(host["worker_configuration_ref"]["path"])
         _require(worker.reference == host["worker_configuration_ref"], "WORKER_CHANGED")
         evaluator = worker.behavior_evaluator()
@@ -623,7 +640,6 @@ def _resume_v2_task_agent(*, artifact_store_root, checkpoint_ref):
             _require(PatchWorkerConfiguration.load(host["worker_configuration_ref"]["path"]).reference == worker.reference
                 and evaluator.verification_identity() == host["verification_identity"], "PROVIDERS_CHANGED")
 
-        deadline = None if host["deadline_utc"] is None else time.monotonic() + (host["deadline_utc"] - time.time())
         output = Path(host["original_output_root"]) / ("resume-" + uuid4().hex)
         owner = TaskAgentExecutionV2(artifact_store=ArtifactStore(artifact_store_root), workspace_root=host["workspace_root"],
             profile=LocalOllamaInitialPatchProfileV1(**host["model_profile"]), policy=worker.policy,
@@ -632,7 +648,7 @@ def _resume_v2_task_agent(*, artifact_store_root, checkpoint_ref):
             providers={}, validate_providers=validate_providers, reserve_model_call=reserve,
             budget_snapshot=lambda: deepcopy(budget), allowed_edit_paths=tuple(host["allowed_edit_paths"]),
             allowed_read_roots=tuple(host["allowed_read_roots"]), output_root=output,
-            deadline=deadline, candidate_mode=host["candidate_mode"],
+            deadline_utc=deadline_utc, candidate_mode=host["candidate_mode"],
             experience_configuration_ref=host["experience_configuration_ref"])
         _require(asdict(owner.policy) == host["policy"], "POLICY_CHANGED")
         owner._resume_v2 = loaded

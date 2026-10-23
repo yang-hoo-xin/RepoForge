@@ -89,12 +89,27 @@ def prepare_trial(row):
 
 def _run_command(command, *, timeout=None, **_kwargs):
     """Bound the owned launcher tree, including its fresh Product child process."""
+    environment = dict(os.environ)
+    deadline_utc = None if timeout is None else time.time() + timeout
+    inherited = environment.get("REPOFORGE_TASK_DEADLINE_UTC")
+    if inherited is not None:
+        inherited = float(inherited)
+        if not math.isfinite(inherited):
+            raise ValueError("Trial inherited deadline must be finite.")
+        deadline_utc = inherited if deadline_utc is None else min(deadline_utc, inherited)
+    deadline = None if deadline_utc is None else time.monotonic() + (deadline_utc - time.time())
+    if deadline_utc is not None:
+        environment["REPOFORGE_TASK_DEADLINE_UTC"] = str(deadline_utc)
+    if deadline is not None and deadline <= time.monotonic():
+        result = subprocess.CompletedProcess(command, 124, "", "")
+        result.deadline_exceeded, result.deadline_utc = True, deadline_utc
+        return result
     with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
         process = subprocess.Popen(command, stdout=stdout, stderr=stderr,
-            start_new_session=os.name != "nt", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            start_new_session=os.name != "nt", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), env=environment)
         timed_out = False
         try:
-            code = process.wait(timeout=timeout)
+            code = process.wait(timeout=None if deadline is None else max(0, deadline - time.monotonic()))
         except subprocess.TimeoutExpired:
             timed_out = True
             if os.name == "nt":
@@ -107,6 +122,7 @@ def _run_command(command, *, timeout=None, **_kwargs):
         result = subprocess.CompletedProcess(command, code, stdout.read().decode("utf-8", errors="replace"),
             stderr.read().decode("utf-8", errors="replace"))
         result.deadline_exceeded = timed_out
+        result.deadline_utc = deadline_utc
         return result
 
 
@@ -350,6 +366,7 @@ def run_product_trial_batch(spec, *, execute=False, delivery_adapter=None, comma
                 row["normal_entry_seconds"] = time.perf_counter() - started
             row["launcher_exit_code"] = completed.returncode
             row["process_deadline_exceeded"] = getattr(completed, "deadline_exceeded", False)
+            row["process_deadline_utc"] = getattr(completed, "deadline_utc", None)
             if completed.returncode or not (run_root / "run_result.json").is_file():
                 # 为什么要有它：CLI 的结构化失败写入 stdout；缺少 terminal 不能覆盖原始失败。
                 row["launcher_stdout"] = getattr(completed, "stdout", None)

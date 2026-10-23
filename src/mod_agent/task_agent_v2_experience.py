@@ -400,6 +400,7 @@ class TaskAgentV2Experience:
                         bind = getattr(client, "bind_context_identity", None)
                         if callable(bind):
                             bind(model_identity=observed, owner_profile_sha256=canonical_hash(owner.profile.to_dict()))
+                        owner.require_model_send_window("strategy_learning")
                         response = client.complete_turn(request)
                         return response
 

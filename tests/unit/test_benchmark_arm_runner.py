@@ -65,6 +65,24 @@ def test_deadline_kills_owned_child_tree_and_retains_raw_output(tmp_path):
     assert result['broker_descendant_cleanup'] == 'not_established_by_generic_job_ownership'
 
 
+@pytest.mark.skipif(os.name != 'nt', reason='Windows Job Object contract')
+@pytest.mark.parametrize('environment_mode', ['same', 'absent', 'later'])
+def test_owned_process_passes_actual_utc_deadline_without_extending_inherited_window(tmp_path, monkeypatch, environment_mode):
+    inherited = time.time() + 60
+    monkeypatch.setenv('REPOFORGE_TASK_DEADLINE_UTC', str(inherited))
+    env = {**os.environ, 'REPOFORGE_TASK_DEADLINE_UTC': str(inherited)}
+    if environment_mode == 'absent':
+        env.pop('REPOFORGE_TASK_DEADLINE_UTC')
+    elif environment_mode == 'later':
+        env['REPOFORGE_TASK_DEADLINE_UTC'] = str(inherited + 120)
+    child = 'import os;print(os.environ.get("REPOFORGE_TASK_DEADLINE_UTC"),flush=True)'
+    result = execute([sys.executable, '-I', '-B', '-c', child], cwd=tmp_path, stdin_path=None,
+        output=tmp_path / 'bounded', deadline=time.monotonic() + 300, environment=env)
+    assert result['exit_code'] == 0
+    assert result['deadline_utc'] == inherited
+    assert float((tmp_path / 'bounded/stdout.bin').read_text()) == inherited
+
+
 def test_source_audit_ignores_build_outputs_but_catches_protected_edits(tmp_path):
     (tmp_path / 'Plugin.cs').write_text('before')
     (tmp_path / 'Project.csproj').write_text('fixed')

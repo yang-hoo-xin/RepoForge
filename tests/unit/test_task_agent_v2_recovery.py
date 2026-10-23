@@ -3,6 +3,7 @@
 为什么要有它：恢复测试要跨新owner与磁盘原件，不能只证明字典能序列化。
 """
 import json
+import time
 from copy import deepcopy
 from pathlib import Path
 
@@ -234,6 +235,46 @@ def test_saved_checkpoint_rejects_source_drift_before_model_send(repository_work
         monkeypatch.setattr(recovery.time, "time", lambda: host["deadline_utc"] + 1)
     with pytest.raises(ValueError):
         resume_v2_task_agent(artifact_store_root=store, checkpoint_ref=ref)
+
+
+def test_repeated_recovery_retains_earliest_deadline_without_new_reservations(repository_workspace, monkeypatch, capsys):
+    from src.mod_agent.task_agent_v2_state import load_v2_artifact
+    from tests.unit.test_task_agent_v2_product_entry import (
+        test_v2_normal_cli_empty_registry_retarget_and_product_handoff,
+    )
+
+    deadline = time.time() + 1800
+    monkeypatch.setenv("REPOFORGE_TASK_DEADLINE_UTC", str(deadline))
+    original = TaskAgentRecoveryJournal.save
+    retained = []
+
+    def interrupt(journal, value):
+        ref = original(journal, value)
+        if value["phase"] == "ready" and value["model_turns"] == 1:
+            retained.append((journal.state.store_root, ref))
+            raise KeyboardInterrupt()
+        return ref
+
+    monkeypatch.setattr(TaskAgentRecoveryJournal, "save", interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_workspace, monkeypatch, capsys, False)
+    capsys.readouterr()
+    for inherited, expected in ((deadline + 300, deadline), (deadline - 300, deadline - 300), (None, deadline - 300)):
+        if inherited is None:
+            monkeypatch.delenv("REPOFORGE_TASK_DEADLINE_UTC")
+        else:
+            monkeypatch.setenv("REPOFORGE_TASK_DEADLINE_UTC", str(inherited))
+        store, reference = retained[-1]
+        with pytest.raises(KeyboardInterrupt):
+            resume_v2_task_agent(artifact_store_root=store, checkpoint_ref=reference)
+        latest = load_v2_artifact(*retained[-1])
+        assert latest["owner"]["deadline_utc"] == expected
+        assert latest["loop"]["model_budget"]["consumed"] == 1
+        assert latest["task_head"]["resources"]["model_calls"] == 1
+    monkeypatch.setenv("REPOFORGE_TASK_DEADLINE_UTC", str(time.time() - 1))
+    with pytest.raises(ValueError, match="DEADLINE_EXPIRED"):
+        resume_v2_task_agent(artifact_store_root=retained[-1][0], checkpoint_ref=retained[-1][1])
+    assert load_v2_artifact(*retained[-1])["task_head"]["resources"]["model_calls"] == 1
 
 
 def test_terminal_learning_refreshes_total_resources_without_rewriting_execution(repository_workspace, monkeypatch, capsys):

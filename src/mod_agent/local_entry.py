@@ -7030,10 +7030,15 @@ def run_local_request(
 ) -> dict[str, Any]:
     """Run one request through the existing graph against an isolated target copy."""
     entry_clock = None
+    task_deadline_utc = None
     if task_agent_protocol == "v2":
         entry_clock = {"received_at": datetime.now(timezone.utc).isoformat(),
             "monotonic": time.monotonic(), "process_id": os.getpid()}
-        from src.mod_agent.task_agent_v2_execution import capture_clock
+        from src.mod_agent.task_agent_v2_execution import (
+            capture_clock,
+            task_deadline_utc_from_environment,
+        )
+        task_deadline_utc = task_deadline_utc_from_environment()
         entry_clock["process_instance"] = capture_clock()["process_instance"]
     from src.mod_agent.evidence.optimization_policy import optimization_policy
     from src.mod_agent.model_call_budget import (
@@ -8381,7 +8386,8 @@ def run_local_request(
                 from src.mod_agent.task_agent_v2_execution import TaskAgentExecutionV2
                 executor_class = TaskAgentExecutionV2
             task_agent_execution = executor_class(
-                **({"experience_configuration_ref": experience_configuration_ref} if task_agent_protocol == "v2" else {}),
+                **({"experience_configuration_ref": experience_configuration_ref, "deadline_utc": task_deadline_utc}
+                   if task_agent_protocol == "v2" else {}),
                 artifact_store=artifact_store, workspace_root=run_root, profile=worker_profile,
                 policy=worker_policy, behavior_evaluator=patch_worker_configuration.behavior_evaluator(),
                 worker_configuration_ref=bound_worker_ref, expected_model_identity=local_model_identity,

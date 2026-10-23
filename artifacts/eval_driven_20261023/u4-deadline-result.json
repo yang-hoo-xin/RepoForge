@@ -1,0 +1,42 @@
+{
+  "schema": "u4-deadline-integration-result.v1",
+  "base_before_change": "e26bb15",
+  "origin": "platform_development_controlled_verification_not_autonomous_business_success",
+  "baseline": "Polly context attempt retained an outer 1800-second hard limit but saved host.deadline_utc=null and no remaining wall time in the model state.",
+  "changed_behavior": [
+    "Owned benchmark and paired-trial launchers propagate the actual UTC limit without extending inherited deadlines.",
+    "Normal v2 entry passes the deadline to its execution owner; model requests include cumulative resources, reservation budget and remaining wall time.",
+    "Recovery retains the earliest host/checkpoint/inherited deadline; shortened deadlines persist across later resumes.",
+    "Technical and learning transports recheck the execution window after request preparation and identity admission; an expired send retains a not_sent receipt and its existing reservation."
+  ],
+  "verification": [
+    {"command": ".venv/Scripts/python.exe -m pytest tests/unit/test_benchmark_arm_runner.py tests/unit/test_task_agent_v2_admission.py -q --disable-warnings --basetemp C:/tmp/rf-u4-window-after", "result": "22 passed", "scope": "including actual owned Python child timeout/propagation and current-state resource projection; controller variants extended afterward"},
+    {"command": ".venv/Scripts/python.exe -m pytest tests/unit/test_task_agent_v2_product_entry.py tests/unit/test_task_agent_v2_recovery.py tests/unit/test_task_agent_v2_experience.py -k 'deadline or repeated_recovery or learning_preparation_expiry' -q --disable-warnings --basetemp C:/tmp/rf-u4-window-cli", "result": "4 passed, 1 test assertion failed", "scope": "actual controlled HTTP payload, saved UTC binding, repeated recovery, expired recovery, and learning preparation expiry; failure was incorrect access to the existing nested termination.detail"},
+    {"command": ".venv/Scripts/python.exe -m pytest tests/unit/test_benchmark_arm_runner.py tests/unit/test_task_agent_v2_product_entry.py -k 'passes_actual_utc or deadline_expiring_during_preparation' -q --disable-warnings --basetemp C:/tmp/rf-u4-window-final-targeted", "result": "4 passed", "scope": "parent limit cannot be removed or extended by explicit environment; technical pre-send expiry and retained not_sent receipt"},
+    {"command": ".venv/Scripts/python.exe -m pytest 'tests/unit/test_task_agent_v2_recovery.py::test_normal_entry_interruption_reconstructs_owner_and_finishes_same_product[checkpoint_completed]' tests/unit/test_task_agent_v2_recovery.py::test_cli_resumes_applied_public_failure_from_actual_source_and_requires_new_approval 'tests/unit/test_task_agent_v2_experience.py::test_experience_through_normal_cli_actual_requests_and_terminal[extract]' -q --disable-warnings --basetemp C:/tmp/rf-u4-window-compatibility", "result": "3 passed in 224.64 seconds", "scope": "unbounded legacy configuration, cross-process recovery, already-applied failure continuation with new approval, and normal terminal learning"},
+    {"command": ".venv/Scripts/python.exe -m pytest tests/unit/test_product_trial_batch.py -q --disable-warnings --basetemp C:/tmp/rf-u4-batch-window", "result": "50 passed, 2 new test assertions failed", "scope": "new assertions compared float and integer environment text instead of the same numeric cutoff"},
+    {"command": ".venv/Scripts/python.exe -m pytest tests/unit/test_product_trial_batch.py -k 'deadline or expired_trial' -q --disable-warnings --basetemp C:/tmp/rf-u4-batch-window-final", "result": "7 passed", "scope": "corrected numeric assertions; inherited, shorter, absent and already-expired paired-trial windows"}
+  ],
+  "first_failures": [
+    "Two minimal pre-change checks failed because deadline_utc and execution_window were absent.",
+    "Independent review found parent environment loss when a caller provided an explicit child mapping; two counterexamples failed before the minimum-of-three correction.",
+    "Developer test mistakes (termination.detail path and numeric text comparison) were corrected without weakening product boundaries."
+  ],
+  "owned_process_evidence_refs": [
+    {"path": "C:/tmp/rf-u4-window-final-targeted/test_owned_process_passes_actu0/bounded/process.json", "sha256": "bd5fdc4fb0cd3e058f6b747638960653c0ff582c6b0e4707750501ffcfd1c829"},
+    {"path": "C:/tmp/rf-u4-window-final-targeted/test_owned_process_passes_actu1/bounded/process.json", "sha256": "c90fecb1f746cac4c43dde7ea1436f7684fda55c96e2b0b93647382708355f85"},
+    {"path": "C:/tmp/rf-u4-window-final-targeted/test_owned_process_passes_actu2/bounded/process.json", "sha256": "45e9464908393c1a1f6a43b7a9707c173cf810fbce1d9ec6a51cddd003626906"}
+  ],
+  "lint": "Changed selected files pass Ruff. local_entry.py retains the same 22 pre-existing findings as e26bb15; no unrelated cleanup.",
+  "cost_scope": "platform_development_only; controlled token fixtures are not real-provider usage",
+  "new_real_model_calls": 0,
+  "new_sdk_builds": 0,
+  "business_task_reruns": 0,
+  "limits": [
+    "A stop check is cooperative, not termination of an in-flight compiler or provider/server computation.",
+    "No claim that deadline visibility improves model decision quality; test on a separately frozen genuine task rather than restarting ended attempts.",
+    "Absent historical deadline/receipt facts remain absent; old owner hashes are still verified before recovery.",
+    "Overlapping test selections are not independent task samples or business-success counts."
+  ],
+  "next": "U2 genuine public-episode extraction and B/B+ preparation, alongside remaining U1-U5 integration; no automatic Polly or RestSharp replay"
+}

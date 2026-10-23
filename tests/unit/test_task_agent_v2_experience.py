@@ -76,12 +76,22 @@ def test_trial_arm_cannot_relabel_a_consuming_configuration_as_baseline(tmp_path
 @pytest.mark.parametrize("mode", ["consume", "withdraw", "extract", "compile_extract", "rejected_extract",
     "discovery_extract", "discovery_tamper_extract", "discovery_environment_extract", "recheck_extract",
     "trial_consume", "trial_off"])
-def test_experience_through_normal_cli_actual_requests_and_terminal(repository_workspace, monkeypatch, capsys, mode):
+def test_experience_through_normal_cli_actual_requests_and_terminal(repository_workspace, monkeypatch, capsys, mode,
+                                                                expire_learning_send=False):
     root = repository_workspace
     profile, source = _profile(root)
     extract_mode = mode.endswith("extract")
     consume = not extract_mode and mode != "trial_off"
     memory, config = _configuration(root, consume=consume, extract=extract_mode, trial=mode.startswith("trial_"))
+    if expire_learning_send:
+        original_window = TaskAgentExecutionV2.require_model_send_window
+
+        def expire_before_learning(owner, purpose):
+            if purpose == "strategy_learning":
+                owner.deadline = 0
+            return original_window(owner, purpose)
+
+        monkeypatch.setattr(TaskAgentExecutionV2, "require_model_send_window", expire_before_learning)
     _fake_execution(monkeypatch)
     fake_build = backend.nuget._run_nuget_isolated_build
     def build(selected):
@@ -242,6 +252,14 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
         assert code == 0 and result["status"] == "awaiting_delivery", result
     receipt = owner.complete_terminal_learning()
     assert Path(execution_ref["path"]).read_bytes() == original
+    if expire_learning_send:
+        assert receipt["status"] == "failed" and not learning
+        assert receipt["model_calls"] == 1 and receipt["unknown_usage_calls"] == 1
+        assert receipt["budget_after"]["consumed"] == owner.execution_receipt().budget_after["consumed"] + 1
+        raw = next(owner.output_root.glob("model-not-sent-*.json"))
+        assert json.loads(raw.read_bytes())["purpose"] == "strategy_learning"
+        assert json.loads(raw.read_bytes())["transport_attempted"] is False
+        return
     if mode in {"extract", "compile_extract", "discovery_extract", "recheck_extract"}:
         assert receipt["status"] == "completed", receipt
         assert len(learning) == 1
@@ -312,3 +330,8 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
                 first_checkpoint = owner._v2_state.load(first_checkpoint["previous_checkpoint_ref"])
             assert first_checkpoint["host_config_ref"] == journal.host_config_ref
             assert first_checkpoint["loop"]["model_budget"]["consumed"] == 0
+
+
+def test_learning_preparation_expiry_preserves_reservation_without_model_send(repository_workspace, monkeypatch, capsys):
+    test_experience_through_normal_cli_actual_requests_and_terminal(
+        repository_workspace, monkeypatch, capsys, "extract", expire_learning_send=True)

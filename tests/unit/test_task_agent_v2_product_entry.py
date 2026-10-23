@@ -27,7 +27,8 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                                                                  exercise_experiments=False, exercise_discovery=False,
                                                                  exercise_correction=False, exercise_stale_view=False,
                                                                  exercise_feedback=False, expect_postcheck_failure=False,
-                                                                 exercise_paging=False, exercise_history=False):
+                                                                 exercise_paging=False, exercise_history=False,
+                                                                 exercise_deadline=False, expect_unsent_deadline=False):
     short_workspace = repository_workspace
     if real_sdk and os.environ.get("REPOFORGE_REAL_REPOSITORY_CLI_INTEGRATION") != "1":
         pytest.skip("Explicit SDK integration; decisions remain scripted.")
@@ -110,6 +111,16 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
             return httpx.Response(200, request=request, json=payload)
         payload = json.loads(request.content)
         requests.append(payload)
+        if exercise_deadline:
+            current = next(json.loads(row["content"])["current_task_state"] for row in reversed(payload["messages"])
+                if row["role"] == "user" and '"current_task_state"' in row["content"])
+            window = current["execution_window"]
+            assert window["deadline_utc"] == float(os.environ["REPOFORGE_TASK_DEADLINE_UTC"])
+            remaining = window["remaining_wall_seconds"]
+            assert 0 < remaining <= memory.get("remaining_wall_seconds", 1800)
+            assert current["model_call_budget"]["consumed"] == len(requests)
+            assert current["cumulative_resources"]["model_calls"] == len(requests)
+            memory["remaining_wall_seconds"] = remaining
         tools = {x["function"]["name"] for x in payload.get("tools", [])}
         assert "binding_add" in tools, "v2 must reach investigation without pre-model planning"
         context = next(json.loads(x["content"]) for x in payload["messages"]
@@ -302,6 +313,16 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
     pending = json.loads(capsys.readouterr().out)
     (short_workspace / "v2-entry-result.json").write_text(json.dumps(pending, ensure_ascii=False, indent=2), encoding="utf-8")
     (short_workspace / "scripted-requests.json").write_text(json.dumps(requests, ensure_ascii=False, indent=2), encoding="utf-8")
+    if expect_unsent_deadline:
+        assert code != 0 and pending["task_agent_outcome"]["status"] == "blocked", pending
+        diagnostic = pending["task_agent_outcome"]["termination"]["detail"]["provider_diagnostic"]
+        assert diagnostic["transport_attempted"] is False
+        assert diagnostic["termination"]["code"] == "TASK_AGENT_WALL_BUDGET_EXHAUSTED"
+        assert not requests and pending["model_call_budget"]["consumed"] == 1
+        receipt = json.loads(Path(diagnostic["not_sent_receipt_ref"]["path"]).read_text(encoding="utf-8"))
+        assert receipt["status"] == "not_sent" and receipt["purpose"] == "technical_decision"
+        assert {p.name: p.read_bytes() for p in (source / "Library").glob("*.cs")} == baseline
+        return
     if expect_postcheck_failure:
         assert code != 0 and pending["current_stage"] == "blocked", pending
         assert pending.get("status") != "awaiting_delivery"
@@ -358,6 +379,13 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         assert pending["model_call_budget"]["consumed"] == 15
     assert {p.name: p.read_bytes() for p in (source / "Library").glob("*.cs")} == baseline
     root = Path(pending["run_root"])
+    if exercise_deadline:
+        from src.mod_agent.task_agent_v2_state import load_v2_artifact
+
+        latest = next((root / "a/v2/session-checkpoints").glob("*.json"))
+        checkpoint = load_v2_artifact(root / "a", json.loads(latest.read_bytes())["checkpoint_ref"])
+        host = load_v2_artifact(root / "a", checkpoint["host_config_ref"])
+        assert checkpoint["owner"]["deadline_utc"] == host["deadline_utc"] == float(os.environ["REPOFORGE_TASK_DEADLINE_UTC"])
     timing_origin = json.loads((root / "entry-timing.json").read_text(encoding="utf-8"))
     assert timing_origin["entry_clock"]["monotonic"] <= admission_clocks[0]
     timing = json.loads(Path(pending["task_timing_ref"]["path"]).read_text(encoding="utf-8"))
@@ -437,6 +465,27 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
 def test_normal_cli_probe_unavailable_preserves_task_path(repository_workspace, monkeypatch, capsys):
     test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
         repository_workspace, monkeypatch, capsys, False, exercise_experiments=True)
+
+
+def test_normal_cli_passes_deadline_to_actual_requests_and_checkpoint(repository_workspace, monkeypatch, capsys):
+    monkeypatch.setenv("REPOFORGE_TASK_DEADLINE_UTC", str(time.time() + 1800))
+    test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
+        repository_workspace, monkeypatch, capsys, False, exercise_deadline=True)
+
+
+def test_normal_cli_deadline_expiring_during_preparation_does_not_send(repository_workspace, monkeypatch, capsys):
+    from src.mod_agent.task_agent_v2_execution import TaskAgentExecutionV2
+
+    original = TaskAgentExecutionV2.prepare_decision_request
+
+    def expire(owner, request, session):
+        prepared = original(owner, request, session)
+        owner.deadline = time.monotonic() - 1
+        return prepared
+
+    monkeypatch.setattr(TaskAgentExecutionV2, "prepare_decision_request", expire)
+    test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
+        repository_workspace, monkeypatch, capsys, False, expect_unsent_deadline=True)
 
 
 def test_normal_cli_source_pages_preserve_read_edit_recheck_and_handoff(repository_workspace, monkeypatch, capsys):

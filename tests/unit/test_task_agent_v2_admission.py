@@ -43,6 +43,17 @@ def action(session, name):
     return next(item for item in session.actions() if item.definition.name == name)
 
 
+def test_current_decision_receives_remaining_window_and_cumulative_resources(session):
+    import time
+
+    session.owner.deadline = time.monotonic() + 30
+    prepared = session.owner.prepare_decision_request(session.initial_request(), session)
+    current = prepared.messages[-1].content['current_task_state']
+    assert 0 < current['execution_window']['remaining_wall_seconds'] <= 30
+    assert current['cumulative_resources'] == session.state.head['resources']
+    assert current['model_call_budget'] == session.owner.budget_snapshot()
+
+
 def response(name, arguments, identifier="call-1"):
     call = AgentToolCall(identifier, name, arguments)
     return AgentTurnResponse("ollama_chat_local", "local", "", (call,), provider_state={"calls": [identifier]})
