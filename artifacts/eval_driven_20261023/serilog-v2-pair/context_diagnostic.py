@@ -101,7 +101,8 @@ def freeze():
     public = read_bound_json(_ref(OLD / "public-preparation.json"))
     baseline = read_bound_json(_ref(OLD / "baseline-result.json"))
     for key in ("request_ref", "profile_ref", "settings_ref"):
-        read_bound_json(public[key])
+        if _ref(public[key]["path"]) != public[key]:
+            raise ValueError("PUBLIC_INPUT_CHANGED")
     if (_ref(public["public_test_ref"]["path"]) != public["public_test_ref"]
             or _snapshot(Path(public["source_root"])) != public["source_inputs"]
             or baseline["status"] != "behavior_failed" or baseline["local_feed_only"] is not True):
