@@ -235,7 +235,17 @@ def _finish(root, result_path, payload):
         json.dump({"receipt_ref": ref}, stream)
         stream.flush()
         os.fsync(stream.fileno())
-    return {**payload, "receipt_ref": ref, "replayed": False}
+    from src.mod_agent.run_outcome_finalization import finalize_continuation
+    evidence_roots = ()
+    if payload.get("status") == "built" and payload.get("applied_source_root") and payload.get("verification_ref"):
+        # The delivery owner has just verified these public output paths and source bytes.
+        evidence_roots = (payload["applied_source_root"], str(Path(payload["verification_ref"]["path"]).parent))
+    summary = finalize_continuation(artifact_store_root=root, event="delivery_return",
+        evidence_roots=evidence_roots,
+        result={"status": payload.get("status"), "receipt_ref": ref,
+            "candidate_source_id": payload.get("candidate_source_id"),
+            "whole_task_delivered": payload.get("whole_task_delivered")})
+    return {**payload, "receipt_ref": ref, "replayed": False, **summary}
 
 
 def _validate_applied_receipt(store, apply_ref):
@@ -296,6 +306,24 @@ def _validate_applied_receipt(store, apply_ref):
 
 
 def apply_v2_delivery(*, artifact_store_root, displayed_binding, human_semantic_decision=None, task_delegation_ref=None):
+    from src.mod_agent.run_outcome_finalization import finalize_continuation
+    try:
+        result = _apply_v2_delivery(artifact_store_root=artifact_store_root, displayed_binding=displayed_binding,
+            human_semantic_decision=human_semantic_decision, task_delegation_ref=task_delegation_ref)
+    except Exception as error:
+        if not getattr(error, "delivery_receipt_ref", None):
+            finalize_continuation(artifact_store_root=artifact_store_root, event="apply_return",
+                checkpoint_ref=displayed_binding.get("checkpoint_ref") if isinstance(displayed_binding, dict) else None,
+                error=error)
+        raise
+    if "outcome_summary_status" not in result:
+        result.update(finalize_continuation(artifact_store_root=artifact_store_root, event="apply_return",
+            checkpoint_ref=displayed_binding.get("checkpoint_ref") if isinstance(displayed_binding, dict) else None,
+            result={key: result[key] for key in ("status", "receipt_ref", "replayed") if key in result}))
+    return result
+
+
+def _apply_v2_delivery(*, artifact_store_root, displayed_binding, human_semantic_decision=None, task_delegation_ref=None):
     """Apply approved bytes only to a new isolated copy; repeated IDs reuse facts."""
     _require((human_semantic_decision is not None) != (task_delegation_ref is not None), "ONE_APPROVAL_SOURCE_REQUIRED")
     checkpoint_ref = displayed_binding["checkpoint_ref"]
@@ -384,6 +412,22 @@ def apply_v2_delivery(*, artifact_store_root, displayed_binding, human_semantic_
 
 
 def build_v2_delivery(*, artifact_store_root, apply_ref, operation_id, allow_build=False, task_delegation_ref=None):
+    from src.mod_agent.run_outcome_finalization import finalize_continuation
+    try:
+        result = _build_v2_delivery(artifact_store_root=artifact_store_root, apply_ref=apply_ref,
+            operation_id=operation_id, allow_build=allow_build, task_delegation_ref=task_delegation_ref)
+    except Exception as error:
+        finalize_continuation(artifact_store_root=artifact_store_root, event="build_return",
+            checkpoint_ref=apply_ref, error=error)
+        raise
+    if "outcome_summary_status" not in result:
+        result.update(finalize_continuation(artifact_store_root=artifact_store_root, event="build_return",
+            checkpoint_ref=apply_ref,
+            result={key: result[key] for key in ("status", "receipt_ref", "replayed") if key in result}))
+    return result
+
+
+def _build_v2_delivery(*, artifact_store_root, apply_ref, operation_id, allow_build=False, task_delegation_ref=None):
     """Run the frozen repository Build/test contract on the actual applied copy."""
     store = ArtifactStore(artifact_store_root)
     applied, checkpoint, handoff, destination = _validate_applied_receipt(store, apply_ref)

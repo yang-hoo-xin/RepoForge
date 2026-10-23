@@ -553,6 +553,19 @@ def _activate_delivery_rebase(root, rebase_ref):
 
 
 def resume_v2_task_agent(*, artifact_store_root, checkpoint_ref):
+    from src.mod_agent.run_outcome_finalization import finalize_continuation
+
+    try:
+        result = _resume_v2_task_agent(artifact_store_root=artifact_store_root, checkpoint_ref=checkpoint_ref)
+    except Exception as error:
+        error.outcome_finalization = finalize_continuation(artifact_store_root=artifact_store_root, event="recovery_return",
+            checkpoint_ref=checkpoint_ref, error=error)
+        raise
+    return {**result, **finalize_continuation(artifact_store_root=artifact_store_root,
+        event="recovery_return", checkpoint_ref=checkpoint_ref, result=result)}
+
+
+def _resume_v2_task_agent(*, artifact_store_root, checkpoint_ref):
     """Reconstruct the same trusted owner and shared loop; never allocate a task.
 
     为什么要有它：CLI恢复必须消耗原合同、原模型和原累计账本，而不是暗中重开一次尝试。

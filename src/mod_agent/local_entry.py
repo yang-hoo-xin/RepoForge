@@ -6164,6 +6164,8 @@ def _persist_pre_graph_failure(
             "timing_scope": "failure_decision_record_only",
         }):
             pass
+        from src.mod_agent.run_outcome_finalization import finalize_run_outcome
+        finalize_run_outcome(run_root=run_root, run_id=run_id)
     except OSError:
         return
 
@@ -6221,7 +6223,7 @@ def _persist_graph_terminal_result(
     model_call_count: int,
     patch_payload_parser_entered: bool,
     actual_write_performed: bool | None,
-) -> None:
+) -> dict[str, Any]:
     manifest_path = run_root / "run_manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("run_id") != run_id or manifest.get("request_id") != request_id:
@@ -6259,6 +6261,8 @@ def _persist_graph_terminal_result(
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    from src.mod_agent.run_outcome_finalization import finalize_run_outcome
+    return finalize_run_outcome(run_root=run_root, run_id=run_id)
 
 
 def _sort_graph_terminal_json_objects(value: Any) -> Any:
@@ -6340,6 +6344,8 @@ def _persist_graph_terminal_failure(
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    from src.mod_agent.run_outcome_finalization import finalize_run_outcome
+    failure.update(finalize_run_outcome(run_root=run_root, run_id=run_id))
     return failure
 
 
@@ -8802,11 +8808,11 @@ def run_local_request(
                 waiting["execution_trace"] = product_trace_identity(product_trace, run_root)
                 waiting["patch_execution_receipts"] = [journal.projection() for journal in patch_change_factory.journals]
                 waiting.update(task_execution_result_fields())
-                _persist_graph_terminal_result(
+                waiting.update(_persist_graph_terminal_result(
                     run_root=run_root, run_id=run_id, request_id=request_id, summary=waiting,
                     model_call_count=model_call_count, patch_payload_parser_entered=True,
                     actual_write_performed=False,
-                )
+                ))
                 return waiting
             except ProductExecutionContractError:
                 raise
@@ -8962,7 +8968,7 @@ def run_local_request(
             summary["task_timing_ref"] = task_agent_execution.observe_task_boundary(
                 "product_return", status=summary.get("status") or product_result.execution_disposition)
         try:
-            _persist_graph_terminal_result(
+            summary.update(_persist_graph_terminal_result(
                 run_root=run_root,
                 run_id=run_id,
                 request_id=request_id,
@@ -8970,7 +8976,7 @@ def run_local_request(
                 model_call_count=model_call_count,
                 patch_payload_parser_entered=patch_payload_parser_entered,
                 actual_write_performed=actual_write_performed,
-            )
+            ))
         except Exception as exc:
             raise ProductExecutionPresentationError(
                 product_execution_result=product_result,

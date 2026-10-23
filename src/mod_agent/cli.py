@@ -2703,6 +2703,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "run-request":
         if args.resume_task_agent:
             from src.mod_agent.task_agent_v2_recovery import resume_v2_task_agent
+            recovery_invoked = False
             try:
                 selected = list(argv if argv is not None else sys.argv[1:])
                 allowed_flags = {"--resume-task-agent", "--artifact-store-root"}
@@ -2710,10 +2711,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                         or any(value.startswith("--") and value.split("=", 1)[0] not in allowed_flags for value in selected)):
                     raise ValueError("TASK_V2_RESUME_ORIGINAL_CONFIGURATION_ONLY")
                 # 为什么要有它：恢复必须重用原模型、授权和累计资源，不让新的命令行参数悄悄创建另一套执行条件。
+                recovery_invoked = True
                 result = resume_v2_task_agent(artifact_store_root=args.artifact_store_root,
                                              checkpoint_ref=args.resume_task_agent)
             except (OSError, ValueError, RuntimeError, TypeError, KeyError) as error:
-                print(json.dumps({"status": "blocked", "protocol": "v2", "reason": str(error)}, ensure_ascii=False))
+                summary = getattr(error, "outcome_finalization", {})
+                if not recovery_invoked and args.artifact_store_root:
+                    from src.mod_agent.run_outcome_finalization import finalize_continuation
+                    summary = finalize_continuation(artifact_store_root=args.artifact_store_root,
+                        event="recovery_admission_rejected", checkpoint_ref=args.resume_task_agent, error=error)
+                print(json.dumps({"status": "blocked", "protocol": "v2", "reason": str(error), **summary}, ensure_ascii=False))
                 return 2
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result.get("status") in {"awaiting_delivery", "candidate_ready"} else 1
