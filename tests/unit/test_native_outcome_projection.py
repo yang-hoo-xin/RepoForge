@@ -114,6 +114,26 @@ def test_delivery_requires_reader_validation_and_same_accepted_source():
     assert project_native_outcome(source)["result"]["correct_delivery"] is True
 
 
+def test_verified_later_delivery_supersedes_native_not_delivered_without_inventing_correctness():
+    source = inputs()
+    source["native_facts"][0]["value"]["whole_task_delivered"] = False
+    acceptance = fact("acceptance", independent_acceptance_passed=True, preservation_suite_passed=True,
+        candidate_source_id="source1", tests_executed=True, native_execution_ref=ref("native"))
+    delivery = fact("delivery")
+    delivery["verification"] = {"status": "verified_delivery", "value": {
+        "native_execution_ref": ref("native"), "status": "delivered", "candidate_source_id": "source1",
+        "delivered_artifact_refs": [ref("dll")], "verification": {"passed": True,
+            "candidate_source_id": "source1", "native_verification_ref": ref("build")}}}
+    source["context_facts"] = [acceptance, delivery]
+    assert project_native_outcome(source)["result"]["correct_delivery"] is None
+    acceptance["verification"] = {"status": "verified_independent_acceptance",
+        "native_execution_ref": ref("native"), "candidate_source_id": "source1", "judge_ref": ref("judge")}
+    acceptance["value"]["independent_acceptance_passed"] = False
+    assert project_native_outcome(source)["result"]["correct_delivery"] is False
+    acceptance["value"]["independent_acceptance_passed"] = True
+    assert project_native_outcome(source)["result"]["correct_delivery"] is True
+
+
 def test_candidate_resubmission_and_plan_update_are_not_repairs():
     source = inputs()
     source["report"]["artifacts"] = [{"schema": "task-agent-candidate.v2", "candidate_source_id": "same"}] * 2

@@ -1,0 +1,155 @@
+{
+  "candidate_model_origin": {
+    "arguments_ref": {
+      "path": "C:\\tmp\\rf-polly-v2-context-main\\runs\\dsh_18b052e78c9943f4a38cfb364e31b563\\a\\task-agent-execution\\model-arguments-aa34f6c40b5241d49a35fe9d0e88e978.json",
+      "sha256": "8060fc1a4fb2c321620e7ebcf1eb560b62e3d5ee792f57b835d689b3e0506f97"
+    },
+    "call_id": "call_1avzjy4m",
+    "response_ref": {
+      "path": "C:\\tmp\\rf-polly-v2-context-main\\runs\\dsh_18b052e78c9943f4a38cfb364e31b563\\a\\task-agent-execution\\model-response-0d19729b1a3843c892bbc852ed56f7ae.json",
+      "sha256": "b4a98739a1a58dcddf097a3bc8cd6f76da048b7021aa4b20474117798cd11ae3"
+    }
+  },
+  "run_id": "dsh_18b052e78c9943f4a38cfb364e31b563",
+  "build_stage_ref": {
+    "path": "C:/tmp/rf-polly-v2-context-main/runs/dsh_18b052e78c9943f4a38cfb364e31b563/repository_candidates/c5d9b4d94ec043d8bf9a24f7be06e1f3/build-fact.json",
+    "sha256": "5e6a680b477bc0f80affef7cc0effa80f6550d3309ef6f78640a9f37f920b093"
+  },
+  "build_stage_execution": {
+    "build_executed": true,
+    "build_exit_code": 0,
+    "duration_ms": 37300,
+    "exit_code": 0,
+    "restore_exit_code": 0
+  },
+  "process_status": "timed_out",
+  "changed_paths": [
+    "src/Polly.Core/Retry/RetryHelper.cs"
+  ],
+  "process_ref": {
+    "path": "C:/tmp/rf-polly-v2-context-main/execution/process.json",
+    "sha256": "03d0a567d44631564ecb6f1ca3307398e4f2394f35bd8efd6ef9f130d6141bdc"
+  },
+  "resources": {
+    "cached_input_tokens": 326492,
+    "input_tokens": 531404,
+    "model_calls": 39,
+    "observation_bytes": 96845,
+    "output_tokens": 7001,
+    "reads": 31,
+    "reasoning_tokens": 0,
+    "total_tokens": 538405
+  },
+  "current_check_ref": null,
+  "candidate_ref": "v2/candidate/9a148035ed8548dfb575f5b52a0baa78d7a1b1551818e7881f962be17f4ddb39.json",
+  "process_wall_seconds": 1801.2340000000004,
+  "cooperative_deadline_utc": null,
+  "checkpoint_ref": {
+    "path": "C:\\tmp\\rf-polly-v2-context-main\\runs\\dsh_18b052e78c9943f4a38cfb364e31b563\\a\\v2\\session-checkpoint\\ebcc987d5f37c15be7f32519296010ae9cb2a5824f6c285e09af55f7d9ffcd0b.json",
+    "sha256": "ebcc987d5f37c15be7f32519296010ae9cb2a5824f6c285e09af55f7d9ffcd0b"
+  },
+  "completed_tool_dispatches": [
+    {
+      "count": 1,
+      "name": "binding_add"
+    },
+    {
+      "count": 1,
+      "name": "candidate_submit"
+    },
+    {
+      "count": 1,
+      "name": "experiment_run"
+    },
+    {
+      "count": 3,
+      "name": "plan_update"
+    },
+    {
+      "count": 1,
+      "name": "probe_submit"
+    },
+    {
+      "count": 24,
+      "name": "source_read"
+    },
+    {
+      "count": 7,
+      "name": "source_search"
+    }
+  ],
+  "phase": "tool_pending",
+  "requested_actions": [
+    {
+      "count": 1,
+      "name": "binding_add"
+    },
+    {
+      "count": 1,
+      "name": "candidate_check"
+    },
+    {
+      "count": 1,
+      "name": "candidate_submit"
+    },
+    {
+      "count": 1,
+      "name": "experiment_run"
+    },
+    {
+      "count": 3,
+      "name": "plan_update"
+    },
+    {
+      "count": 1,
+      "name": "probe_submit"
+    },
+    {
+      "count": 24,
+      "name": "source_read"
+    },
+    {
+      "count": 7,
+      "name": "source_search"
+    }
+  ],
+  "exit_code": 124,
+  "candidate_source_id": "9bc542ef53307233f0aa266054f189cb75936f21683aa092dcdcf945cd6bc074",
+  "schema": "polly-context-diagnostic-observed-result.v1",
+  "outcome": {
+    "task_status": "process_time_limit_reached",
+    "delivered": false,
+    "public_check": "started but no final receipt; business unknown",
+    "independent_acceptance": null,
+    "conditional_business_repair": {
+      "eligible_feedback_opportunities": 0,
+      "successful_repairs": null,
+      "basis": "No confirmed public business failure reached a later model decision."
+    },
+    "native_terminal_missing": true,
+    "automatic_terminal_extraction": "not run: process ended during candidate check; not a no_information_gain result"
+  },
+  "boundaries": [
+    "No outer early stop or patch/hint during this attempt; original1800s owned process limit enforced.",
+    "Recorded build command exit0 is a stage fact, not final source/artifact integrity or business acceptance.",
+    "Do not resume/repeat the unknown original check; any later independent candidate diagnostic is a new evaluation with separate cost, not a recovered task result.",
+    "39 model responses, cumulative source ledger shown; cached input included in input, no second addition.",
+    "Public preflight/model/evaluation/platform-development costs separate; money and human active time unknown.",
+    "Exposure is development; not an unseen-task or U5/B+ learning result."
+  ],
+  "experiment_observation": {
+    "probe_submitted": true,
+    "probe_artifact_ref": "v2/probe/5b7e22981c6357899e1b1070e1cc93ac30f868144cce53db2991a8177ad4113b.json",
+    "experiment_requested": "temporary_probe",
+    "execution_status": "capability_unavailable",
+    "executed": false,
+    "grants_acceptance": false,
+    "meaning": "Model chose and submitted an experiment, but code did not execute; completed tool dispatch is not completed experiment. Docker engine unavailable is an environment limit, not evidence against the whole autonomous-experiment design."
+  },
+  "next_verified_gap": {
+    "fact": "Recovered host config deadline_utc is null even though outer process hard window is1800 seconds.",
+    "hypothesis": "Product-local awareness of the actual remaining window may support better allocation and graceful receipts; no causal benefit established by this attempt.",
+    "scope": "Existing deadline/resource contract and normal caller, not larger budgets or new approval caps."
+  },
+  "diagnostic_plan": "Only the immutable candidate can be independently evaluated via explicit checkpoint diagnostic after origin validation; original timeout/non-delivery unchanged."
+}

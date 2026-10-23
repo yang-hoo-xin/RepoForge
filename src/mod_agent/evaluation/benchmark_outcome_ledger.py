@@ -10,9 +10,9 @@ from __future__ import annotations
 import hashlib
 import math
 import re
-from datetime import datetime
 from collections import Counter, defaultdict
 from collections.abc import Callable, Mapping, Sequence
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -1314,9 +1314,18 @@ def project_native_outcome(facts: Mapping[str, Any]) -> dict[str, Any]:
     confirmed_related = [d for d in deliveries if d["basis"] == "validated_delivery" and
                          (_outcome_ref_key(d["native_execution_ref"]), d["candidate_source_id"]) in accepted_ids]
     confirmed = [d for d in confirmed_related if _outcome_ref_key(d["native_execution_ref"]) in selected_keys]
+    delivered_selected = [d for d in deliveries if d["basis"] == "validated_delivery"
+        and _outcome_ref_key(d["native_execution_ref"]) in selected_keys]
+    rejected_ids = {(_outcome_ref_key(a["native_execution_ref"]), a["candidate_source_id"]) for a in acceptances
+        if a["verification_status"] == "verified_independent_acceptance" and a["tests_executed"] is True
+        and (a["independent_acceptance_passed"] is False or a["preservation_suite_passed"] is False)
+        and (_outcome_ref_key(a["native_execution_ref"]), a["candidate_source_id"]) not in disputed_ids}
+    incorrect_delivered = any((_outcome_ref_key(d["native_execution_ref"]), d["candidate_source_id"]) in rejected_ids
+        for d in delivered_selected)
     explicit_no = any(d["delivered"] is False and (_outcome_ref_key(d.get("native_execution_ref")) in selected_keys or
                       d.get("run_id") == report.get("run_id")) for d in deliveries)
-    correct = True if confirmed else False if explicit_no else None
+    # 为什么要有它：技术阶段尚未交付不能否定后来已验证的交付；独立正确性缺证据仍须未知，而非报成成功或失败。
+    correct = True if confirmed else False if incorrect_delivered or (explicit_no and not delivered_selected) else None
     terminal = {key: value for key, value in (report.get("terminal") or {}).items()
                 if key in {"run_id", "status", "whole_task_delivered", "current_stage", "completion_classification", "delivery_ref"}}
     outcomes = {"scope": "selected_run_not_parent_diagnostic_outcome", "terminal": terminal, "boundaries": boundaries, "independent_acceptance": acceptances,

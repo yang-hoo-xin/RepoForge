@@ -745,8 +745,12 @@ def inspect_evidence(*, execution_config: str, run_id: str, evidence_context=(),
         raise ValueError("DSH_RUN_CONFIGURATION_PATH_MUST_BE_ABSOLUTE: --workspace-root")
     from src.observability.dashboard.services.trace_service import TraceService
 
-    result = TraceService().query_run_evidence(allowed_roots=[str(Path(workspace))], run_id=run_id,
-        evidence_context=evidence_context, evidence_roots=evidence_roots)
+    extra = {}
+    if evidence_context:
+        extra["evidence_context"] = evidence_context
+    if evidence_roots:
+        extra["evidence_roots"] = evidence_roots
+    result = TraceService().query_run_evidence(allowed_roots=[str(Path(workspace))], run_id=run_id, **extra)
     return {**result, "inspection": evidence_locator(execution_config=execution_config, run_id=run_id,
         evidence_context=evidence_context, evidence_roots=evidence_roots)}
 

@@ -232,7 +232,14 @@ def test_partial_apply_retains_public_failure_and_does_not_repeat(delivery_case,
     store, _checkpoint_ref, _isolated, prepared = delivery_case
     actual_replace = delivery_module.os.replace
     calls = []
+    metadata_calls = []
+    destination = Path(prepared["displayed_binding"]["isolated_workspace"]).resolve()
     def fail_second(source, target):
+        if not Path(target).resolve().is_relative_to(destination):
+            # 为什么要有它：共享os替换钩子也能看到新汇总元数据，必须与已批准源码写入分别计数并检查范围。
+            assert Path(target).resolve() == store.parent / "run_manifest.json"
+            metadata_calls.append(str(target))
+            return actual_replace(source, target)
         calls.append(str(target))
         if len(calls) == 2:
             raise OSError("controlled second replacement failure")
@@ -250,6 +257,7 @@ def test_partial_apply_retains_public_failure_and_does_not_repeat(delivery_case,
     replay = apply_v2_delivery(artifact_store_root=store, displayed_binding=prepared["displayed_binding"],
         human_semantic_decision=approve(prepared))
     assert replay["status"] == "apply_failed" and replay["replayed"] and len(calls) == 2
+    assert metadata_calls
 
 
 def test_human_approval_cannot_move_to_another_destination(delivery_case):

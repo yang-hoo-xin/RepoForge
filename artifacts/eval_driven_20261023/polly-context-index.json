@@ -1,0 +1,67 @@
+{
+  "public_input_ref": {
+    "path": "C:\\tmp\\rf-polly-v2-context-main\\public-input.json",
+    "sha256": "fbc9284802241e87cc2309eb78af38bf267a8b79a16d0d6f8b4e451e10dead95"
+  },
+  "warmup_ref": {
+    "path": "C:\\tmp\\rf-polly-v2-context-main\\warmup.json",
+    "sha256": "120d5433ce0b86bf89e533be25152d12e3b14ad21843c6edb852d6757ff0920a"
+  },
+  "preflight_ref": {
+    "path": "C:\\tmp\\rf-polly-v2-context-main\\baseline-preflight-result.json",
+    "sha256": "c9e2fdf05296fc75fdc9d7b6578ac1f63dd3240577fd635b7861949a16cd491c"
+  },
+  "git_head": "3174075ad7aee4ca0b74f50fe8866fba0639adf3",
+  "started_ref": {
+    "sha256": "b293e733cd968571076e8f5b625067c0b645a3e5e5bfaad588a413297fa038e9",
+    "path": "C:/tmp/rf-polly-v2-context-main/started.json"
+  },
+  "local_feed_only": true,
+  "platform_ref": {
+    "path": "C:\\tmp\\rfcode-polly-v2-context-B\\execution_snapshot.json",
+    "sha256": "27605e6181c65369a42273b83aac20152e67a621d001990abbde9a3a986c158b"
+  },
+  "failed_public_checks": [
+    "Polly.Core.Tests.Retry.RetryHelperPublicReproductionTests.ExponentialJitter_WithUnlimitedRetries_NeverReturnsAnInstantOrNegativeDelay"
+  ],
+  "execution_config_ref": {
+    "path": "C:\\tmp\\rf-polly-v2-context-main\\runs\\.dsh-inputs\\dsh_18b052e78c9943f4a38cfb364e31b563\\execution.json",
+    "sha256": "6112ee682db8a4a2ed18353aa35bd9d1c1f66b576ea08401e2522d140e351ee9"
+  },
+  "public_baseline_summary": {
+    "checks": 682,
+    "executions": 1,
+    "failed_checks": 1,
+    "test_command_executed": true
+  },
+  "run_id": "dsh_18b052e78c9943f4a38cfb364e31b563",
+  "plan_ref": {
+    "sha256": "b8ee342ef276cce8e88cbeb073c94f18b0d1e3dc2ffd8ecb664aadff4caa3641",
+    "path": "C:/tmp/rf-polly-v2-context-main/frozen-plan.json"
+  },
+  "schema": "polly-context-diagnostic-index.v1",
+  "observation": "process timed_out after its original1800-second window; immutable model candidate exists, public check lacks final receipt and original task is not delivered. Independent checkpoint candidate diagnostic is separate and does not complete the original task.",
+  "completion_observation_ref": {"path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261023\\polly-context-result.json", "sha256": "ae9587b5ce8a8c9851ec60b060b11d66d3509d17fda01bfa17ed88b8735ad553"},
+  "inspect_argv": [
+    "python",
+    "-m",
+    "scripts.dsh_run_request",
+    "--execution-config",
+    "C:\\tmp\\rf-polly-v2-context-main\\runs\\.dsh-inputs\\dsh_18b052e78c9943f4a38cfb364e31b563\\execution.json",
+    "--inspect-run",
+    "dsh_18b052e78c9943f4a38cfb364e31b563",
+    "--view",
+    "evidence",
+    "--format",
+    "json"
+  ],
+  "boundaries": [
+    "Exposed cross-task platform/capability diagnostic, not U5/held-out or isolated-factor improvement.",
+    "Old B3 remains ended; no resource transfer or automatic resume.",
+    "No injected strategy; genuine public terminal episode may trigger extraction on this task's cumulative ledger.",
+    "Process deadline1800s after separate warmup; per-request600s; meter_only.",
+    "No repeat-query snapshot heuristic early stop; current model response/progress must not be inferred from stale observations.",
+    "Temporary probes unavailable because local Docker engine endpoint absent; no host fallback.",
+    "Independent grading only after terminal and exact candidate; historical baseline/reference qualification does not supply U2 three-control adoption eligibility."
+  ]
+}
