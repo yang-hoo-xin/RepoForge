@@ -1,0 +1,18 @@
+{
+  "schema": "v2-capability-diagnostic-intent.v1",
+  "status_at_registration": "before preparation or model execution",
+  "question": "Can current B autonomously investigate and revise on the exposed Polly issue using public diagnostic feedback, correctable current-source references, bounded source pages and recoverable history?",
+  "basis": "Old Polly v2 B3 ended blocked after13 real responses with a candidate and check; termination stale_or_invalid_source_view. Original run remains unchanged and is not resumed or pooled.",
+  "expected_effect": "Newly available source-reference correction and public failure detail should allow continued decisions; history facts should retain actual previous queries without prescribing the next action.",
+  "baseline_run_id": "dsh_379b036c2fdd40c8a2c7c7fe18843ab6",
+  "baseline_execution_config": "C:/tmp/rfext-polly-v2-b3/runs/.dsh-inputs/dsh_379b036c2fdd40c8a2c7c7fe18843ab6/execution.json",
+  "comparison_scope": "Combined-capability absolute development diagnostic, not isolated causal gain, held-out migration or a B/B+ comparison.",
+  "preflight": "Replay saved failed candidate through current public checker and verify local-only dependency use before real model execution. Reuse existing public checker controls; no hidden material in solver inputs.",
+  "model": "qwen3-coder:30b",
+  "policy": "meter_only; existing600-second request timeout and1800-second process wall. No new stage/read/call cap, no budget transferred from closed attempts.",
+  "manual_stop_policy": "No repeat-query heuristic stop. Observe the exact live handle through its existing process deadline unless actual permission/safety conditions require interruption. Any external interruption is separately recorded and censors task efficacy.",
+  "experience": "No injected strategy; terminal extraction enabled on genuine public information gain, charged to this task's resource ledger. Extraction is not active adoption or proven transfer.",
+  "unavailable_capability": "Temporary probe execution remains disabled: local Docker engine endpoint is absent. No unrestricted host fallback.",
+  "reported_dimensions": ["platform choices available", "actual model choices", "public checks and independently qualified business result", "delivery identity", "known and unknown costs", "outer technical and control interventions"],
+  "return_point": "After this one diagnostic, return to remaining U2-U4 integration; no Polly-success prerequisite, no RestSharp rerun, U5 retained."
+}

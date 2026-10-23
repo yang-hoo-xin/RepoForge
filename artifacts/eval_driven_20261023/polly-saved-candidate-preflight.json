@@ -1,0 +1,118 @@
+{
+  "verification_summary": {
+    "checks": 0,
+    "executions": 0,
+    "failed_checks": 0,
+    "test_command_executed": false
+  },
+  "test_execution": {
+    "status": "not_executed"
+  },
+  "build_execution": {
+    "build_executed": true,
+    "build_exit_code": 1,
+    "duration_ms": 37767,
+    "exit_code": 1,
+    "restore_exit_code": 0
+  },
+  "diagnostics": [
+    {
+      "code": "CS0103",
+      "column": 20,
+      "error_class": "unknown",
+      "file": "C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Retry\\RetryHelper.cs",
+      "line": 117,
+      "message": "The name 'maxDelay' does not exist in the current context [C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Polly.Core.csproj::TargetFramework=net8.0]",
+      "severity": "error"
+    },
+    {
+      "code": "CS0103",
+      "column": 20,
+      "error_class": "unknown",
+      "file": "C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Retry\\RetryHelper.cs",
+      "line": 117,
+      "message": "The name 'maxDelay' does not exist in the current context [C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Polly.Core.csproj::TargetFramework=net6.0]",
+      "severity": "error"
+    },
+    {
+      "code": "CS0103",
+      "column": 20,
+      "error_class": "unknown",
+      "file": "C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Retry\\RetryHelper.cs",
+      "line": 117,
+      "message": "The name 'maxDelay' does not exist in the current context [C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Polly.Core.csproj::TargetFramework=netstandard2.0]",
+      "severity": "error"
+    },
+    {
+      "code": "CS0103",
+      "column": 20,
+      "error_class": "unknown",
+      "file": "C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Retry\\RetryHelper.cs",
+      "line": 117,
+      "message": "The name 'maxDelay' does not exist in the current context [C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Polly.Core.csproj::TargetFramework=net472]",
+      "severity": "error"
+    },
+    {
+      "code": "CS0103",
+      "column": 20,
+      "error_class": "unknown",
+      "file": "C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Retry\\RetryHelper.cs",
+      "line": 117,
+      "message": "The name 'maxDelay' does not exist in the current context [C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Polly.Core.csproj::TargetFramework=net462]",
+      "severity": "error"
+    },
+    {
+      "code": "CS0103",
+      "column": 20,
+      "error_class": "unknown",
+      "file": "C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Retry\\RetryHelper.cs",
+      "line": 117,
+      "message": "The name 'maxDelay' does not exist in the current context [C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Polly.Core.csproj::TargetFramework=net8.0]",
+      "severity": "error"
+    },
+    {
+      "code": "CS0103",
+      "column": 20,
+      "error_class": "unknown",
+      "file": "C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Retry\\RetryHelper.cs",
+      "line": 117,
+      "message": "The name 'maxDelay' does not exist in the current context [C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Polly.Core.csproj::TargetFramework=net6.0]",
+      "severity": "error"
+    },
+    {
+      "code": "CS0103",
+      "column": 20,
+      "error_class": "unknown",
+      "file": "C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Retry\\RetryHelper.cs",
+      "line": 117,
+      "message": "The name 'maxDelay' does not exist in the current context [C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Polly.Core.csproj::TargetFramework=netstandard2.0]",
+      "severity": "error"
+    },
+    {
+      "code": "CS0103",
+      "column": 20,
+      "error_class": "unknown",
+      "file": "C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Retry\\RetryHelper.cs",
+      "line": 117,
+      "message": "The name 'maxDelay' does not exist in the current context [C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Polly.Core.csproj::TargetFramework=net472]",
+      "severity": "error"
+    },
+    {
+      "code": "CS0103",
+      "column": 20,
+      "error_class": "unknown",
+      "file": "C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Retry\\RetryHelper.cs",
+      "line": 117,
+      "message": "The name 'maxDelay' does not exist in the current context [C:\\tmp\\rf-polly-v2-context-main\\preflight-source\\src\\Polly.Core\\Polly.Core.csproj::TargetFramework=net462]",
+      "severity": "error"
+    }
+  ],
+  "status": "behavior_failed",
+  "report_ref": {
+    "sha256": "45258f0a451b01ed51b1f9c135a1893c2c1fa3a84af1d1145e4c3203d90c170c",
+    "path": "C:/tmp/rf-polly-v2-context-main/preflight/f26585d375404f768590162b2a189f5b/report.json"
+  },
+  "schema": "saved-polly-candidate-preflight.v1",
+  "interpretation": "Saved candidate has an undefined identifier compilation failure. Business tests did not execute. Public business-feedback validator correctly refused PUBLIC_FEEDBACK_EXECUTION_UNCONFIRMED. This is not a new model attempt or evidence of business failure after diagnostic feedback.",
+  "next_step": "Verify original public baseline separately; do not fix saved candidate, alter acceptance or discard this failed preflight."
+}
