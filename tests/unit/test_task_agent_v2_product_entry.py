@@ -27,7 +27,7 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                                                                  exercise_experiments=False, exercise_discovery=False,
                                                                  exercise_correction=False, exercise_stale_view=False,
                                                                  exercise_feedback=False, expect_postcheck_failure=False,
-                                                                 exercise_paging=False):
+                                                                 exercise_paging=False, exercise_history=False):
     short_workspace = repository_workspace
     if real_sdk and os.environ.get("REPOFORGE_REAL_REPOSITORY_CLI_INTEGRATION") != "1":
         pytest.skip("Explicit SDK integration; decisions remain scripted.")
@@ -122,6 +122,24 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         tool_outputs = [json.loads(x["content"]) for x in payload["messages"] if x["role"] == "tool"]
         observed = [row.get("value", row) for row in tool_outputs]
         last = observed[-1] if observed else None
+        if exercise_history:
+            current = next(json.loads(row["content"])["current_task_state"] for row in reversed(payload["messages"])
+                if row["role"] == "user" and '"current_task_state"' in row["content"])
+            if last and last.get("history_ref") and "text" in last:
+                assert last["grants_acceptance"] is False and len(last["text"]) <= 2000
+                assert last["history_ref"] == memory["queried_history_ref"]
+                assert last["task_contract_ref"] == context["task_contract_ref"]
+                memory["history_read_observed"] = True
+                last = memory["before_history_read"]
+            if current.get("history_projection") and not memory.get("history_requests"):
+                projection = current["history_projection"]
+                assert projection["archived_exchange_count"] > 0 and projection["origin"] == "execution_host"
+                assert current["model_technical_plan"]["origin"] == "model_authored_advisory_plan"
+                memory.update(history_requests=1, before_history_read=last, queried_history_ref=projection["history_ref"])
+                return httpx.Response(200, request=request, json={"model": model,
+                    "message": {"role": "assistant", "content": "", "tool_calls": [{"function": {
+                        "name": "history_read", "arguments": {"history_ref": projection["history_ref"]}}}]}, "done": True,
+                    "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
         if exercise_paging and last and last.get("path") == "Library/Unused.cs":
             assert len(last["text"]) <= 2000 and last["text_scope"] == "read_window"
             assert last["parent_revision_ref"] == memory["parent"]
@@ -205,6 +223,7 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                 "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
         turn = (len(requests) - (3 if exercise_experiments else 0) - int(exercise_discovery)
                 - memory.get("page_requests", 0)
+                - memory.get("history_requests", 0)
                 - int(exercise_correction and len(requests) > 4)
                 - (2 if exercise_stale_view and len(requests) > 12 else 0)
                 - int(exercise_feedback and len(requests) > 6))
@@ -327,9 +346,12 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         "reason": pending.get("reason"), "outcome": pending.get("task_agent_outcome")}
     assert len(requests) == (13 + (3 if exercise_experiments else 0) + int(exercise_discovery)
                              + memory.get("page_requests", 0)
+                             + memory.get("history_requests", 0)
                              + int(exercise_correction) + (2 if exercise_stale_view else 0) + int(exercise_feedback))
     if exercise_feedback:
         assert pending["model_call_budget"]["consumed"] == 14
+    if exercise_history:
+        assert memory["history_read_observed"] is True
     if exercise_correction:
         assert pending["model_call_budget"]["consumed"] == 14
     if exercise_stale_view:
@@ -420,6 +442,11 @@ def test_normal_cli_probe_unavailable_preserves_task_path(repository_workspace, 
 def test_normal_cli_source_pages_preserve_read_edit_recheck_and_handoff(repository_workspace, monkeypatch, capsys):
     test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
         repository_workspace, monkeypatch, capsys, False, exercise_paging=True)
+
+
+def test_normal_cli_archived_history_read_keeps_candidate_revision_and_handoff(repository_workspace, monkeypatch, capsys):
+    test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
+        repository_workspace, monkeypatch, capsys, False, exercise_paging=True, exercise_history=True)
 
 
 def test_normal_cli_discovery_before_edit_preserves_actual_failed_execution(repository_workspace, monkeypatch, capsys):

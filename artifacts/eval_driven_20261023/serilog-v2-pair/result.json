@@ -488,6 +488,14 @@
     "no_new_model_or_sdk_execution_during_repair": true
   },
   "return_point": "Continue U2-U4 remaining integration and bounded runtime validation; U5 stays a frozen later comparison. Do not wait for Serilog/Polly success; no RestSharp third run implied.",
+  "next_integration_decision": {
+    "status_at_registration": "before implementation",
+    "owner": "U4 model context projection, existing persistent task state and loop",
+    "expected_effect": "Keep closed old tool exchanges recoverable without repeatedly sending all source/log text; retain recent exchanges, latest public check, current task/code/budget and model-authored plan. Preserve original loop and execution records for recovery/accounting.",
+    "baseline": "d97b86f bounded tool reads, but unbounded historical_tool_exchanges; exposed B/B+ original attempts remain unchanged.",
+    "verification": "Saved-request zero-model admission projection; focused tests for whole native exchange retention, exact history read scope, latest check, unchanged original request and recovery state; normal CLI controlled history -> read -> revision/handoff; once usable, one explicitly frozen real B capability diagnostic, not a new memory efficacy claim or RestSharp repeat.",
+    "scope_limit": "No inferred model reasoning, hidden evaluation or external repair advice in projection; no automatic retry or enlarged context/budget. Absolute diagnostic results unless a valid comparable baseline exists."
+  },
   "known_costs_total": {
     "input_tokens": 148238,
     "output_tokens": 2252,

@@ -192,13 +192,26 @@ class StrategyExperience(TaskMemory):
             response_ref = self._write(feature + "_response", "response", {"response": asdict(response),
                 "request_ref": asdict(request_ref)})
             receipt = {"model_calls": 1, "usage": response.usage.to_dict(), "response_ref": asdict(response_ref)}
-            after_call(receipt)
+            # 为什么要有它：取得响应是执行事实，计量或语义核验失败不能让重放退回“仅开始派发”。
+            received = {**base, **receipt, "response_received": True}
+            self._write(feature, "extraction", {**received, "status": "response_received"})
+            try:
+                after_call(receipt)
+            except Exception as error:
+                self._write(feature, "extraction", {**received, "status": "accounting_failed",
+                    "error_type": type(error).__name__, "accounting_status": "unconfirmed"})
+                raise
             import json
-            _require(response.provider == admitted_client.provider and response.model == admitted_client.model
-                and not response.tool_calls and response.stop_reason not in {"length", "incomplete", "refusal", "content_filter"},
-                "RESPONSE_NOT_COMPLETE")
-            strategy = {**json.loads(response.content), "applicability": episode["applicability"]}
-            _strategy(strategy)
+            try:
+                _require(response.provider == admitted_client.provider and response.model == admitted_client.model
+                    and not response.tool_calls and response.stop_reason not in {"length", "incomplete", "refusal", "content_filter"},
+                    "RESPONSE_NOT_COMPLETE")
+                strategy = {**json.loads(response.content), "applicability": episode["applicability"]}
+                _strategy(strategy)
+            except Exception as error:
+                self._write(feature, "extraction", {**received, "status": "response_rejected",
+                    "error_type": type(error).__name__, "accounting_status": "recorded"})
+                raise
             completed = self._write(feature, "extraction", {**base, "status": "completed",
                 "response_ref": asdict(response_ref), "usage": receipt["usage"], "strategy": strategy})
             proposed = self.record_strategy("episode:" + canonical_hash(episode), strategy,
