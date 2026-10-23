@@ -328,22 +328,63 @@ class CSharpRepositoryBackend:
         self.profile.verify_fixed_inputs(self.source_root, self.fixed_inputs)
 
     def verification_identity(self):
+        from src.mod_agent import public_failure_feedback
+
         self.profile.verify_fixed_inputs(self.source_root, self.fixed_inputs)
         return {"validator_sha256": canonical_hash({
                     "owner_sha256": _ref(__file__)["sha256"],
                     "build_owner_sha256": _ref(nuget.__file__)["sha256"],
+                    "feedback_owner_sha256": _ref(public_failure_feedback.__file__)["sha256"],
                 }),
                 "inputs_sha256": canonical_hash({"profile": self.profile.reference, "fixed_inputs": self.fixed_inputs}),
                 "environment_sha256": canonical_hash(self.profile.data["dotnet_ref"]),
                 "deterministic_reuse_allowed": False}
 
     def run_build_test(self, source_root, feature_id, input_execution_mode, *, candidate_context=None):
+        ledger = {}
+        try:
+            return self._run_build_test(source_root, feature_id, input_execution_mode,
+                                        candidate_context=candidate_context, ledger=ledger)
+        except Exception as error:
+            # 为什么要有它：解析或后置核验失败不能抹去已执行命令；未知完整性也不能冒充业务失败。
+            if ledger:
+                _save(ledger["run"] / "integrity-error.json", {
+                    "schema_version": "csharp_repository_integrity_v1", "status": "unknown",
+                    "context": ledger["context"], "stage_receipts": ledger["stages"],
+                    "checks": ledger.get("integrity_checks", {}),
+                    "error_type": type(error).__name__, "error": str(error)})
+            raise
+
+    def _run_build_test(self, source_root, feature_id, input_execution_mode, *, candidate_context, ledger):
         source = Path(source_root).resolve(strict=True)
         self.profile.verify_fixed_inputs(source, self.fixed_inputs)
         before = _snapshot(source)
         identity = self.verification_identity()
         run = self.output_root / uuid4().hex
         run.mkdir(parents=True, exist_ok=False)
+        v2_binding = {}
+        if candidate_context is not None and candidate_context.get("schema_version") == "task_agent_candidate_check_v2":
+            v2_binding = {key: deepcopy(candidate_context[key]) for key in (
+                "task_contract_ref", "binding_registry_ref", "candidate_ref", "candidate_source_id",
+                "public_acceptance_ref", "source_snapshot_sha256")}
+        context = {**v2_binding, "source_root": str(source), "source_inputs": before,
+                   "profile_ref": self.profile.reference, "verification_identity": identity,
+                   "materialized_code_identity": deepcopy((candidate_context or {}).get("materialized_code_identity"))}
+        ledger.update(run=run, context=context, stages={})
+
+        def record_stage(stage, execution, *, commands=None, raw_report_ref=None):
+            # 为什么要有它：每个阶段返回即保存原始观察，后续解析及身份核验另行决定其可用性。
+            logs = {}
+            for key, value in execution.items():
+                if key.endswith(("stdout", "stderr")) and isinstance(value, str):
+                    path = run / (stage + "-" + key + ".txt")
+                    with path.open("x", encoding="utf-8", newline="") as stream:
+                        stream.write(value)
+                    logs[key] = _ref(path)
+            ledger["stages"][stage] = _save(run / (stage + "-fact.json"), {
+                "schema_version": "csharp_repository_stage_fact_v1", "stage": stage,
+                "context": context, "execution": deepcopy(execution),
+                "commands": commands, "raw_report_ref": raw_report_ref, "logs": logs})
         profile = self.profile.create_nuget_profile(self.workspace_root, source)
         data = self.profile.data
         targets = run / "compile-inputs.targets"
@@ -361,6 +402,8 @@ class CSharpRepositoryBackend:
             _require(selected.command == profile.build_command, "BUILD_COMMAND_CHANGED")
             execution = _run_build(profile)
             build_execution.update(execution.to_dict())
+            record_stage("build", build_execution, commands={
+                "restore": list(profile.restore_command), "build": list(profile.build_command)})
             (run / "build.stdout.txt").write_text(execution.stdout, encoding="utf-8")
             (run / "build.stderr.txt").write_text(execution.stderr, encoding="utf-8")
             return BuildCommandResult(execution.exit_code, execution.stdout, execution.stderr, execution.duration_ms)
@@ -397,6 +440,8 @@ class CSharpRepositoryBackend:
                                        data.get("build_properties", {}).items()))))
                 test_build = _run_build(tests_profile)
                 test_execution["build"] = test_build.to_dict()
+                record_stage("test_build", test_build.to_dict(), commands={
+                    "restore": list(tests_profile.restore_command), "build": list(tests_profile.build_command)})
                 (run / "tests-build.stdout.txt").write_text(test_build.stdout, encoding="utf-8")
                 (run / "tests-build.stderr.txt").write_text(test_build.stderr, encoding="utf-8")
                 if test_build.exit_code != 0:
@@ -427,6 +472,13 @@ class CSharpRepositoryBackend:
                                                       int((time.time_ns() - started) / 1_000_000))
                     test_execution.update(status="executed", command=list(command), exit_code=executed.exit_code,
                                           stdout=executed.stdout, stderr=executed.stderr, duration_ms=executed.duration_ms)
+                    record_stage("test_execution", test_execution, commands={"test": list(command)})
+                    # 为什么要有它：原始结果先引用再解析；无法读取报告也保留前面的执行事实。
+                    raw_report_ref = None
+                    if report_path.is_file() and not report_path.is_symlink() and report_path.resolve().is_relative_to(output):
+                        raw_report_ref = _ref(report_path)
+                        record_stage("raw_test_result", {"report_format": data["test_report"]["format"]},
+                                     raw_report_ref=raw_report_ref)
                     try:
                         _require(report_path.is_file() and not report_path.is_symlink(), "TEST_REPORT_MISSING")
                         _require(report_path.resolve().is_relative_to(output), "TEST_REPORT_OUTSIDE_OUTPUT")
@@ -438,9 +490,9 @@ class CSharpRepositoryBackend:
                         observations.append({"check_id": "test_report", "expected": "A fresh non-empty complete test report.",
                                              "observed": {"error": str(error), "exit_code": executed.exit_code}})
                     else:
-                        observations.extend({"check_id": row["check_id"], "expected": row["expected"],
-                                             "observed": {"actual": row["actual"], "passed": row["passed"]}}
-                                            for row in checks if not row["passed"])
+                        from src.mod_agent.public_failure_feedback import project_failed_checks
+                        observations.extend(project_failed_checks(checks,
+                            raw_report_ref=test_execution["report_ref"], source_root=source))
                         if observations:
                             status, owner = "behavior_failed", "patch_implementation"
                         elif executed.exit_code != 0:
@@ -451,10 +503,24 @@ class CSharpRepositoryBackend:
             observations.append({"check_id": "repository_compilation", "expected": "Declared project compiles and produces its artifacts.",
                                  "observed": {"status": build.status, "diagnostics": [row.to_dict() for row in build.diagnostics],
                                               "build_execution": build_execution}})
-        self.profile.verify_fixed_inputs(source, self.fixed_inputs)
-        _require(_snapshot(source) == before and self.verification_identity() == identity, "INPUT_CHANGED_DURING_EXECUTION")
-        _require(all(_ref(row["resolved_path"])["sha256"] == row["sha256"] for row in build.verified_artifacts),
-                 "BUILT_ARTIFACT_CHANGED_DURING_TEST")
+        ledger["integrity_checks"] = {}
+
+        def verify_integrity_part(name, check):
+            try:
+                check()
+            except Exception as error:
+                ledger["integrity_checks"][name] = {"status": "unconfirmed", "error_type": type(error).__name__}
+                raise
+            ledger["integrity_checks"][name] = {"status": "verified"}
+
+        verify_integrity_part("fixed_inputs", lambda: self.profile.verify_fixed_inputs(source, self.fixed_inputs))
+        verify_integrity_part("source_snapshot", lambda: _require(_snapshot(source) == before, "INPUT_CHANGED_DURING_EXECUTION"))
+        verify_integrity_part("verifier_identity", lambda: _require(self.verification_identity() == identity, "INPUT_CHANGED_DURING_EXECUTION"))
+        verify_integrity_part("built_artifacts", lambda: _require(all(
+            _ref(row["resolved_path"])["sha256"] == row["sha256"] for row in build.verified_artifacts), "BUILT_ARTIFACT_CHANGED_DURING_TEST"))
+        integrity_ref = _save(run / "integrity.json", {
+            "schema_version": "csharp_repository_integrity_v1", "status": "validated",
+            "context": context, "stage_receipts": ledger["stages"], "checks": ledger["integrity_checks"]})
         if status != "passed" and build.claims_real_build_success:
             # 为什么要有它：正式入口沿用BuildResult，不能把编译成功交接为未经测试的交付成功。
             build = replace(build, status="failed", claims_real_build_success=False, build_status="verification_failed",
@@ -487,6 +553,7 @@ class CSharpRepositoryBackend:
         }
         compilation_ref = _save(run / "compilation.json", compilation_record)
         report = {**v2_binding, "status": status, "failure_owner": owner, "execution_origin": "executed",
+                  "stage_receipts": deepcopy(ledger["stages"]), "integrity_ref": integrity_ref,
                   "profile_ref": self.profile.reference, "fixed_inputs": self.fixed_inputs,
                   "source_inputs": before, "source_root": str(source), "verification_identity": identity,
                   "materialized_code_identity": code_identity,
@@ -723,6 +790,42 @@ def validate_candidate_report_v2(report_ref, *, context=None, require_pass=None,
              and verification.get("failure_owner") == report.get("failure_owner")
              and verification.get("observations") == report.get("observations")
              and verification.get("verification_summary") == report.get("verification_summary"), "EXECUTION_RESULT_MISMATCH")
+    # 为什么要有它：失败反馈也必须来自身份核验完成的执行，阶段事实本身没有业务验收资格。
+    integrity = read_bound_json(verification["integrity_ref"])
+    integrity_context = {key: verification.get(key) for key in (
+        *expected, "source_snapshot_sha256", "source_root", "source_inputs", "profile_ref",
+        "verification_identity", "materialized_code_identity")}
+    stages = verification["stage_receipts"]
+    _require(integrity.get("schema_version") == "csharp_repository_integrity_v1"
+             and integrity.get("status") == "validated" and integrity.get("context") == integrity_context
+             and integrity.get("stage_receipts") == stages, "EXECUTION_INTEGRITY_UNCONFIRMED")
+    _require(integrity.get("checks") == {key: {"status": "verified"} for key in (
+        "fixed_inputs", "source_snapshot", "verifier_identity", "built_artifacts")}, "EXECUTION_INTEGRITY_CHECKS_UNCONFIRMED")
+    _require("build" in stages, "BUILD_STAGE_MISSING")
+    for stage, reference in stages.items():
+        fact = read_bound_json(reference)
+        _require(fact.get("schema_version") == "csharp_repository_stage_fact_v1"
+                 and fact.get("stage") == stage and fact.get("context") == integrity_context,
+                 "STAGE_CONTEXT_MISMATCH")
+        if stage == "build":
+            _require(fact.get("execution") == verification["build_execution"], "BUILD_STAGE_MISMATCH")
+        elif stage == "test_build":
+            _require(fact.get("execution") == verification["test_execution"].get("build"), "TEST_BUILD_STAGE_MISMATCH")
+        elif stage == "test_execution":
+            _require(fact.get("execution") == {key: value for key, value in verification["test_execution"].items()
+                                              if key != "report_ref"}, "TEST_STAGE_MISMATCH")
+        elif stage == "raw_test_result":
+            ref = fact.get("raw_report_ref")
+            _require(_ref(ref["path"]) == ref, "TEST_REPORT_CHANGED")
+    if verification["test_execution"].get("status") == "executed":
+        _require("test_execution" in stages and "test_build" in stages, "TEST_STAGE_MISSING")
+    if verification.get("checks"):
+        ref = verification["test_execution"]["report_ref"]
+        _require("raw_test_result" in stages and read_bound_json(stages["raw_test_result"])["raw_report_ref"] == ref,
+                 "RAW_TEST_STAGE_MISMATCH")
+        _require(_ref(ref["path"]) == ref and _read_tests(Path(ref["path"]),
+                 CSharpRepositoryProfile(report["profile_ref"]).data["test_report"]["format"]) == verification["checks"],
+                 "TEST_RESULTS_MISMATCH")
     if report["status"] != "passed":
         # 为什么要有它：真实失败可以进入下一轮决策，产品交付仍须显式要求成功及完整测试原件。
         return report

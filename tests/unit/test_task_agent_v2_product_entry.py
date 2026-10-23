@@ -5,6 +5,7 @@
 import hashlib
 import json
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -24,7 +25,8 @@ from tests.unit.test_csharp_repository_product_entry import (
 @pytest.mark.parametrize("real_sdk", [False, True], ids=["controlled-build", "real-sdk"])
 def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_workspace, monkeypatch, capsys, real_sdk,
                                                                  exercise_experiments=False, exercise_discovery=False,
-                                                                 exercise_correction=False, exercise_stale_view=False):
+                                                                 exercise_correction=False, exercise_stale_view=False,
+                                                                 exercise_feedback=False, expect_postcheck_failure=False):
     short_workspace = repository_workspace
     if real_sdk and os.environ.get("REPOFORGE_REAL_REPOSITORY_CLI_INTEGRATION") != "1":
         pytest.skip("Explicit SDK integration; decisions remain scripted.")
@@ -54,14 +56,37 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
             arithmetic = (root / "Library/Arithmetic.cs").read_text()
             factor = (root / "Library/Factor.cs").read_text()
             passed = "value * Factor.Multiplier" in arithmetic and "Multiplier = 2" in factor
-            Path(command[-1]).write_text(json.dumps({"schema_version": "csharp-test-report.v1",
-                "tests": [{"name": "double", "passed": passed, "expected": 6, "actual": 6 if passed else 3}]}))
+            test = {"name": "double", "passed": passed, "expected": 6, "actual": 6 if passed else 3}
+            if exercise_feedback and not passed:
+                test["details"] = ("Expected Double(3) to equal 6, but found 3.\n"
+                    f"   at PublicExample in {root / 'Library/Arithmetic.cs'}:line 1\n"
+                    + "Recorded public assertion context. " * 100 + "END OF ORIGINAL PUBLIC FAILURE")
+                memory["failure_details"] = test["details"]
+            Path(command[-1]).write_text(json.dumps({"schema_version": "csharp-test-report.v1", "tests": [test]}))
+            if expect_postcheck_failure:
+                memory["test_returned"] = True
+                memory["test_report_path"] = Path(command[-1])
+                # 为什么要有它：正常CLI按已绑定源码装载独立评估器模块，故障须注入实际执行者的后置核验。
+                loaded = [module for name, module in tuple(sys.modules.items())
+                          if name.startswith("_mod_agent_patch_factory_")
+                          and getattr(module, "__file__", None) == backend.__file__]
+                assert loaded
+                for module in loaded:
+                    monkeypatch.setattr(module, "_snapshot", snapshot_after_execution)
             return BuildCommandResult(0, "controlled test", "", 1)
 
         monkeypatch.setattr(backend.nuget, "_run_nuget_isolated_build", build)
         monkeypatch.setattr(local_entry, "_run_nuget_isolated_build", build)
         monkeypatch.setattr(backend.nuget, "_run_nuget_isolated_verification_command", verify)
     memory = {}
+    if expect_postcheck_failure:
+        original_snapshot = backend._snapshot
+
+        def snapshot_after_execution(path):
+            if memory.pop("test_returned", False):
+                raise OSError("controlled post-execution source integrity failure")
+            return original_snapshot(path)
+
     requests = []
     admission_clocks = []
     original_selection = local_entry._request_technical_execution_selection
@@ -93,6 +118,36 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         tool_outputs = [json.loads(x["content"]) for x in payload["messages"] if x["role"] == "tool"]
         observed = [row.get("value", row) for row in tool_outputs]
         last = observed[-1] if observed else None
+        if exercise_feedback and len(requests) == 6:
+            assert "check_feedback_read" in tools
+            assert last["candidate_ref"] == memory["parent"]
+            assert last["candidate_source_id"] == memory["failed_source_id"]
+            assert last["check_ref"] and last["feedback_ref"]
+            failure = last["observations"][0]
+            assert failure["test_name"] == "double"
+            assert failure["details"].startswith("Expected Double(3) to equal 6, but found 3.")
+            assert failure["details_truncated"] is True
+            assert failure["details_total_chars"] == len(memory["failure_details"])
+            assert failure["source_locations"] == [{"path": "Library/Arithmetic.cs", "line": 1,
+                "origin": "reported_public_stack_trace"}]
+            assert failure["raw_report_ref"]["sha256"]
+            memory["failed_check"] = last
+            return httpx.Response(200, request=request, json={"model": model,
+                "message": {"role": "assistant", "content": "", "tool_calls": [{"function": {
+                    "name": "check_feedback_read", "arguments": {"feedback_ref": last["feedback_ref"],
+                        "offset": 0, "limit": 8000}}}]}, "done": True,
+                "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
+        if exercise_feedback and len(requests) == 7:
+            assert last["candidate_ref"] == memory["parent"]
+            assert last["candidate_source_id"] == memory["failed_source_id"]
+            assert last["check_ref"] == memory["failed_check"]["check_ref"]
+            assert last["offset"] == 0 and last["truncated"] is False
+            assert last["next_offset"] is None
+            full_failure = json.loads(last["text"])[0]
+            assert full_failure["details"] == memory["failure_details"]
+            assert full_failure["name"] == "double" and full_failure["actual"] == 3
+            assert last["total_chars"] == len(last["text"])
+            last = memory["failed_check"]
         if exercise_discovery and len(requests) == 1:
             return httpx.Response(200, request=request, json={"model": model,
                 "message": {"role": "assistant", "content": "", "tool_calls": [{"function": {
@@ -134,7 +189,8 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                 "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
         turn = (len(requests) - (3 if exercise_experiments else 0) - int(exercise_discovery)
                 - int(exercise_correction and len(requests) > 4)
-                - (2 if exercise_stale_view and len(requests) > 12 else 0))
+                - (2 if exercise_stale_view and len(requests) > 12 else 0)
+                - int(exercise_feedback and len(requests) > 6))
         if turn == 1:
             memory.update(parent=context["parent_revision_ref"], registry=context["binding_registry_ref"])
             name, args = "plan_update", {"plan": {"hypotheses": ["Investigate marker state"], "intended_targets": ["Library/Unused.cs"]}}
@@ -169,6 +225,8 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         elif turn in {5, 12}:
             if turn == 5:
                 assert last["edit_explanations"] == [{"binding_id": memory["unused_binding"], "status": "not_expressed", "rationale": None}]
+                if exercise_feedback:
+                    memory["failed_source_id"] = last["candidate_source_id"]
             memory["parent"] = last["candidate_ref"]
             name, args = "candidate_check", {"candidate_ref": memory["parent"]}
         elif turn == 11:
@@ -208,11 +266,52 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
     pending = json.loads(capsys.readouterr().out)
     (short_workspace / "v2-entry-result.json").write_text(json.dumps(pending, ensure_ascii=False, indent=2), encoding="utf-8")
     (short_workspace / "scripted-requests.json").write_text(json.dumps(requests, ensure_ascii=False, indent=2), encoding="utf-8")
+    if expect_postcheck_failure:
+        assert code != 0 and pending["current_stage"] == "blocked", pending
+        assert pending.get("status") != "awaiting_delivery"
+        assert pending["task_agent_outcome"]["status"] == "unknown", pending
+        assert pending["task_agent_outcome"]["check_ref"] is None
+        assert pending["task_agent_outcome"]["whole_task_delivered"] is False
+        assert "patch_proposal" not in pending["artifacts"]
+        assert len(requests) == 5, "Unconfirmed business observations must not reach another model request"
+        assert pending.get("actual_write_performed") is not True
+        assert not pending.get("v2_delivery_checkpoint_ref")
+        assert {p.name: p.read_bytes() for p in (source / "Library").glob("*.cs")} == baseline
+        errors = [parent / "integrity-error.json" for parent in memory["test_report_path"].parents
+                  if (parent / "integrity-error.json").is_file()]
+        assert len(errors) == 1
+        integrity = json.loads(errors[0].read_text(encoding="utf-8"))
+        assert integrity["status"] == "unknown" and integrity["error_type"] == "OSError"
+        assert "controlled post-execution source integrity failure" in integrity["error"]
+        assert integrity["context"]["candidate_ref"] == memory["parent"]
+        assert set(integrity["stage_receipts"]) == {"build", "test_build", "test_execution", "raw_test_result"}
+        facts = {}
+        for stage, reference in integrity["stage_receipts"].items():
+            raw = Path(reference["path"]).read_bytes()
+            assert hashlib.sha256(raw).hexdigest() == reference["sha256"]
+            facts[stage] = json.loads(raw)
+            assert facts[stage]["context"] == integrity["context"]
+            for log_ref in facts[stage]["logs"].values():
+                assert hashlib.sha256(Path(log_ref["path"]).read_bytes()).hexdigest() == log_ref["sha256"]
+        assert facts["build"]["execution"]["build_exit_code"] == 0
+        assert facts["build"]["commands"]["build"]
+        assert facts["test_execution"]["execution"]["exit_code"] == 0
+        assert facts["test_execution"]["execution"]["stdout"] == "controlled test"
+        assert facts["test_execution"]["commands"]["test"]
+        report_ref = facts["raw_test_result"]["raw_report_ref"]
+        report_raw = Path(report_ref["path"]).read_bytes()
+        assert hashlib.sha256(report_raw).hexdigest() == report_ref["sha256"]
+        assert json.loads(report_raw)["tests"][0]["passed"] is False
+        assert not (errors[0].parent / "report.json").exists()
+        assert not (errors[0].parent / "integrity.json").exists()
+        return
     assert code == 0 and pending["status"] == "awaiting_delivery", {
         "result_file": str(short_workspace / "v2-entry-result.json"), "status": pending.get("status"),
         "reason": pending.get("reason"), "outcome": pending.get("task_agent_outcome")}
     assert len(requests) == (13 + (3 if exercise_experiments else 0) + int(exercise_discovery)
-                             + int(exercise_correction) + (2 if exercise_stale_view else 0))
+                             + int(exercise_correction) + (2 if exercise_stale_view else 0) + int(exercise_feedback))
+    if exercise_feedback:
+        assert pending["model_call_budget"]["consumed"] == 14
     if exercise_correction:
         assert pending["model_call_budget"]["consumed"] == 14
     if exercise_stale_view:
@@ -313,3 +412,13 @@ def test_normal_cli_correctable_missing_preimage_continues_same_task_and_budget(
 def test_normal_cli_historical_view_requires_refresh_before_revision(repository_workspace, monkeypatch, capsys):
     test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
         repository_workspace, monkeypatch, capsys, False, exercise_stale_view=True)
+
+
+def test_normal_cli_public_failure_details_reach_next_request_and_revision(repository_workspace, monkeypatch, capsys):
+    test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
+        repository_workspace, monkeypatch, capsys, False, exercise_feedback=True)
+
+
+def test_normal_cli_postcheck_failure_retains_stage_facts_without_delivery(repository_workspace, monkeypatch, capsys):
+    test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
+        repository_workspace, monkeypatch, capsys, False, expect_postcheck_failure=True)

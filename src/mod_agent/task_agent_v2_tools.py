@@ -115,7 +115,7 @@ class TaskAgentSessionV2:
             messages = tuple(error.message for error in errors)
             if name == "candidate_submit":
                 raise TaskCandidateRevisionInputError(messages)
-            if name in {"source_read", "candidate_read"}:
+            if name in {"source_read", "candidate_read", "check_feedback_read"}:
                 raise TaskActionInputError(messages)
             raise ValueError("TASK_V2_TOOL_ARGUMENTS_INVALID")
         state = self.state
@@ -136,11 +136,15 @@ class TaskAgentSessionV2:
                 raise
         elif name == "binding_add":
             state.validate_binding_request(args["expected_registry_ref"], args["source_view_ref"], args["target_selector"])
+        elif name == "check_feedback_read":
+            feedback = self._feedback_record(args["feedback_ref"])
+            if args.get("offset", 0) > len(feedback["text"]):
+                raise TaskActionInputError(("offset exceeds total_chars of this public feedback",))
         elif name in {"candidate_check", "finish"}:
             if args["candidate_ref"] != state.current_revision_ref:
                 raise ValueError("TASK_V2_CURRENT_CANDIDATE_REQUIRED")
             state.validate_candidate(args["candidate_ref"])
-        return PreparedTaskAction(deepcopy(args), int(name in {"source_read", "candidate_read", "source_search"}),
+        return PreparedTaskAction(deepcopy(args), int(name in {"source_read", "candidate_read", "source_search", "check_feedback_read"}),
                                   canonical_hash({"contract": state.contract_ref, "revision": state.current_revision_ref}))
 
     def _validate_binding_prerequisites(self, args):
@@ -210,6 +214,13 @@ class TaskAgentSessionV2:
             return state.read_source(args["parent_revision_ref"], args["path"], args.get("root_id", "target"))
         if name == "source_search":
             return state.search_source(args["parent_revision_ref"], args["query"], args.get("root_id", "target"))
+        if name == "check_feedback_read":
+            record = self._feedback_record(args["feedback_ref"])
+            text, offset, limit = record["text"], args.get("offset", 0), args.get("limit", 4000)
+            end = min(len(text), offset + limit)
+            return {key: record[key] for key in ("candidate_ref", "candidate_source_id", "check_ref")} | {
+                "text": text[offset:end], "offset": offset, "next_offset": end if end < len(text) else None,
+                "total_chars": len(text), "truncated": end < len(text), "feedback_ref": args["feedback_ref"]}
         if name == "binding_add":
             return state.add_binding(args["expected_registry_ref"], args["source_view_ref"], args["target_selector"],
                                      operation_id=operation)
@@ -231,6 +242,11 @@ class TaskAgentSessionV2:
 
     def _check(self, reference):
         from src.mod_agent.domain.csharp_repository_backend import validate_candidate_report_v2
+        from src.mod_agent.public_failure_feedback import (
+            failed_checks_text,
+            project_failed_checks,
+            validated_public_checks,
+        )
 
         state = self.state
         candidate = state.validate_candidate(reference)
@@ -247,9 +263,14 @@ class TaskAgentSessionV2:
         # 为什么要有它：检查请求先落盘，执行异常保留未知副作用，不能将缺少回执当成可免费重跑。
         request_ref = self.owner._save("check-request-" + uuid4().hex + ".json", context)
         self._check_inflight = True
+        feedback = None
         try:
             report = self.evaluator(context)
             validate_candidate_report_v2(report, context=context)
+            if report["status"] == "behavior_failed" and report.get("verification_summary", {}).get("test_command_executed"):
+                original, checks = validated_public_checks(report["verification_ref"])
+                feedback = {"text": failed_checks_text(checks), "observations": project_failed_checks(checks,
+                    raw_report_ref=original["test_execution"]["report_ref"], source_root=original["source_root"])}
         except Exception as error:
             self.owner._save("check-error-" + uuid4().hex + ".json", {
                 "request_ref": request_ref, "candidate_ref": reference,
@@ -262,10 +283,35 @@ class TaskAgentSessionV2:
             "candidate_ref": reference, "candidate_source_id": candidate["candidate_source_id"],
             "request_ref": request_ref, "report": report})
         self.public_checks.append(state.load(self.current_check))
+        feedback_ref = None
+        if feedback is not None:
+            feedback_ref = state.save("public-check-feedback", {"schema": "task-agent-public-check-feedback.v2",
+                "task_contract_ref": state.contract_ref, "candidate_ref": reference,
+                "candidate_source_id": candidate["candidate_source_id"], "check_ref": self.current_check,
+                "text": feedback["text"]})
+        observations = feedback["observations"] if feedback is not None else report.get("observations", [])
         return {"candidate_ref": reference, "candidate_source_id": candidate["candidate_source_id"],
                 "check_ref": self.current_check, "status": report["status"],
-                "observations": deepcopy(report.get("observations", [])),
+                "observations": deepcopy(observations[:8]), "observations_truncated": len(observations) > 8,
+                "observation_count": len(observations), "feedback_ref": feedback_ref,
                 "verification_summary": deepcopy(report.get("verification_summary", {}))}
+
+    def _feedback_record(self, reference):
+        from src.mod_agent.public_failure_feedback import (
+            failed_checks_text,
+            validated_public_checks,
+        )
+
+        record = self.state.load(reference)
+        if record.get("schema") != "task-agent-public-check-feedback.v2" or record.get("task_contract_ref") != self.state.contract_ref:
+            raise ValueError("PUBLIC_FEEDBACK_SCOPE_DENIED")
+        check = self.state.load(record["check_ref"])
+        if check not in self.public_checks or any(record[key] != check[key] for key in ("candidate_ref", "candidate_source_id")):
+            raise ValueError("PUBLIC_FEEDBACK_CHECK_NOT_OBSERVED")
+        _original, checks = validated_public_checks(check["report"]["verification_ref"])
+        if record["text"] != failed_checks_text(checks):
+            raise ValueError("PUBLIC_FEEDBACK_CONTENT_CHANGED")
+        return record
 
     def completion_check(self, *, prepared, output):
         state = self.state
@@ -295,6 +341,9 @@ class TaskAgentSessionV2:
                 ["parent_revision_ref", "path"], "Read current candidate bytes; supply its exact reference, not an ambiguous current alias."),
             ("source_search", "source_search", {"parent_revision_ref": text, "query": text, "root_id": text},
                 ["parent_revision_ref", "query"], "Search authorized source at the chosen revision. Results grant no edit authority."),
+            ("check_feedback_read", "source_read", {"feedback_ref": text, "offset": {"type": "integer", "minimum": 0},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 8000}}, ["feedback_ref"],
+                "Read complete public failure details in bounded chunks from feedback_ref returned by candidate_check. No arbitrary files or independent evaluator reports are accessible."),
             ("binding_add", "upstream", {"expected_registry_ref": text, "source_view_ref": text,
                 "target_selector": text, "rationale": text, "expected_validation": text},
                 ["expected_registry_ref", "source_view_ref", "target_selector", "rationale", "expected_validation"],

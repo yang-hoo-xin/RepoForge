@@ -83,6 +83,7 @@ def restore_session(session, snapshot):
 class TaskAgentRecoveryJournal:
     def __init__(self, owner, session, graph_state, original_budget, details, *, host_config_ref=None):
         from src.mod_agent import (
+            public_failure_feedback,
             task_agent_execution,
             task_agent_loop,
             task_agent_v2_execution,
@@ -114,7 +115,7 @@ class TaskAgentRecoveryJournal:
                 "owner_refs": [_ref(module.__file__) for module in (
                     task_agent_execution, task_agent_loop, task_agent_v2_execution, task_agent_v2_tools,
                     task_agent_v2_state, task_agent_v2_experience, task_agent_v2_experiments,
-                    task_agent_v2_experiment_tools)] + [_ref(__file__)]}
+                    task_agent_v2_experiment_tools, public_failure_feedback)] + [_ref(__file__)]}
             self.host_config_ref = self.state.save("host-recovery-config", host)
             with self.state._transaction("host-recovery-config", {"kind": "host_recovery_config", "host_config_ref": self.host_config_ref}) as (_head, result, _replay):
                 result["host_config_ref"] = self.host_config_ref
@@ -401,7 +402,7 @@ def _reconcile_checkpoint(state, checkpoint_ref, checkpoint, latest_path):
             checked = state.load(output["check_ref"])
             _require(checked["candidate_ref"] == arguments["candidate_ref"], "CHECK_CANDIDATE_CHANGED")
             validate_candidate_report_v2(checked["report"], context=read_bound_json(checked["request_ref"]))
-        elif name not in {"source_read", "candidate_read", "source_search", "finish"}:
+        elif name not in {"source_read", "candidate_read", "source_search", "check_feedback_read", "finish"}:
             raise ValueError("TASK_V2_RECOVERY_TOOL_REQUIRES_SPECIALIZED_RECONCILIATION")
         previous = loop["call_records"][call_id]
         projected = {"value": output, "execution": "executed", "version_identity": previous["version_identity"]}

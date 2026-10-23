@@ -1,0 +1,53 @@
+{
+  "schema_version": "public_feedback_gap_closure_v1",
+  "date": "2026-10-23",
+  "base_commit": "8fd56a5947a6e031e9d1965c1d871491cb1dcebc",
+  "scope": "public failure projection and stage facts; not model repair success or release acceptance",
+  "new_real_model_calls": 0,
+  "saved_report_projection": {
+    "path": "artifacts/eval_driven_20261023/public-feedback-projection-v2/result.json",
+    "sha256": "f0bccdb90725ecc7c249d22f28a86a5f817965a295b4c6ec0b22fbbefedb915e",
+    "candidate_source_id": "da76ea51f3b966415be4566672fa6c4206a25328cfa4aa0647ce63e9902918da",
+    "failed_checks": 2,
+    "test_names_and_original_errors_present": true,
+    "test_reruns": 0,
+    "original_head_unchanged": true,
+    "original_worker_frozen_inputs_verified": true,
+    "historical_model_received_this_projection": false
+  },
+  "normal_cli_feedback": {
+    "requests_path": "C:/Users/10160/AppData/Local/Temp/rfcscli-7q5frync/scripted-requests.json",
+    "requests_sha256": "d187e5aa9c943e8aea400fa21b2ca70787b176805a8027414b3ed1abb1023682",
+    "test": "test_normal_cli_public_failure_details_reach_next_request_and_revision",
+    "response_source": "controlled HTTP adapter, not autonomous model",
+    "observed": ["exact candidate and check identity", "test name and assertion", "explicitly truncated preview", "original source location and report reference", "bounded full feedback read", "current candidate reads, cross-file revision and recheck", "Proposal, Review, Dry-run; awaiting delivery"],
+    "scripted_requests": 14,
+    "resource_policy": "existing meter_only policy, not a reset or new budget"
+  },
+  "normal_cli_postcheck_fault": {
+    "requests_path": "C:/Users/10160/AppData/Local/Temp/rfcscli-4xenf353/scripted-requests.json",
+    "requests_sha256": "1d73daedf1d34bc3d2823cc9634662e39957307e635100de27142aba7bbe154a",
+    "test": "test_normal_cli_postcheck_failure_retains_stage_facts_without_delivery",
+    "fault": "OSError in actual dynamically loaded evaluator after test execution",
+    "observed": ["build and test stage facts retained", "raw report and log hashes retained", "unknown outcome", "no trusted check reference", "no proposal or delivery", "no subsequent business-feedback request"],
+    "scripted_requests": 5
+  },
+  "focused_checks": [
+    {"selection": "test_csharp_repository_backend.py excluding real", "passed": 38, "deselected": 2},
+    {"selection": "test_public_failure_feedback.py", "passed": 5},
+    {"selection": "two named normal CLI regressions", "passed": 2, "run_separately": true},
+    {"selection": "test_task_agent_v2_recovery.py -k checkpoint_completed", "passed": 1, "deselected": 16}
+  ],
+  "review_resolution": "Saved-report extra-test scope gap closed by original native worker input binding; both added-file counterexamples pass; independent source review confirms closure.",
+  "historical_interpretation": {
+    "B1": "No business failure reached model; original unknown retained.",
+    "revision_1": "Simplified failure states reached model; a separate catalog tool fault interrupted before a new candidate.",
+    "full_diagnostic_feedback_eligible_runs_in_these_two": 0,
+    "conditional_repair_rate": null,
+    "different_test_sets_not_subtracted_as_regression": true,
+    "cumulative_tokens_not_context_length": true
+  },
+  "return_to": "Preserved uncommitted U2 repository evaluator integration, including build/test configuration alignment; then remaining U2-U4 and cross-task validation. U5 retained.",
+  "local_evidence_note": "Paths identify local retained originals; not all raw artifacts are uploaded to GitHub.",
+  "why": "为什么要有它：实际发送内容、执行事实和独立业务结果必须分别有据，不把受控通路冒充自主成功。"
+}

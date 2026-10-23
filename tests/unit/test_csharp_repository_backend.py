@@ -320,6 +320,72 @@ def test_test_execution_cannot_change_inputs_or_built_artifact(tmp_path, monkeyp
     monkeypatch.setattr(owner.nuget, "_run_nuget_isolated_verification_command", mutate)
     with pytest.raises(ValueError, match=code):
         _backend(tmp_path, profile, source).run_build_test(source, "test", "controlled_fixture")
+    run = next((tmp_path / "build-records").iterdir())
+    integrity = owner.read_bound_json(_ref(run / "integrity-error.json"))
+    assert integrity["status"] == "unknown"
+    assert code in integrity["error"]
+    assert not (run / "report.json").exists()
+    assert not (run / "candidate-report.json").exists()
+    stages = integrity["stage_receipts"]
+    assert set(stages) == {"build", "test_build", "test_execution", "raw_test_result"}
+    execution = owner.read_bound_json(stages["test_execution"])
+    assert execution["execution"]["exit_code"] == 0
+    assert execution["execution"]["stdout"] == "fixture"
+    assert Path(execution["logs"]["stdout"]["path"]).read_text() == "fixture"
+    raw = owner.read_bound_json(stages["raw_test_result"])["raw_report_ref"]
+    assert owner.read_bound_json(raw)["tests"][0]["name"] == "double"
+
+
+def test_post_test_snapshot_exception_retains_stage_facts_without_acceptance(tmp_path, monkeypatch):
+    profile, source = _profile(tmp_path)
+    backend = _backend(tmp_path, profile, source)
+    _fake_execution(monkeypatch)
+    verify = owner.nuget._run_nuget_isolated_verification_command
+    def fail_after_return(selected, command):
+        result = verify(selected, command)
+        def inaccessible(_):
+            raise OSError("saved post-test snapshot failure")
+        monkeypatch.setattr(owner, "_snapshot", inaccessible)
+        return result
+    monkeypatch.setattr(owner.nuget, "_run_nuget_isolated_verification_command", fail_after_return)
+    with pytest.raises(OSError, match="saved post-test snapshot failure"):
+        backend.run_build_test(source, "test", "controlled_fixture")
+    run = next(backend.output_root.iterdir())
+    assert not (run / "report.json").exists()
+    receipt = owner.read_bound_json(_ref(run / "integrity-error.json"))
+    assert receipt["status"] == "unknown"
+    assert set(receipt["stage_receipts"]) == {"build", "test_build", "test_execution", "raw_test_result"}
+    for stage, reference in receipt["stage_receipts"].items():
+        fact = owner.read_bound_json(reference)
+        assert fact["stage"] == stage
+        assert fact["context"]["source_root"] == str(source.resolve())
+        assert fact["context"]["profile_ref"] == profile.reference
+    raw = owner.read_bound_json(receipt["stage_receipts"]["raw_test_result"])["raw_report_ref"]
+    assert owner._read_tests(Path(raw["path"]), "json_assertions")[0]["passed"] is True
+
+
+def test_stage_facts_exist_before_parsing_and_success_binds_integrity(tmp_path, monkeypatch):
+    profile, source = _profile(tmp_path)
+    backend = _backend(tmp_path, profile, source)
+    calls = _fake_execution(monkeypatch)
+    parse = owner._read_tests
+    def inspect_before_parse(path, kind):
+        run = next(backend.output_root.iterdir())
+        raw = owner.read_bound_json(_ref(run / "raw_test_result-fact.json"))
+        assert raw["raw_report_ref"] == _ref(path)
+        assert not (run / "integrity.json").exists()
+        assert not (run / "report.json").exists()
+        test = owner.read_bound_json(_ref(run / "test_execution-fact.json"))
+        assert test["commands"]["test"] == list(calls[-1])
+        assert test["execution"]["exit_code"] == 0
+        return parse(path, kind)
+    monkeypatch.setattr(owner, "_read_tests", inspect_before_parse)
+    result = backend.run_build_test(source, "test", "controlled_fixture")
+    integrity = owner.read_bound_json(result["integrity_ref"])
+    assert integrity["status"] == "validated"
+    assert integrity["stage_receipts"] == result["stage_receipts"]
+    assert integrity["context"]["source_inputs"] == result["source_inputs"]
+    assert integrity["context"]["verification_identity"] == result["verification_identity"]
 
 
 def test_candidate_materialization_copies_full_repository_without_changing_original(tmp_path, monkeypatch):
