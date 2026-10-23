@@ -1,0 +1,43 @@
+diff --git a/test/RestSharp.Tests/PublicIssue2241Tests.cs b/test/RestSharp.Tests/PublicIssue2241Tests.cs
+new file mode 100644
+--- /dev/null
++++ b/test/RestSharp.Tests/PublicIssue2241Tests.cs
+@@ -0,0 +1,38 @@
++using System.Net;
++using System.Net.Http;
++
++namespace RestSharp.Tests;
++
++public class PublicIssue2241Tests {
++    [Fact]
++    public void Reported_client_construction_allows_explicit_user_agent() {
++        using var client = new RestClient();
++        client.AddDefaultHeader("User-Agent", "myagent");
++    }
++
++    [Fact]
++    public async Task Reported_header_reaches_the_outgoing_request() {
++        string[] observed = null;
++        var handler = new CaptureHandler(request => {
++            observed = request.Headers.TryGetValues("User-Agent", out var values) ? values.ToArray() : Array.Empty<string>();
++        });
++        using var client = new RestClient(new RestClientOptions("https://public-reproduction.invalid") {
++            ConfigureMessageHandler = _ => handler
++        });
++        client.AddDefaultHeader("User-Agent", "myagent");
++        var response = await client.ExecuteAsync(new RestRequest());
++        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
++        Assert.Equal(new[] { "myagent" }, observed);
++    }
++
++    sealed class CaptureHandler : HttpMessageHandler {
++        readonly Action<HttpRequestMessage> capture;
++        public CaptureHandler(Action<HttpRequestMessage> capture) => this.capture = capture;
++        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
++            capture(request);
++            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) {
++                Content = new StringContent("ok")
++            });
++        }
++    }
++}

@@ -1,0 +1,22 @@
+diff --git a/NuGet.config b/NuGet.config
+new file mode 100644
+--- /dev/null
++++ b/NuGet.config
+@@ -0,0 +1 @@
++<configuration><packageSources><clear/><add key="nuget.org" value="https://api.nuget.org/v3/index.json"/></packageSources></configuration>
+diff --git a/src/Directory.Build.props b/src/Directory.Build.props
+--- a/src/Directory.Build.props
++++ b/src/Directory.Build.props
+@@ -3,3 +3,3 @@
+     <PropertyGroup>
+-        <TargetFrameworks>netstandard2.0;net471;net48;net6.0;net7.0;net8.0</TargetFrameworks>
++        <TargetFrameworks>net8.0</TargetFrameworks>
+         <PackageIcon>restsharp.png</PackageIcon>
+diff --git a/test/Directory.Build.props b/test/Directory.Build.props
+--- a/test/Directory.Build.props
++++ b/test/Directory.Build.props
+@@ -5,3 +5,3 @@
+         <IsPackable>false</IsPackable>
+-        <TargetFrameworks>net48;net6.0;net7.0;net8.0</TargetFrameworks>
++        <TargetFrameworks>net8.0</TargetFrameworks>
+         <Nullable>disable</Nullable>

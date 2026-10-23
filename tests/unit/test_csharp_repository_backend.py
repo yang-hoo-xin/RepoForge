@@ -18,6 +18,31 @@ def _write(path, text):
     path.write_text(text, encoding="utf-8")
 
 
+def test_snapshot_handles_generated_paths_at_win32_limit_and_hashes_long_source(tmp_path):
+    from src.mod_agent.build.dependencies import _windows_extended_length_path
+
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "A.cs").write_text("original", encoding="utf-8")
+    generated = source / "obj"
+    generated.mkdir()
+    name = "g" * max(16, 260 - len(str(generated)) - 4) + ".cs"
+    target = generated / name
+    io_target = Path(_windows_extended_length_path(str(target))) if os.name == "nt" else target
+    io_target.write_bytes(b"generated")
+    baseline = owner._snapshot(source)
+    assert baseline == [{"path": "A.cs", "sha256": _ref(source / "A.cs")["sha256"]}]
+    (source / "src").mkdir()
+    long_name = "included" + name
+    long_source = source / "src" / long_name
+    io_source = Path(_windows_extended_length_path(str(long_source))) if os.name == "nt" else long_source
+    io_source.write_bytes(b"included source")
+    observed = owner._snapshot(source)
+    assert len(observed) == 2
+    assert len(str(long_source)) > 260
+    assert next(row for row in observed if row["path"] == "src/" + long_name)["sha256"] == _ref(io_source)["sha256"]
+
+
 def _profile(tmp_path, *, real=False, build_properties=None):
     source = tmp_path / "source"
     if real:

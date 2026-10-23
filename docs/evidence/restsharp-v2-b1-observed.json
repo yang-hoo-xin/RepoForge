@@ -1,0 +1,38 @@
+{
+  "schema_version": "observed_task_agent_run_summary_v1",
+  "task": "restsharp__restsharp-2241",
+  "product_commit": "635011f19428b9779eda69e1a6598fd28892d1af",
+  "native_execution_ref": {
+    "path": "C:/tmp/rfext-restsharp-v2-b1/runs/dsh_7e85b512903f4692a7812b24edeadefe/a/task-agent-execution/execution.json",
+    "sha256": "1bea61629b2b7744217a3d4a420998d6b4788ee9bcd76d9c1cdac26cbb20288a"
+  },
+  "candidate_ref": "v2/candidate/a4482a1c0af63743993e3067399a6a21ce7b468efae7a293ce196eceb6112bfd.json",
+  "candidate_source_id": "da76ea51f3b966415be4566672fa6c4206a25328cfa4aa0647ce63e9902918da",
+  "original_status": "unknown",
+  "termination": "TASK_AGENT_ACTION_OUTCOME_UNKNOWN",
+  "direct_platform_failure": "Windows ordinary-path lstat failed on a 260-character generated file during the post-test source snapshot. The generated file exists; source snapshot verification did not finish.",
+  "actual_model_actions": ["source_search", "source_read", "plan_update", "probe_submit", "experiment_run", "binding_add", "candidate_submit", "candidate_check"],
+  "probe_execution": "unavailable; no qualified runner configured",
+  "argument_correction": "First submission lacked edit rationale. The same session returned correction; the next submission added rationale and kept identical before/after code.",
+  "accepted_candidates": 1,
+  "effective_business_revisions": 0,
+  "public_raw_test_results": {"total": 213, "failed": 2, "feedback_delivered_to_model": false},
+  "repaired_checker_replay_ref": {
+    "path": "C:/tmp/rfext-restsharp-v2-b1-check-replay/result.json",
+    "sha256": "7494107b9cffb62b0c41f1b710d861dec12cd9c7a1acfe3aac66575c88049dd6"
+  },
+  "repaired_checker_replay": {"status": "behavior_failed", "checks": 213, "failed_checks": 2, "model_calls": 0, "original_task_resumed": false},
+  "independent_diagnostic_ref": {
+    "path": "C:/tmp/rfext-restsharp-v2-b1-independent-diagnostic/result.json",
+    "sha256": "c92dc94b4c23d7def0805cd249567227d2a9d78d1e64e6ab1559010dda178539"
+  },
+  "independent_diagnostic": {"tests_executed": true, "total": 220, "failed": 5, "business_passed": false, "preservation_passed": false, "model_calls": 0, "feedback_delivered_to_model": false},
+  "cost": {"responded_model_calls": 14, "input_tokens": 212520, "output_tokens": 5126, "total_tokens": 217646, "cached_input_tokens_included_in_input": 145571, "owned_process_wall_seconds": 1359.937},
+  "cost_scope": "Real B process after service readiness; excludes separate environment preparation, evaluator qualification and offline diagnostics. Those remain in their original process records.",
+  "initial_environment_failure": "Ollama catalog unavailable before any model request; the same allocated task continued after starting an owned local service.",
+  "terminal_learning": {"status": "no_information_gain", "model_calls": 0},
+  "delivered": false,
+  "original_task_resumed_by_diagnostics": false,
+  "historical_results_rewritten": false,
+  "why": "为什么要有它：实际自主动作、参数纠正、执行器故障与独立业务失败各有原件，不能互相替代或补写成功。"
+}

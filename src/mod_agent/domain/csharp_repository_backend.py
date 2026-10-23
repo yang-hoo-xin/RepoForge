@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import stat
@@ -22,6 +23,7 @@ from xml.etree import ElementTree
 
 from src.mod_agent.build import nuget
 from src.mod_agent.build.adapter import BuildAdapter, BuildCommandResult, BuildProfile
+from src.mod_agent.build.dependencies import _windows_extended_length_path
 from src.mod_agent.candidate_execution import materialize_candidate, materialized_code_identity
 from src.mod_agent.domain.full_project_compilation import _ref, _save
 from src.mod_agent.model_qualification import canonical_hash, read_bound_json
@@ -67,14 +69,18 @@ def _within(root, value):
 
 def _snapshot(root):
     """Hash repository inputs, ignoring only generated build and VCS directories."""
+    root = Path(root).resolve(strict=True)
+    # 为什么要有它：真实生成器可产生超过Win32普通路径上限的文件；校验仍须拒绝链接并保持原相对源码身份。
+    io_root = Path(_windows_extended_length_path(str(root))) if os.name == "nt" else root
     rows = []
-    for path in sorted(root.rglob("*")):
-        relative = path.relative_to(root).as_posix()
+    for path in sorted(io_root.rglob("*")):
+        relative_path = path.relative_to(io_root)
+        relative = relative_path.as_posix()
         _require(not path.is_symlink()
                  and not getattr(path.lstat(), "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT,
                  "LINKED_INPUT_UNSUPPORTED")
-        _require(path.resolve().is_relative_to(root), "PATH_ESCAPES_SOURCE")
-        if any(part in _IGNORED for part in path.relative_to(root).parts):
+        _require(path.resolve().is_relative_to(io_root), "PATH_ESCAPES_SOURCE")
+        if any(part in _IGNORED for part in relative_path.parts):
             continue
         if path.is_file():
             rows.append({"path": relative, "sha256": _ref(path)["sha256"]})
