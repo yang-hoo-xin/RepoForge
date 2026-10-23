@@ -138,7 +138,7 @@ def _terminal(result, projection):
 def _generation(call, trace_id, segment_index):
     return {key: call.get(key) for key in (
         "generation_span_id", "request_span_id", "role", "model", "provider", "status",
-        "started_at", "finished_at", "elapsed_ms", "transport", "usage", "local_evidence",
+        "started_at", "finished_at", "elapsed_ms", "transport", "usage", "local_evidence", "response_sha256",
     )} | {"trace_id": trace_id, "segment_index": segment_index}
 
 

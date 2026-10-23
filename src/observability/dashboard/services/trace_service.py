@@ -744,6 +744,7 @@ class TraceService:
             "usage": usage,
             "input_payload_sha256": attrs.get("input_payload_sha256"),
             "output_sha256": attrs.get("output_sha256"),
+            "response_sha256": attrs.get("response_sha256"),
             "provider_body_sha256": attrs.get("provider_body_sha256"),
             "provider_request_sha256": attrs.get("provider_request_sha256"),
             "provider_request_bytes": attrs.get("provider_request_bytes"),

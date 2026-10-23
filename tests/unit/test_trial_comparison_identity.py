@@ -75,3 +75,61 @@ def test_missing_deadline_stays_unknown_and_changed_retained_config_is_rejected(
     (tmp_path / snapshot["external_refs"][0]["retained_path"]).write_text("changed")
     with pytest.raises(ValueError, match="input changed"):
         resource_budget_identity(snapshot, tmp_path, manifest, result, 1800)
+
+
+def test_explicit_meter_only_disables_quotas_but_preserves_timeouts(tmp_path):
+    snapshot = _snapshot(tmp_path)
+    manifest = {"ollama_patch_generation_profile": {"timeout_seconds": 180},
+        "nuget_isolated_build_profile": {"timeout_seconds": 120}}
+    result = {"model_call_budget": {"maximum": None, "policy": "meter_only"}}
+    identity = resource_budget_identity(snapshot, tmp_path, manifest, result, 1800)
+    assert identity["complete"] and not identity["stage_limits_enforced"]
+    assert identity["declared_worker_model_turn_maximum"] == 8
+    assert set(identity["unenforced_limits"]) == {"task_model_call_maximum", "source_tool_read_maximum",
+        "observation_bytes_maximum", "stage_model_limits", "worker_model_turn_maximum"}
+    assert all(identity["effective_limits"][key] is None for key in identity["unenforced_limits"])
+    assert identity["effective_limits"]["normal_process_deadline_seconds"] == 1800
+    assert identity["effective_limits"]["model_request_timeout_seconds"] == 180
+    assert identity["effective_limits"]["build_process_timeout_seconds"] == 120
+    other = _snapshot(tmp_path / "other", reads=100, observation_bytes=100000)
+    assert identity["effective_limits"] == resource_budget_identity(other, tmp_path / "other", manifest, result, 1800)["effective_limits"]
+    missing = resource_budget_identity(snapshot, tmp_path, manifest, result, None)
+    assert missing["missing"] == ["normal_process_deadline_seconds"]
+
+
+@pytest.mark.parametrize("omitted", ["maximum", "policy", "worker", "model_timeout", "build_timeout"])
+def test_meter_only_does_not_turn_missing_facts_into_unlimited_policy(tmp_path, omitted):
+    snapshot = _snapshot(tmp_path)
+    manifest = {"ollama_patch_generation_profile": {"timeout_seconds": 180},
+        "nuget_isolated_build_profile": {"timeout_seconds": 120}}
+    result = {"model_call_budget": {"maximum": None, "policy": "meter_only"}}
+    if omitted in {"maximum", "policy"}:
+        del result["model_call_budget"][omitted]
+    elif omitted == "worker":
+        snapshot["business_argv"] = []
+    else:
+        manifest.pop("ollama_patch_generation_profile" if omitted == "model_timeout" else "nuget_isolated_build_profile")
+    identity = resource_budget_identity(snapshot, tmp_path, manifest, result, 1800)
+    assert not identity["complete"]
+    if omitted == "policy":
+        assert identity["stage_limits_enforced"]
+        assert identity["unenforced_limits"] == []
+
+
+def test_meter_only_rejects_contradictory_numeric_maximum(tmp_path):
+    snapshot = _snapshot(tmp_path)
+    with pytest.raises(ValueError, match="null maximum"):
+        resource_budget_identity(snapshot, tmp_path, {},
+            {"model_call_budget": {"maximum": 10, "policy": "meter_only"}}, 1800)
+
+
+def test_legacy_stage_policy_keeps_stage_and_worker_limits_required(tmp_path):
+    snapshot = _snapshot(tmp_path)
+    manifest = {"ollama_patch_generation_profile": {"timeout_seconds": 180},
+        "nuget_isolated_build_profile": {"timeout_seconds": 120}}
+    identity = resource_budget_identity(snapshot, tmp_path, manifest,
+        {"model_call_budget": {"maximum": 10, "policy": "stage_and_total"}}, 1800)
+    assert identity["missing"] == ["stage_model_limits"]
+    assert identity["stage_limits_enforced"]
+    assert identity["effective_limits"]["worker_model_turn_maximum"] == 8
+    assert identity["effective_limits"]["source_tool_read_maximum"] == 6

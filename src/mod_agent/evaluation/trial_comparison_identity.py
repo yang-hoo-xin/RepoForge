@@ -61,18 +61,32 @@ def resource_budget_identity(snapshot, snapshot_root, manifest, result, process_
     native = manifest.get("ollama_patch_generation_profile") or {}
     build = manifest.get("nuget_isolated_build_profile") or {}
     total_only = model.get("policy") == "task_total_only"
+    metered = model.get("policy") == "meter_only"
+    no_stage_caps = total_only or metered
+    if metered and model.get("maximum") is not None:
+        raise ValueError("Meter-only model budget must declare a null maximum.")
+    # The execution owner replaces worker quotas under this explicit policy.
+    # 为什么要有它：计量策略取消的上限应标为不执行，不能误报为缺失或沿用配置中的旧配额。
     budget = {"task_model_call_maximum": model.get("maximum"), "model_call_policy": model.get("policy"),
-        "source_tool_read_maximum": policy.get("max_tool_rounds"),
-        "observation_bytes_maximum": policy.get("max_observation_bytes"),
+        "source_tool_read_maximum": None if metered else policy.get("max_tool_rounds"),
+        "observation_bytes_maximum": None if metered else policy.get("max_observation_bytes"),
         "normal_process_deadline_seconds": process_deadline_seconds,
         "model_request_timeout_seconds": native.get("timeout_seconds"),
         "build_process_timeout_seconds": build.get("timeout_seconds"),
-        "stage_model_limits": None if total_only else _bound_input(snapshot, root, "--stage-model-call-limits"),
-        "worker_model_turn_maximum": None if total_only else policy.get("max_total_model_turns")}
+        "stage_model_limits": None if no_stage_caps else _bound_input(snapshot, root, "--stage-model-call-limits"),
+        "worker_model_turn_maximum": None if no_stage_caps else policy.get("max_total_model_turns")}
     required = [key for key in budget if key not in {"stage_model_limits", "worker_model_turn_maximum"}]
-    if not total_only:
+    if not no_stage_caps:
         required += ["stage_model_limits", "worker_model_turn_maximum"]
+    unenforced = ["stage_model_limits", "worker_model_turn_maximum"] if no_stage_caps else []
+    if metered:
+        unenforced += ["task_model_call_maximum", "source_tool_read_maximum", "observation_bytes_maximum"]
+        required = [key for key in required if key not in unenforced]
     missing = [key for key in required if budget[key] is None]
+    if metered and "maximum" not in model:
+        missing.append("task_model_call_maximum")
+    if metered and (not isinstance(worker, dict) or not isinstance(worker.get("policy"), dict)):
+        missing.append("worker_policy")
     return {"effective_limits": budget, "complete": not missing, "missing": missing,
         "declared_worker_model_turn_maximum": policy.get("max_total_model_turns"),
-        "stage_limits_enforced": not total_only}
+        "stage_limits_enforced": not no_stage_caps, "unenforced_limits": unenforced}

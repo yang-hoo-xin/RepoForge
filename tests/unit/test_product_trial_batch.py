@@ -116,6 +116,135 @@ def test_prepare_preserves_original_argv_and_performs_no_execution(tmp_path):
     assert output["summary"]["by_arm"]["baseline"]["completion_fraction"] is None
 
 
+@pytest.mark.parametrize("damage", [None, "receipt", "candidate", "judge", "native", "unqualified"])
+def test_v2_pending_delivery_reaches_native_receipt_and_independent_verdict(tmp_path, monkeypatch, damage):
+    from src.mod_agent.evaluation import product_trial_batch as batch
+
+    spec, log, verified = _spec(tmp_path), [], []
+    ordinary_runner, ordinary_delivery = _runner(log), _delivery(log)
+    monkeypatch.setattr(batch, "measure_product_task", _measurement)
+    monkeypatch.setattr(batch, "verify_product_model_proposal", lambda *_: pytest.fail("v2 must not fabricate a v1 Plan"))
+    monkeypatch.setattr(batch, "_verify_v2_live_submission", lambda *_: {"scope": "controlled_origin_fixture"})
+    monkeypatch.setattr("src.mod_agent.evaluation.strategy_native_export.validate_native_strategy_execution",
+        lambda _: {"status": "native_execution_verified"})
+
+    def run(command, **kwargs):
+        result = ordinary_runner(command, **kwargs)
+        root = Path(command[command.index("--run-root") + 1])
+        original = json.loads((root / "run_result.json").read_bytes())
+        native_ref = _save(root / "a/task-agent-execution/execution.json", {
+            "schema_version": "task-agent-product-execution.v2", "run_id": root.name})
+        _save(root / "run_result.json", {**original, "status": "awaiting_delivery", "protocol": "v2",
+            "task_agent_execution_ref": native_ref})
+        return result
+
+    def completed(**kwargs):
+        verified.append(kwargs)
+        assert kwargs["receipt_ref"] == "v2/receipt"
+        assert kwargs["artifact_store_root"].name == "a"
+        return {"candidate_source_id": "source", "candidate_ref": "candidate", "status": "delivered"}
+
+    monkeypatch.setattr("src.mod_agent.task_agent_v2_delivery.read_completed_v2_delivery", completed)
+    monkeypatch.setattr("src.mod_agent.evaluation.strategy_adoption._evaluator_evidence", lambda _: {
+        "status": "missing_original_evaluator_evidence" if damage == "unqualified" else "verified_repository_csharp"})
+
+    def deliver(context):
+        result = ordinary_delivery(context)
+        root = Path(context["run_root"])
+        native = context["initial_result"]["task_agent_execution_ref"]
+        execution = _save(root / "delivery/export.json", {"native_execution_ref": {} if damage == "native" else native,
+            "candidate_source_id": "source", "candidate_state": {"candidate_ref": "candidate"}})
+        verdict = _save(root / "delivery/verdict.json", {"schema_version": "independent_strategy_verdict_v1",
+            "independent": True, "batch_complete": True, "execution_ref": execution,
+            "candidate_source_id": "other" if damage == "candidate" else "source",
+            "evaluator_ref": {} if damage == "judge" else spec["judge_ref"],
+            "task_success": True, "preservation_passed": True})
+        return {**result, "v2_delivery_receipt_ref": None if damage == "receipt" else "v2/receipt",
+            "verification_report_ref": verdict}
+
+    report = run_product_trial_batch(spec, execute=True, command_runner=run, delivery_adapter=deliver)
+    assert [kind for kind, _ in log] == ["normal", "delivery"] * 2
+    assert all(row["status"] == ("delivered" if damage is None else "infrastructure_failure") for row in report["trials"])
+    if damage is None:
+        assert len(verified) == 2
+        assert all(row["delivery"]["proposal_origin"]["verification"] == "native_v2_delivery_and_qualified_independent_verdict"
+            for row in report["trials"])
+    else:
+        assert not any(row["success"] for row in report["trials"])
+
+
+def test_meter_only_identity_is_explicit_not_missing_or_invented():
+    from src.mod_agent.evaluation.product_trial_batch import _comparison_identity
+
+    manifest = {"request": "task", "source_snapshot_sha256": "source", "model_admission": {"model": "m", "model_digest": "digest"},
+        "ollama_patch_generation_profile": {"model": "m"}}
+    result = {"model_call_budget": {"policy": "meter_only", "maximum": None}}
+    assert _comparison_identity(manifest, result, {"sha256": "judge"})["budget_maximum"] is None
+    for budget in ({"policy": "meter_only"}, {"policy": "task_total_only", "maximum": None}):
+        assert _comparison_identity(manifest, {"model_call_budget": budget}, {"sha256": "judge"}) is None
+
+
+def test_normal_batch_cli_continues_v2_pending_delivery_and_keeps_failure(tmp_path, monkeypatch, capsys):
+    from scripts.run_product_trial_batch import main
+    from src.mod_agent.evaluation import product_trial_batch as batch
+
+    spec, log = _spec(tmp_path), []
+    adapter = tmp_path / "adapter.py"
+    adapter.write_text("def deliver(context):\n    return {'status': 'failed', 'reason': 'controlled independent rejection'}\n", encoding="utf-8")
+    spec["delivery_adapter_ref"] = {"path": str(adapter), "sha256": hashlib.sha256(adapter.read_bytes()).hexdigest()}
+    original_runner = _runner(log)
+
+    def run(command, **kwargs):
+        output = original_runner(command, **kwargs)
+        root = Path(command[command.index("--run-root") + 1])
+        result = json.loads((root / "run_result.json").read_bytes())
+        _save(root / "run_result.json", {**result, "status": "awaiting_delivery", "protocol": "v2"})
+        return output
+
+    monkeypatch.setattr(batch, "_run_command", run)
+    monkeypatch.setattr(batch, "measure_product_task", _measurement)
+    selection = _save(tmp_path / "spec.json", spec)
+    result_path = tmp_path / "batch.json"
+    assert main(["--spec", selection["path"], "--output", str(result_path), "--execute"]) == 0
+    assert json.loads(capsys.readouterr().out)["executed"] is True
+    result = json.loads(result_path.read_bytes())
+    assert len(result["trials"]) == 2
+    assert all(row["status"] == "failed" and row["delivery"]["reason"] == "controlled independent rejection"
+        and row["success"] is False for row in result["trials"])
+
+
+@pytest.mark.parametrize("damage", [None, "different_response", "different_request", "nonlive", "incomplete"])
+def test_v2_submit_must_match_the_exact_live_request_response(tmp_path, damage):
+    from src.mod_agent.evaluation.product_trial_batch import _verify_v2_live_submission
+    from src.mod_agent.model_qualification import canonical_hash
+    from src.mod_agent.task_agent_v2_state import save_v2_artifact
+
+    response = {"tool_calls": [{"call_id": "submit", "name": "candidate_submit", "arguments": {}}]}
+    response_ref = _save(tmp_path / "response.json", response)
+    request_ref = _save(tmp_path / "request.json", {"messages": ["actual"]})
+    provider_ref = _save(tmp_path / "provider.json", {"messages": ["actual wire request"]})
+    candidate = save_v2_artifact(tmp_path / "a", "candidate", {"model_origin": {"call_id": "submit", "response_ref": response_ref}})
+    call = {"generation_span_id": "generation", "trace_id": "trace", "response_sha256": canonical_hash(response),
+        "transport": {"response_origin": "live_provider_response", "response_received": True, "response_complete": True},
+        "local_evidence": {role: {"integrity": "verified_bytes", "sha256": ref["sha256"]}
+            for role, ref in (("request", request_ref), ("provider_request", provider_ref))}}
+    if damage == "different_response":
+        call["response_sha256"] = "unrelated-live-response"
+    elif damage == "different_request":
+        call["local_evidence"]["request"]["sha256"] = "other-request"
+    elif damage == "nonlive":
+        call["transport"]["response_origin"] = "controlled"
+    elif damage == "incomplete":
+        call["transport"]["response_complete"] = False
+    args = (tmp_path, {"provider_turns": [{"response_ref": response_ref, "request_ref": request_ref,
+        "provider_request_ref": provider_ref}]}, {"candidate_ref": candidate}, {"model": {"calls": [call]}})
+    if damage is None:
+        assert _verify_v2_live_submission(*args)["call_id"] == "submit"
+    else:
+        with pytest.raises(ValueError, match="retained live model response"):
+            _verify_v2_live_submission(*args)
+
+
 def test_serial_full_delivery_collects_usage_and_repeats_do_not_add_tasks(tmp_path, monkeypatch):
     monkeypatch.setattr("src.mod_agent.evaluation.product_trial_batch.measure_product_task", _measurement)
     log, checkpoints = [], []

@@ -114,8 +114,10 @@ def _comparison_identity(manifest, result, judge_ref):
     model = manifest.get("model_admission") or {}
     budget = result.get("model_call_budget") or manifest.get("model_call_budget") or {}
     required = (manifest.get("request"), manifest.get("source_snapshot_sha256"), model.get("model"),
-        model.get("model_digest"), manifest.get("ollama_patch_generation_profile"), budget.get("maximum"), budget.get("policy"))
+        model.get("model_digest"), manifest.get("ollama_patch_generation_profile"), budget.get("policy"))
     if any(value is None for value in required):
+        return None
+    if "maximum" not in budget or budget["maximum"] is None and budget.get("policy") != "meter_only":
         return None
     return {"request": manifest["request"], "source_snapshot_sha256": manifest["source_snapshot_sha256"],
         "model": model.get("model"), "model_digest": model.get("model_digest"),
@@ -176,7 +178,83 @@ def verify_product_model_proposal(run_root, initial_result, measurement, verific
     raise ValueError("No retained live Product response supports this proposal.")
 
 
-def _delivery(adapter_result, run_root, run_id, measurement, initial_result):
+def _verify_v2_live_submission(run_root, native, delivered, measurement):
+    from src.mod_agent.model_qualification import canonical_hash
+    from src.mod_agent.task_agent_v2_state import load_v2_artifact
+
+    candidate = load_v2_artifact(run_root / "a", delivered["candidate_ref"])
+    origin = candidate["model_origin"]
+    response = json.loads(_read_reference(origin["response_ref"], root=run_root))
+    calls = [row for row in response.get("tool_calls", [])
+        if row.get("call_id") == origin["call_id"] and row.get("name") == "candidate_submit"]
+    turns = [row for row in native.get("provider_turns", [])
+        if row.get("response_ref", {}).get("sha256") == origin["response_ref"]["sha256"]]
+    if len(calls) != 1 or len(turns) != 1:
+        raise ValueError("V2 candidate has no unique native submit response.")
+    turn = turns[0]
+    for key in ("request_ref", "provider_request_ref", "response_ref"):
+        _read_reference(turn[key], root=run_root)
+    # 为什么要有它：整个运行有真实响应不代表最终补丁来自它，须将具体提交与同一请求、传输和响应绑定。
+    matches = [row for row in measurement["model"].get("calls", [])
+        if row.get("transport", {}).get("response_origin") == "live_provider_response"
+        and row["transport"].get("response_received") is True and row["transport"].get("response_complete") is True
+        and row.get("response_sha256") == canonical_hash(response)
+        and all(row.get("local_evidence", {}).get(role, {}).get("integrity") == "verified_bytes"
+            and row["local_evidence"][role]["sha256"] == turn[key]["sha256"]
+            for role, key in (("request", "request_ref"), ("provider_request", "provider_request_ref")))]
+    if len(matches) != 1:
+        raise ValueError("V2 final submit is not bound to one retained live model response.")
+    return {"response_ref": origin["response_ref"], "call_id": origin["call_id"],
+        "request_ref": turn["request_ref"], "generation_span_id": matches[0]["generation_span_id"],
+        "trace_id": matches[0]["trace_id"]}
+
+
+def _verify_v2_delivery(adapter_result, run_root, run_id, initial_result, judge_ref, measurement):
+    """Use native v2 delivery and qualified independent verdicts, never a fake Plan.
+
+    为什么要有它：v2候选身份和正式交付回执须经原owner验证，旧Plan检查不能替代也不能阻断新协议。
+    """
+    from src.mod_agent.evaluation.strategy_adoption import _evaluator_evidence
+    from src.mod_agent.evaluation.strategy_native_export import validate_native_strategy_execution
+    from src.mod_agent.task_agent_v2_delivery import read_completed_v2_delivery
+
+    native_ref = initial_result.get("task_agent_execution_ref") or initial_result.get("task_agent_outcome", {}).get("execution_ref")
+    native = json.loads(_read_reference(native_ref, root=run_root))
+    if native.get("schema_version") != "task-agent-product-execution.v2" or native.get("run_id") != run_id:
+        raise ValueError("V2 trial native execution identity mismatch.")
+    receipt = adapter_result.get("v2_delivery_receipt_ref")
+    if not isinstance(receipt, str):
+        raise ValueError("V2 trial requires the original completed delivery receipt.")
+    delivered = read_completed_v2_delivery(artifact_store_root=run_root / "a", receipt_ref=receipt,
+        native_execution_ref=native_ref)
+    live_submission = _verify_v2_live_submission(run_root, native, delivered, measurement)
+    verdict_ref = adapter_result.get("verification_report_ref")
+    verdict = json.loads(_read_reference(verdict_ref, root=run_root))
+    if (verdict.get("schema_version") != "independent_strategy_verdict_v1"
+            or verdict.get("independent") is not True or verdict.get("batch_complete") is not True
+            or verdict.get("evaluator_ref") != judge_ref or verdict.get("task_success") is not True
+            or verdict.get("preservation_passed") is not True
+            or verdict.get("candidate_source_id") != delivered["candidate_source_id"]):
+        raise ValueError("V2 trial independent verdict is not bound to its delivered candidate and selected judge.")
+    execution = json.loads(_read_reference(verdict["execution_ref"], root=run_root))
+    if (execution.get("native_execution_ref") != native_ref
+            or execution.get("candidate_source_id") != delivered["candidate_source_id"]
+            or execution.get("candidate_state", {}).get("candidate_ref") != delivered["candidate_ref"]):
+        raise ValueError("V2 trial verdict refers to a different native execution.")
+    native_evidence = validate_native_strategy_execution(verdict["execution_ref"])
+    if native_evidence.get("status") != "native_execution_verified":
+        raise ValueError("V2 trial native export is not verified.")
+    verified = _evaluator_evidence(verdict)
+    if verified.get("status") not in {"verified_repository_csharp", "verified_restricted_csharp"}:
+        raise ValueError("V2 trial independent evaluator originals are not verified.")
+    return {"verification": "native_v2_delivery_and_qualified_independent_verdict",
+        "native_execution_ref": native_ref, "delivery_receipt_ref": receipt,
+        "candidate_source_id": delivered["candidate_source_id"], "candidate_ref": delivered["candidate_ref"],
+        "verification_report_ref": verdict_ref, "evaluator_evidence": verified,
+        "live_submission": live_submission, "native_evidence": native_evidence}
+
+
+def _delivery(adapter_result, run_root, run_id, measurement, initial_result, judge_ref=None):
     """Trust the selected delivery adapter's judgment only with retained local evidence.
 
     为什么要有它：开发者修复或仅生成候选都不等于产品交付；adapter负责调用公共续接与共同judge，汇总不替代它们。
@@ -214,8 +292,12 @@ def _delivery(adapter_result, run_root, run_id, measurement, initial_result):
         and bool(refs) and bool(public_records) and live_responses > 0)
     if status == "delivered" and not success:
         status = "unknown"
-    proposal_origin = (verify_product_model_proposal(run_root, initial_result, measurement,
-        adapter_result.get("verification_report_ref")) if success else None)
+    is_v2 = (initial_result.get("protocol") == "v2" or initial_result.get("technical_execution", {}).get("protocol") == "v2"
+        or initial_result.get("status") == "awaiting_delivery")
+    proposal_origin = None
+    if success:
+        proposal_origin = (_verify_v2_delivery(adapter_result, run_root, run_id, initial_result, judge_ref, measurement) if is_v2 else
+            verify_product_model_proposal(run_root, initial_result, measurement, adapter_result.get("verification_report_ref")))
     return {"status": status, "success": success if status != "unknown" else None,
         "judgment_scope": "caller_delivery_adapter_and_bound_public_execution_records",
         "evidence_refs": refs, "execution_refs": adapter_result.get("execution_refs", []),
@@ -302,7 +384,7 @@ def run_product_trial_batch(spec, *, execute=False, delivery_adapter=None, comma
                 "output_tokens": usage["output_tokens"]["total"], "model_generation_records": measurement["model"]["generation_records"],
                 "observed_tool_calls": measurement["tools"]["selected_record_total"],
                 "model_elapsed_ms_sum": usage["generation_elapsed_ms_sum"], "full_delivery_cost": False}
-            if completed.returncode != 0 or result.get("status") not in {"awaiting_approval", "completed", "built"}:
+            if completed.returncode != 0 or result.get("status") not in {"awaiting_approval", "awaiting_delivery", "completed", "built"}:
                 row.update(status="product_failed", success=False, terminal_status=result.get("status"))
                 continue
             delivery_started = time.perf_counter()
@@ -313,7 +395,7 @@ def run_product_trial_batch(spec, *, execute=False, delivery_adapter=None, comma
             finally:
                 row["delivery_seconds"] = time.perf_counter() - delivery_started
             _read_reference(judge_ref)
-            delivery = _delivery(raw_delivery, run_root, row["run_id"], measurement, result)
+            delivery = _delivery(raw_delivery, run_root, row["run_id"], measurement, result, judge_ref)
             row.update(delivery=delivery, status=delivery["status"], success=delivery["success"])
             row["metrics"]["full_delivery_cost"] = delivery["model_cost_known_zero"]
             if not delivery["model_cost_known_zero"]:

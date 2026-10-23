@@ -9,6 +9,10 @@ continuation APIs and common judge. It returns status (delivered/failed/
 infrastructure_failure/unknown), source_origin=product_model_proposal,
 delivery_complete, acceptance_passed, verification_report_ref, evidence_refs and execution_refs. The latter
 are exact references to public continuation result records, not developer closure.
+
+For v2, also return v2_delivery_receipt_ref and a verification_report_ref pointing
+to a qualified independent_strategy_verdict_v1 bound to this native execution.
+为什么要有它：v2交付复用原生回执与独立判分，不伪造旧Plan或仅以某次真实模型调用替代最终补丁来源。
 """
 from __future__ import annotations
 
