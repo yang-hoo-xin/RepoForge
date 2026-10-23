@@ -2,7 +2,7 @@
 
 The administrator supplies a fixed JSON object containing ``arguments``. Only
 the description comes from stdin. This bridge adds no execution state machine
-and forwards the product owner's JSON and exit status unchanged.
+and preserves the product owner's outcome and exit status, adding an inspection locator.
 """
 
 from __future__ import annotations
@@ -722,6 +722,65 @@ def inspect_run(*, execution_config: str, run_id: str) -> dict:
     return record
 
 
+def evidence_locator(*, execution_config: str, run_id: str) -> dict:
+    """Describe a read-only invocation; do not create a report or execution config."""
+    config = str(Path(execution_config).resolve())
+    return {"execution_config_path": config, "run_id": run_id,
+            "argv": ["python", "-m", "scripts.dsh_run_request", "--execution-config", config,
+                     "--inspect-run", run_id, "--view", "evidence", "--format", "json"]}
+
+
+def inspect_evidence(*, execution_config: str, run_id: str) -> dict:
+    """Resolve the business identity using the fixed config, then query shared evidence."""
+    if not isinstance(run_id, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", run_id) is None:
+        raise ValueError("DSH_RUN_INSPECTION_IDENTITY_INVALID")
+    _, options = _configuration_arguments(execution_config)
+    configured = options.get("--run-id")
+    if configured is not None and configured != run_id:
+        raise ValueError("DSH_RUN_INSPECTION_CONFIG_IDENTITY_CONFLICT")
+    workspace = options.get("--workspace-root")
+    if not workspace or not Path(workspace).is_absolute():
+        raise ValueError("DSH_RUN_CONFIGURATION_PATH_MUST_BE_ABSOLUTE: --workspace-root")
+    from src.observability.dashboard.services.trace_service import TraceService
+
+    result = TraceService().query_run_evidence(allowed_roots=[str(Path(workspace))], run_id=run_id)
+    return {**result, "inspection": evidence_locator(execution_config=execution_config, run_id=run_id)}
+
+
+def _with_inspection(result: dict, execution_config: str) -> dict:
+    execution_config = result.get("execution_config_path") or execution_config
+    if isinstance(result.get("product_result"), dict):
+        result = {**result, "product_result": _with_inspection(result["product_result"], execution_config)}
+    run_id = result.get("run_id")
+    if isinstance(run_id, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", run_id):
+        try:
+            _, options = _configuration_arguments(execution_config)
+            if options.get("--run-id") not in (None, run_id):
+                execution_config = task_execution_config(execution_config=execution_config, run_id=run_id)
+            return {**result, "inspection": evidence_locator(execution_config=execution_config, run_id=run_id)}
+        except (OSError, UnicodeError, ValueError, RuntimeError) as error:
+            # 为什么要有它：查询配置缺失或冲突只能使入口不可用，不能伪造可用命令或改变已有产品结果。
+            return {**result, "inspection": {"run_id": run_id, "status": "unavailable", "reason": str(error)}}
+    return result
+
+
+def _dispatch_product(argv: list[str], *, execution_config: str) -> int:
+    # 为什么要有它：新运行返回可用查询入口，但不能把产品失败或待批准状态改写为成功。
+    output = io.StringIO()
+    with redirect_stdout(output):
+        status = cli.main(argv)
+    raw = output.getvalue()
+    try:
+        result = json.loads(raw)
+    except ValueError:
+        result = None
+    if isinstance(result, dict):
+        print(json.dumps(_with_inspection(result, execution_config), ensure_ascii=True))
+    else:
+        print(raw, end="")
+    return status
+
+
 def list_runs(*, execution_config: str) -> dict:
     _, options = _configuration_arguments(execution_config)
     workspace = Path(options["--workspace-root"])
@@ -794,6 +853,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--execution-config", required=True)
     parser.add_argument("--inspect-run")
+    parser.add_argument("--view", choices=["evidence"])
+    parser.add_argument("--format", choices=["json", "markdown"])
     parser.add_argument("--new-task", action="store_true")
     parser.add_argument("--route-request", action="store_true")
     parser.add_argument("--route-preview", action="store_true")
@@ -814,6 +875,30 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--decision-stdin", action="store_true")
     args = parser.parse_args(argv)
     try:
+        # 为什么要有它：只读查询必须在任何执行分支之前拒绝混用，不能由分支顺序决定副作用。
+        if args.inspect_run is not None or args.view is not None or args.format is not None:
+            if args.inspect_run is None or (args.format is not None and args.view != "evidence"):
+                raise ValueError("DSH_RUN_EVIDENCE_INSPECTION_REQUIRED")
+            allowed = {"execution_config", "inspect_run", "view", "format"}
+            if any(value not in (None, False) for name, value in vars(args).items() if name not in allowed):
+                raise ValueError("DSH_RUN_INSPECTION_OPERATION_CONFLICT")
+            if args.view == "evidence":
+                result = inspect_evidence(execution_config=args.execution_config, run_id=args.inspect_run)
+                if args.format == "markdown":
+                    from src.observability.dashboard.services.run_evidence import (
+                        render_evidence_markdown,
+                    )
+                    # 为什么要有它：Windows管道也需稳定UTF-8，不能让人读视图因本机代码页损坏中文。
+                    reconfigure = getattr(sys.stdout, "reconfigure", None)
+                    if callable(reconfigure):
+                        reconfigure(encoding="utf-8")
+                    print(render_evidence_markdown(result))
+                else:
+                    print(json.dumps(result, ensure_ascii=True))
+            else:
+                print(json.dumps(inspect_run(execution_config=args.execution_config,
+                                            run_id=args.inspect_run), ensure_ascii=True))
+            return 0
         if args.route_request or args.route_preview:
             if (args.route_request and args.route_preview or args.new_task or args.initialize_project_name
                     or args.preview_project or args.start_project or args.advance_task or args.list_runs
@@ -831,7 +916,7 @@ def main(argv: list[str] | None = None) -> int:
                 **({"conversation_id": args.conversation_id} if args.conversation_id is not None else {}),
                 **({"clarification_for": args.clarification_for} if args.clarification_for is not None else {}),
                 **({"turn_id": args.routing_turn_id} if args.routing_turn_id is not None else {}))
-            print(json.dumps(result, ensure_ascii=True))
+            print(json.dumps(_with_inspection(result, result.get("execution_config_path") or args.parent_execution_config or args.execution_config), ensure_ascii=True))
             # 为什么要有它：已交付任务的只读续接也是成功结果，非零退出码会让客户端把正确回执当成执行失败。
             return 0 if result["status"] in {"awaiting_approval", "route_selected", "needs_clarification", "built", "delivered"} else 2
         if (args.active_run_id or args.followup_delivery_root or args.parent_execution_config
@@ -840,7 +925,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.advance_task is not None:
             result = advance_task(execution_config=args.execution_config, run_id=args.advance_task,
                 allocation_config=args.findings_allocation_config)
-            print(json.dumps(result, ensure_ascii=True))
+            print(json.dumps(_with_inspection(result, args.execution_config), ensure_ascii=True))
             return 0 if result.get("status") == "awaiting_approval" else 2
         if args.preview_project is not None:
             print(json.dumps(preview_new_project(execution_config=args.execution_config,
@@ -850,7 +935,7 @@ def main(argv: list[str] | None = None) -> int:
             preview = preview_new_project(execution_config=args.execution_config, run_id=args.start_project)
             product_argv = build_product_argv(execution_config=preview["execution_config_path"],
                 description=preview["description"])
-            return cli.main(product_argv)
+            return _dispatch_product(product_argv, execution_config=preview["execution_config_path"])
         if args.execute_findings_continuation is not None:
             if not args.findings_allocation_config or not args.decision_stdin:
                 raise ValueError("INITIAL_FINDINGS_EXPLICIT_APPROVAL_CHANNEL_REQUIRED")
@@ -858,9 +943,9 @@ def main(argv: list[str] | None = None) -> int:
             selected = task_execution_config(execution_config=args.execution_config, run_id=run_id)
             arguments, _ = _configuration_arguments(selected)
             record = inspect_run(execution_config=selected, run_id=run_id)
-            return cli.main(["run-request", *arguments, "--resume-initial-findings", selected,
+            return _dispatch_product(["run-request", *arguments, "--resume-initial-findings", selected,
                 "--findings-stage-allocation", args.findings_allocation_config, "--findings-approval-stdin",
-                "--", record["manifest"]["request"]])
+                "--", record["manifest"]["request"]], execution_config=selected)
         if args.prepare_findings_continuation is not None:
             from src.mod_agent.initial_findings_continuation import (
                 prepare_initial_findings_continuation,
@@ -886,11 +971,6 @@ def main(argv: list[str] | None = None) -> int:
         if args.list_runs:
             print(json.dumps(list_runs(execution_config=args.execution_config), ensure_ascii=False))
             return 0
-        if args.inspect_run is not None:
-            print(json.dumps(inspect_run(
-                execution_config=args.execution_config, run_id=args.inspect_run,
-            ), ensure_ascii=False))
-            return 0
         body = sys.stdin.buffer.read(MAX_REQUEST_BYTES + 1)
         if len(body) > MAX_REQUEST_BYTES:
             raise ValueError("DSH_RUN_REQUEST_INVALID")
@@ -910,7 +990,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     # The owner distinguishes pending approval, domain failure and platform
     # failure. Do not replace its result with a bridge-created success record.
-    return cli.main(product_argv)
+    return _dispatch_product(product_argv, execution_config=selected)
 
 
 if __name__ == "__main__":

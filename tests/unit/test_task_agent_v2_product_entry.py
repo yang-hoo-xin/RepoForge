@@ -417,8 +417,42 @@ def test_normal_cli_historical_view_requires_refresh_before_revision(repository_
 def test_normal_cli_public_failure_details_reach_next_request_and_revision(repository_workspace, monkeypatch, capsys):
     test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
         repository_workspace, monkeypatch, capsys, False, exercise_feedback=True)
+    report = _inspect_retained_entry(repository_workspace, monkeypatch, capsys)
+    chain = report["executions"][0]
+    assert len(chain["turns"]) == 14
+    assert all(row["status"] == "executed_bound" for row in chain["actions"])
+    feedback = next(row for row in chain["feedback_links"] if row["turn"] == 6)
+    assert feedback["matches_recorded_tool_result"] and feedback["included_in_provider_request"]
+    assert feedback["candidate_ref"] and feedback["candidate_source_id"] and feedback["check_ref"]
+    assert any(row["schema"] == "task-agent-candidate.v2" for row in report["artifacts"])
+    assert any(link["integrity"] == "verified_artifact_semantics"
+        for link in report["links"] if link["relation"] == "artifact_semantic_reference")
 
 
 def test_normal_cli_postcheck_failure_retains_stage_facts_without_delivery(repository_workspace, monkeypatch, capsys):
     test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
         repository_workspace, monkeypatch, capsys, False, expect_postcheck_failure=True)
+    report = _inspect_retained_entry(repository_workspace, monkeypatch, capsys)
+    assert report["terminal"]["current_stage"] == "blocked"
+    assert report["executions"][0]["status"] == "unknown"
+    assert len(report["executions"][0]["turns"]) == 5
+    assert not report["executions"][0]["feedback_links"]
+    assert any(row["stage"] == "test_execution" for row in report["stage_facts"])
+    assert any(row["status"] == "unknown" for row in report["stage_facts"])
+
+
+def _inspect_retained_entry(workspace, monkeypatch, capsys):
+    from scripts import dsh_run_request
+
+    pending = json.loads((workspace / "v2-entry-result.json").read_text(encoding="utf-8"))
+    config = workspace / "inspect-config.json"
+    config.write_text(json.dumps({"arguments": ["--workspace-root", str(workspace / "runs")]}), encoding="utf-8")
+    root = workspace / "runs" / pending["run_id"]
+    before = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob("*") if p.is_file()}
+    monkeypatch.setattr(dsh_run_request.cli, "main", lambda *_: pytest.fail("Evidence inspection dispatched execution"))
+    assert dsh_run_request.main(["--execution-config", str(config), "--inspect-run", pending["run_id"],
+        "--view", "evidence", "--format", "json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["query_effects"] == {"model_calls": 0, "builds": 0, "tests": 0, "recoveries": 0, "writes": 0}
+    assert before == {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob("*") if p.is_file()}
+    return report

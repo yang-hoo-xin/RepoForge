@@ -2,8 +2,12 @@
 
 为什么要有它：界面必须按来源和完整分页展示事实，不能把历史状态、缺失数据或摘要当成新交付。
 """
+import hashlib
+import json
+import sys
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -102,6 +106,98 @@ def text_content(app):
 
 def widget(app, kind, prefix):
     return next(item for item in getattr(app, kind) if item.key == prefix or item.key.startswith(prefix + "::"))
+
+
+def test_evidence_view_uses_business_identity_and_shared_service_only_on_request(browser, monkeypatch):
+    browser.runs[0]["recorded_run_id"] = "business-run-1"
+    report = {"run_id": "business-run-1", "status": "ambiguous", "complete": False,
+              "issues": ["duplicate business identity"], "truncated": True,
+              "original_refs": [{"path": "allowed/one/result.json"}]}
+
+    def query(**kwargs):
+        browser.calls.append(("evidence", kwargs))
+        return deepcopy(report)
+
+    browser.query_run_evidence = query
+    monkeypatch.setitem(sys.modules, "src.observability.dashboard.services.run_evidence", SimpleNamespace(
+        render_evidence_markdown=lambda value: "Shared evidence: " + value["status"]))
+    app = open_browser()
+    assert not any(kind == "evidence" for kind, _ in browser.calls)
+    widget(app, "button", "record_evidence_inspect").click().run()
+    assert not app.exception
+    assert [args for kind, args in browser.calls if kind == "evidence"] == [{
+        "allowed_roots": [str(Path.home() / "ModAgentRuns")], "run_id": "business-run-1"}]
+    assert "Shared evidence: ambiguous" in "\n".join(item.value for item in app.markdown)
+    assert "duplicate business identity" in text_content(app)
+    assert "allowed/one/result.json" in text_content(app)
+    assert "不证明模型理解" in text_content(app)
+    assert set(kind for kind, _ in browser.calls) == {"discover", "inspect", "read", "evidence"}
+    app.button(key="record_browser_refresh_run").click().run()
+    assert not app.exception
+    assert "Shared evidence: ambiguous" not in "\n".join(item.value for item in app.markdown)
+    assert len([kind for kind, _ in browser.calls if kind == "evidence"]) == 1
+
+
+def test_evidence_view_does_not_substitute_locator_for_missing_business_id(browser):
+    app = open_browser()
+    assert "未记录业务运行 ID" in text_content(app)
+    assert not any(item.key.startswith("record_evidence_inspect") for item in app.button)
+    assert not any(kind == "evidence" for kind, _ in browser.calls)
+
+
+def test_trace_service_evidence_wrapper_preserves_shared_result(monkeypatch):
+    from src.observability.dashboard.services.trace_service import TraceService
+
+    calls = []
+    report = {"status": "missing", "complete": False}
+
+    def query(**kwargs):
+        calls.append(kwargs)
+        return report
+
+    monkeypatch.setitem(sys.modules, "src.observability.dashboard.services.run_evidence", SimpleNamespace(
+        query_run_evidence=query))
+    assert TraceService().query_run_evidence(allowed_roots=["explicit/root"], run_id="business") is report
+    assert calls == [{"allowed_roots": ["explicit/root"], "run_id": "business"}]
+
+
+def test_evidence_button_consumes_real_shared_query_without_changing_originals(browser, monkeypatch, tmp_path):
+    from src.observability.dashboard.services.trace_service import TraceService
+    from tests.unit.test_run_evidence_query import _fixture
+
+    _, root = _fixture(tmp_path)
+    allowed = str(root.parent)
+    monkeypatch.setenv("REPOFORGE_RUN_RECORD_ROOTS", json.dumps([allowed]))
+    browser.runs[0].update(recorded_run_id="one", run_root=str(root))
+    reports = []
+
+    def query(**kwargs):
+        browser.calls.append(("evidence", kwargs))
+        report = TraceService().query_run_evidence(**kwargs)
+        reports.append(report)
+        return report
+
+    browser.query_run_evidence = query
+    before = {str(path): hashlib.sha256(path.read_bytes()).hexdigest()
+              for path in tmp_path.rglob("*") if path.is_file()}
+    app = open_browser()
+    assert not reports
+    widget(app, "button", "record_evidence_inspect").click().run()
+    assert not app.exception
+    assert [args for kind, args in browser.calls if kind == "evidence"] == [
+        {"allowed_roots": [allowed], "run_id": "one"}]
+    assert len(reports) == 1
+    report = reports[0]
+    assert report["schema_version"] == "run_evidence_v1"
+    assert report["status"] == "ok" and report["terminal"]["status"] == "delivered"
+    assert report["query_effects"] == {"model_calls": 0, "builds": 0, "tests": 0, "recoveries": 0, "writes": 0}
+    rendered_reports = [json.loads(item.value) for item in app.json]
+    assert report in rendered_reports
+    markdown = "\n".join(item.value for item in app.markdown)
+    assert "运行证据：one" in markdown and "状态：ok" in markdown
+    assert "run_result.json" in markdown and "execution.json" in markdown
+    assert before == {str(path): hashlib.sha256(path.read_bytes()).hexdigest()
+                      for path in tmp_path.rglob("*") if path.is_file()}
 
 
 def test_cloud_verification_is_explicit_and_does_not_replace_task_outcome(browser):

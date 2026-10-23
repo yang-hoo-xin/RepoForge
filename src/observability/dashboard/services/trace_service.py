@@ -74,6 +74,14 @@ class TraceService:
         from .run_records import RunRecordBrowser, _sanitize
         return _sanitize(RunRecordBrowser(allowed_roots).inspect(run_id, record_cursor=record_cursor, record_limit=record_limit), [])
 
+    def query_run_evidence(self, *, allowed_roots, run_id):
+        """Query shared developer evidence by business identity, not browser locator.
+
+        为什么要有它：Dashboard 与命令入口应共用关联和权限检查，不能自行选择同名运行或复制证据解析。
+        """
+        from .run_evidence import query_run_evidence
+        return query_run_evidence(allowed_roots=allowed_roots, run_id=run_id)
+
     def read_record(self, *, allowed_roots, record_id, offset=0, limit=65536, expected_sha256=None):
         from .run_records import RunRecordBrowser
         return RunRecordBrowser(allowed_roots).read_record(record_id, offset=offset, limit=limit, expected_sha256=expected_sha256)

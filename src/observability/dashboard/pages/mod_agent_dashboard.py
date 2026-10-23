@@ -28,11 +28,46 @@ def render() -> None:
     records_tab, trace_tab, artifacts_tab = st.tabs(["Run Records", "Trace Drill-down", "Artifact Projection"])
     with records_tab:
         if selected:
+            _render_run_evidence(selected)
             _render_run_record_index(selected["service"], selected["roots"], selected["inspection"])
     with trace_tab:
         _render_product_trace_drilldown(selected=selected)
     with artifacts_tab:
         _render_artifact_projection(selected=selected)
+
+
+def _render_run_evidence(selected: dict[str, Any]) -> None:
+    """Explicitly query the existing selection through the shared evidence service.
+
+    为什么要有它：业务运行身份与浏览器定位符不同；证据查询只读，不能隐式恢复任务或把关联当成模型理解。
+    """
+    import streamlit as st
+
+    run = selected["inspection"].get("run") or {}
+    business_id = run.get("recorded_run_id")
+    with st.expander("Run evidence / 运行证据链"):
+        st.caption("开发诊断视图；不发送给产品模型。关联说明已记录事实，不证明模型理解、采纳或业务成功。")
+        if not isinstance(business_id, str) or not business_id.strip():
+            st.info("未记录业务运行 ID；不会用浏览器定位符或目录名代替。")
+            return
+        st.caption(f"业务运行 ID：{business_id}；同名或身份冲突由共享查询服务报告，不自动选择最新目录。")
+        identity = (tuple(selected["roots"]), business_id,
+                    st.session_state.get("record_browser_inspection_revision", 0))
+        result_key = _selection_key("record_evidence_result", identity)
+        if st.button("Inspect evidence / 查询证据", key=_selection_key("record_evidence_inspect", identity)):
+            st.session_state.pop(result_key, None)
+            try:
+                st.session_state[result_key] = selected["service"].query_run_evidence(
+                    allowed_roots=selected["roots"], run_id=business_id)
+            except (OSError, ValueError) as exc:
+                st.error(f"证据查询无法完成：{exc}")
+        report = st.session_state.get(result_key)
+        if report is not None:
+            from src.observability.dashboard.services.run_evidence import render_evidence_markdown
+
+            st.markdown(render_evidence_markdown(report))
+            st.caption("完整性、缺失、歧义、不可访问与截断状态保留在下列结构化视图；原件仍按引用分别保存。")
+            st.json(report)
 
 
 def _record_issues(items: list[Any]) -> None:

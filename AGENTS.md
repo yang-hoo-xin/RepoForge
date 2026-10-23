@@ -60,3 +60,16 @@ they do not freeze an old architecture or override platform permissions.
    Keep executable identifiers, schemas, paths, hashes, and historical run evidence
    unchanged when improving prose. Clearly separate current progress from history.
    为什么要有它：用户需要能理解、检索和解释技术成果，而不是先学习项目自创词汇；改善表达也不能破坏程序接口或历史证据。
+
+10. When asked to inspect a run's evidence, attribute its failure, assess a capability,
+    or choose its next experiment, use the shared evidence entry:
+    `python -m scripts.dsh_run_request --execution-config "<absolute registered config>" --inspect-run "<business run ID>" --view evidence --format json`
+    (`markdown` is the human-readable format). Follow returned references to the
+    relevant actual requests, patches and checks; report missing or ambiguous facts.
+    Establish the configuration once and reuse it when applicable; never choose the
+    latest directory to resolve conflicting identities. Ordinary code edits do not
+    require scanning historical runs. Natural-language requests are this working
+    agreement, not a registered slash command or automatic trigger. Keep the
+    developer view out of product-model inputs; their existing public-feedback and
+    experience interfaces retain their own visibility and authorization boundaries.
+    为什么要有它：共享入口只有进入实际调查流程才能减少错误归因，统一查询也不能扩张产品模型的可见范围。
