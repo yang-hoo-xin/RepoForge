@@ -1,0 +1,72 @@
+{
+  "run_id": "dsh_90e3622119454273a946e9fa5d4310b0",
+  "execution_config_ref": {
+    "path": "C:\\tmp\\rf-serilog-v2-context-main\\runs\\.dsh-inputs\\dsh_90e3622119454273a946e9fa5d4310b0\\execution.json",
+    "sha256": "67fac9a7a168edffc6f78e57ec1902871b35b09e87c5d22abc29a84393f16191"
+  },
+  "saved_projection_ref": {
+    "path": "C:\\tmp\\rf-serilog-v2-context-main\\saved-request-projection.json",
+    "sha256": "bcc137565682a8eb1da4bb95557e380af5c8425a2b3acd70fdaac318a937034b"
+  },
+  "git_head": "a5126fc0a10ba9ab33938019bb280465464b8f85",
+  "plan_ref": {
+    "sha256": "dee4aca5d9478e944387efe72ee195a35e5cd041d81adf8908f636c6c2f74650",
+    "path": "C:/tmp/rf-serilog-v2-context-main/frozen-plan.json"
+  },
+  "platform_ref": {
+    "path": "C:\\tmp\\rfcode-serilog-v2-context-B\\execution_snapshot.json",
+    "sha256": "60d93496067b5d46a71c46d2ff68f6d92851a818b4f4ec5e1475ee821cd9e453"
+  },
+  "warmup_response": {
+    "created_at": "2026-10-23T08:42:14.8072583Z",
+    "done": true,
+    "done_reason": "load",
+    "model": "qwen3-coder:30b",
+    "response": ""
+  },
+  "started_ref": {
+    "sha256": "1f6dfa6a11f829de60323cb65241ecb736b3e58de88dc9152727786796acf760",
+    "path": "C:/tmp/rf-serilog-v2-context-main/started.json"
+  },
+  "warmup_seconds": 24.59399999999914,
+  "warmup_ref": {
+    "path": "C:\\tmp\\rf-serilog-v2-context-main\\warmup.json",
+    "sha256": "98eb78526ee917a4551954fa0c83dc266e17690fb97bd50c68e99ce8681589f3"
+  },
+  "schema": "v2-context-diagnostic-index.v1",
+  "observation": "initially started; subsequently externally stopped. Native terminal is missing and checkpoint has provider13 pending. See completion_observation_ref; do not infer a natural terminal or automatic resumability.",
+  "completion_observation_ref": {"path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261023\\serilog-v2-pair\\context-diagnostic-result.json", "sha256": "f31566210474b144cebc470839bd27e1dcbe10ccf92e7407950856bf3ca79839"},
+  "inspect_argv": [
+    "python",
+    "-m",
+    "scripts.dsh_run_request",
+    "--execution-config",
+    "C:\\tmp\\rf-serilog-v2-context-main\\runs\\.dsh-inputs\\dsh_90e3622119454273a946e9fa5d4310b0\\execution.json",
+    "--inspect-run",
+    "dsh_90e3622119454273a946e9fa5d4310b0",
+    "--view",
+    "evidence",
+    "--format",
+    "json"
+  ],
+  "question": "Does real B use the provided bounded source/history surface to investigate, choose targets and revise from observations? No prescribed solution or tool sequence.",
+  "verification": {
+    "normal_entry": "controlled CLI archive -> bounded history read -> candidate edits -> public failure -> retarget/revise -> recheck -> product handoff passed",
+    "recovery": "normal CLI interruption after history_read receipt before checkpoint passed; same logical run and cumulative calls, no duplicate action",
+    "existing_callers": "35 focused recovery/handoff/experience tests passed; no real provider/SDK used",
+    "extraction": "received/rejected/accounting-unconfirmed response facts preserved, no proposed strategy or retry; 4 main-agent counterexamples passed; agent also verified existing normal CLI extraction path",
+    "first_failures": [
+      "Archive test compared JSON array to dataclass tuple; corrected expectation without changing execution.",
+      "Review identified missing history_read receipt reconciliation; added and verified interruption.",
+      "Preparation attempted to parse YAML settings as JSON; failed before run allocation/model; fixed by exact raw-byte reference validation."
+    ]
+  },
+  "boundaries": [
+    "Single exposed-task absolute capability diagnostic, not U5 or memory efficacy comparison.",
+    "Model weights/context/permissions unchanged; 600s request, 1800s process, meter_only usage accounting.",
+    "No strategy injection or automatic terminal extraction configured.",
+    "Current native exchange and latest public check retained whole; history byte target not a hard guarantee against oversized active batches.",
+    "Original loop histories, provider records and costs preserved; task plan is model-authored advice, not additional authority.",
+    "Other page document WIP preserved and not included in commits."
+  ]
+}

@@ -1,7 +1,7 @@
 """Model context is a recoverable projection; the original execution stays intact."""
 import json
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 import pytest
 
@@ -53,6 +53,22 @@ def test_small_history_needs_no_archive_or_writes(state):
     before = set(state.root.rglob("*"))
     projected, facts = project_history(original, state, history_bytes=100000)
     assert projected is original and facts is None and set(state.root.rglob("*")) == before
+
+
+def test_archived_search_index_keeps_exact_query_and_result_without_invented_interpretation(state):
+    first = exchange("source_search", "search", "large original result" * 1000)
+    first.provider_state["tool_calls"][0]["function"]["arguments"] = {"query": "Destructuring"}
+    first.tool_results[0].output.update(execution="executed",
+        value={"total_matches": 225, "truncated": True})
+    original = request()
+    original = replace(original, historical_tool_exchanges=(first,))
+    _projected, projection = project_history(original, state, history_bytes=100)
+    fact = projection["archived_action_facts"][0]
+    assert fact["arguments"] == {"query": "Destructuring"}
+    assert fact["observation"] == {"total_matches": 225, "truncated": True}
+    assert fact["arguments_status"] == "exact_native_call_match"
+    assert not projection["archived_action_facts_truncated"]
+    assert "hypothesis" not in fact and "suggested_action" not in fact
 
 
 def test_large_current_batch_not_silently_clipped_or_native_pair_split(state):
