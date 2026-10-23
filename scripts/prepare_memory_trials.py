@@ -236,7 +236,7 @@ def run(*, ready_path, trial_id):
     return result_ref
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="mode", required=True)
     prepare_parser = sub.add_parser("prepare")
@@ -245,10 +245,31 @@ def main():
     run_parser = sub.add_parser("run")
     for name in ("ready-path", "trial-id"):
         run_parser.add_argument("--" + name, required=True)
-    args = vars(parser.parse_args())
+    v2 = sub.add_parser("prepare-v2", help="Prepare registered v2 B/B+ inputs without running models.")
+    v2.add_argument("--input-record", required=True)
+    v2.add_argument("--output-root", required=True)
+    check_v2 = sub.add_parser("verify-v2", help="Recheck saved v2 inputs and live strategy withdrawal state.")
+    check_v2.add_argument("--prepared-record", required=True)
+    args = vars(parser.parse_args(argv))
     mode = args.pop("mode")
+    if mode in {"prepare-v2", "verify-v2"}:
+        from src.mod_agent.evaluation.strategy_trial_preparation import (
+            prepare_strategy_trials,
+            verify_strategy_trials,
+        )
+
+        # 为什么要有它：新协议复用既有准备入口，准备与核对不能暗中派发求解或重启旧尝试。
+        try:
+            result = (prepare_strategy_trials(input_ref=ref(args["input_record"]), output_root=args["output_root"])
+                if mode == "prepare-v2" else verify_strategy_trials(prepared_ref=ref(args["prepared_record"])))
+        except (OSError, ValueError, RuntimeError, KeyError, TypeError) as error:
+            print(json.dumps({"status": "blocked", "reason": str(error)}, ensure_ascii=True))
+            return 2
+        print(json.dumps(result, ensure_ascii=True))
+        return 0
     print(json.dumps(prepare(**args) if mode == "prepare" else run(**args)))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

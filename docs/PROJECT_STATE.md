@@ -4,6 +4,14 @@
 
 ## 1. 当前正在做的工作
 
+可复用v2配对输入已接入既有准备入口：`python -m scripts.prepare_memory_trials prepare-v2 --input-record <已登记输入> --output-root <新目录>`；复验使用 `verify-v2 --prepared-record <prepared.json>`。同一任务的两臂由共同配置派生，B不注入策略，B+只使用冻结策略快照；各自分配运行身份和输出位置，提炼开关一致，Planning memory保持关闭。任务及顺序来自已登记协议，不硬编码仓库或任务数量；准备不启动模型、Build、测试或恢复。
+
+准备层复验原始需求／源码身份、包括二进制资源的源码字节、配置与协议引用、真实argv、worker输出重定位和策略最新撤回状态。仅重写prepared及其引用哈希，仍不能改变两臂的模型、预算或经验绑定。相对源码清单不会按当前目录当成外部文件引用；重复准备不覆盖原件。为什么要有它：公平比较应由实际输入保证，不能依赖调用者手工拼路径或自述两组相同。
+
+正常入口受控验证已运行两臂，每臂5次受控HTTP响应：B无策略，B+的策略进入实际请求；两组原生导出均为 `protocol_bound_before_model`、`source_and_request_verified`，实际共同条件hash一致（`a741809a2527354216438d7b80768a1e99905a9ad69eae1e5f6f6475bcc6eae0`）。原件索引为 `C:/Users/10160/AppData/Local/Temp/rfcscli-iwu5xwei/prepared/prepared.json`（SHA-256 `ea9560b6360c8c90bae33031b948c29f7790dc54300df16f583ce58a2d8b4f34`），两组导出分别在同根的 `export-B/execution.json`、`export-Bplus/execution.json`。统一证据入口也读取了这两个配置及实际运行ID；查询无执行副作用，外部引用维持partial。这里的策略和响应均为受控夹具，不计自动提炼、真实自主修复或迁移收益。
+
+本项仅完成实际输入准备、复验和正常消费；还未完成平台／模型冻结、真实B/B+运行或U5新任务结论。下一步使用这条已接通路径落实适用策略与实际开发任务，随后冻结运行；不把准备清单当试验结果。
+
 通用冻结批次执行器已接通v2待交付状态：`scripts.run_product_trial_batch --execute` 不再将 `awaiting_delivery` 提前判成产品失败，后续由既有交付适配器提供v2正式回执和合格独立判分。v2分支复用交付owner、原生执行导出验真与独立验收适配，不要求重建旧Plan；错候选、换judge、缺少回执及未验真原件均拒绝。正常命令入口的受控回归确认独立拒绝保留为失败，不伪造成成功。
 
 真实来源进一步绑定到最终候选的具体提交：必须匹配同一已验证应用请求、provider请求和真实完整响应的身份，运行中其他真实调用不能替代最终补丁来源。经统一证据入口选择B1原件后，零模型只读复核定位到 `request-013.json`（SHA-256 `4ff51c050cfe51f57b9db75fea4deb08a28c71b326dac2018a77a2708837401f`）、提交 `call_op0vxtsl`、generation `71ccd31f06f34cde`；原候选确实来自真实响应，但业务失败、unknown与未交付结论不变。
