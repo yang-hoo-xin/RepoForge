@@ -193,7 +193,11 @@ class TaskAgentExperiments:
         return {**payload, "catalog_ref": self.state.save("test-catalog", payload)}
 
     def registered_tests_run(self, *, source_revision_ref, catalog_ref, test_ids, operation_id, model_origin=None):
-        catalog = self.state.load(catalog_ref)
+        try:
+            catalog = self.state.load(catalog_ref)
+        except FileNotFoundError as error:
+            # 为什么要有它：目录引用不存在时尚未启动测试，应返回实际未执行的拒绝，不伪造未知副作用。
+            raise ExperimentRejectedError("CATALOG_REFERENCE_NOT_FOUND: obtain catalog_ref and test_ids from test_catalog; do not invent them") from error
         _require(catalog.get("schema") == "task-agent-test-catalog.v2"
             and catalog.get("task_contract_ref") == self.state.contract_ref, "CATALOG_TASK_MISMATCH")
         _require(self.test_runner is not None and catalog["runner_identity"] == self.test_runner.identity(), "RUNNER_CHANGED")

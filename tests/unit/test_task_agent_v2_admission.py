@@ -204,3 +204,37 @@ def test_missing_edit_explanation_is_recorded_without_blocking_authorized_code_c
     assert "rationale" not in session.actual_calls[-1]["arguments"]["edits"][0]
     with pytest.raises(TaskAgentV2StateError, match="stale_parent_revision"):
         action(session, "candidate_submit").prepare(arguments)
+
+
+def test_missing_experiment_catalog_returns_known_rejection_and_keeps_same_session(session, monkeypatch):
+    from src.mod_agent import task_agent_v2_experiment_tools as adapters
+    from src.mod_agent.task_agent_v2_experiments import TaskAgentExperiments
+
+    def unexpected_runner():
+        pytest.fail("A nonexistent catalog cannot dispatch tests")
+
+    experiments = TaskAgentExperiments(state=session.state, test_runner=SimpleNamespace(identity=unexpected_runner))
+    monkeypatch.setattr(adapters, "_experiments", lambda _session: experiments)
+    baseline = session.state.current_revision_ref
+    arguments = {"kind": "registered_test", "source_revision_ref": baseline,
+        "catalog_ref": "v2/test-catalog/" + "7" * 64 + ".json", "test_ids": ["invented"],
+        "hypothesis": "Check public behavior", "expected_observation": "Actual result"}
+    replies = [response("experiment_run", arguments, "missing-catalog"),
+        response("test_catalog", {}, "discover-options"),
+        AgentTurnResponse("ollama_chat_local", "local", "", (), stop_reason="refusal", provider_state={})]
+    requests = []
+
+    def complete(request):
+        requests.append(request)
+        return replies.pop(0)
+
+    result = session.run(SimpleNamespace(complete_turn=complete), session.observe_dispatch_event)
+    rejection = requests[1].tool_results[-1].output["value"]
+    assert rejection["status"] == "rejected" and rejection["executed"] is False
+    assert "CATALOG_REFERENCE_NOT_FOUND" in rejection["reason"]
+    assert requests[2].tool_results[-1].output["value"]["discovery_available"] is True
+    assert not result.unknown_effects
+    assert result.call_records["missing-catalog"]["status"] == "completed"
+    assert session.state.current_revision_ref == baseline
+    assert session.state.head["resources"]["model_calls"] == 3
+    assert not any(key.startswith("experiment:") for key in session.state.head["operations"])

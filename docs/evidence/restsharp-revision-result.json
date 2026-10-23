@@ -1,0 +1,23 @@
+{
+  "schema_version": "exposed_revision_trial_result_v1",
+  "run_root": "C:/tmp/rfext-restsharp-v2-revision-1",
+  "native_execution_ref": {
+    "path": "C:/tmp/rfext-restsharp-v2-revision-1/runs/dsh_1fd7a8c7c3fd491ab5bd30536e18076b/a/task-agent-execution/execution.json",
+    "sha256": "3ebec0e973f0fc792ba80903d527d7203ed726a1c937cfaa69e8aa821634e1eb"
+  },
+  "status": "unknown",
+  "termination": "TASK_AGENT_ACTION_OUTCOME_UNKNOWN",
+  "candidate_created": false,
+  "business_tests_started": false,
+  "independent_evaluation": "not_applicable_no_new_candidate",
+  "delivered": false,
+  "actual_choices": "Investigated source and updated plan; submitted a probe including a prohibited project file; after rejection, supplied an invented catalog reference and test ID.",
+  "direct_platform_defect": "Missing catalog FileNotFoundError was not classified before any test execution, causing an unknown-outcome terminal.",
+  "post_run_fix": "Only FileNotFoundError while loading the supplied catalog is now a known ExperimentRejectedError with executed=false. Errors after runner dispatch retain unknown handling.",
+  "saved_request_recheck": {"model_calls": 0, "test_runs": 0, "original_head_unchanged": true, "result": "CATALOG_REFERENCE_NOT_FOUND"},
+  "cost": {"responded_model_calls": 7, "input_tokens": 79762, "output_tokens": 1199, "total_tokens": 80961, "cached_input_tokens_included_in_input": 62485, "process_wall_seconds": 266.218},
+  "combined_known_model_cost_with_original_B1": {"calls": 21, "tokens": 298607},
+  "terminal_learning": {"status": "no_information_gain", "model_calls": 0},
+  "original_task_rewritten": false,
+  "why": "为什么要有它：模型选择无效与平台错误归类应分别保留，无候选不能制造独立评分或自主成功。"
+}
