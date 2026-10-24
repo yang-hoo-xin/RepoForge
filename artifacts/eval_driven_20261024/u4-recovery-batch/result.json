@@ -1,0 +1,36 @@
+{
+  "schema_version": "u4_recovery_delivery_integration_result_v1",
+  "status": "controlled_normal_entry_and_consumers_verified",
+  "baseline_commit": "bb6abea",
+  "intent": "intent.json",
+  "actual_changes": [
+    "Normal CLI recovery activates an invocation-specific existing Trace and retains actual provider request/response bindings in an immutable recovery receipt; original run trace is unchanged.",
+    "Existing continuation finalization indexes the receipt, including failed invocation facts; trace storage failure does not replace the original exception.",
+    "Shared measurement accepts explicitly selected recovery receipts in the original run, validates content-addressed checkpoints and actual request refs, and deduplicates observations without adding cumulative budgets.",
+    "Batch delivery uses the final independent verdict's native execution, verifies the same delivered candidate and its actual submit transport, and proves the checkpoint/rebase chain reaches the original execution.",
+    "Native strategy export uses verified original source/request conditions for comparison and the current candidate for delivery; a checkpoint-only origin is explicit, not a fabricated old terminal.",
+    "Batch remeasures after delivery or adapter failure. Missing cost remains unknown separately from delivery qualification; already measured recovery calls do not become a second unknown increment."
+  ],
+  "normal_entry": "python -m src.mod_agent.cli run-request --resume-task-agent <original checkpoint or failed-delivery receipt> --artifact-store-root <original store>; existing run_product_trial_batch and native strategy export consume the returned originals",
+  "verification": [
+    {"scope": "Normal CLI applied failure, observed HTTP recovery, new candidate and approval, actual controlled Build receipt, shared measurement, exact live-submit verification, original-native lineage and completed-delivery reader", "result": "passed; duplicate recovery selection and zero-model replay do not increase measured calls", "ref": {"path": "C:/tmp/rf-u4-recovery-delivery-consumers.xml", "sha256": "e2413f36a09d94e779ab098c5bb6267425c3aa67d8657391debf2a6306f36f60"}},
+    {"scope": "Normal CLI interruption and resume retains original trace unchanged", "result": "passed", "ref": {"path": "C:/tmp/rf-u4-recovery-trace-retention.xml", "sha256": "f1b9143233594b0abc9d9d17c00e0147173578487279339f57fb832489b5c5b3"}},
+    {"scope": "Transport error and trace-storage error retain original failure; absent response usage stays unknown", "result": "2 passed", "ref": {"path": "C:/tmp/rf-u4-recovery-trace-errors.xml", "sha256": "25be02dc26e8518fce088b1494b65e8baaceb9ea6776d532c1f0987afbfcb83e"}},
+    {"scope": "Batch and normal batch CLI final-native selection, wrong evidence rejection, post-failure remeasurement, missing cost, and already-measured receipt consumption", "result": "58 passed", "ref": {"path": "C:/tmp/rf-u4-batch-accounted-recovery.xml", "sha256": "bb4913309cc4aef09051c524a33b4fddb8b8384825df0f6ad3fa5ff211c0776d"}},
+    {"scope": "Existing terminal finalization behavior", "result": "17 passed", "ref": {"path": "C:/tmp/rf-u4-recovery-finalization.xml", "sha256": "05cad9ddd68fa697dc2f1760b5013f92e5741a713d214db3fdb6755cc588f6e4"}},
+    {"scope": "Shared identity lineage, existing export and actual normal recovery export", "result_record": "lineage-result.json", "result": "15 identity counterexamples, 4 existing CLI exports, and 2 actual controlled recovery/export paths passed"},
+    {"scope": "Shared measurement", "result_record": "measurement-intent.json", "result": "50 focused production-shaped cases passed; then parent normal CLI integration above passed"}
+  ],
+  "retained_failures": [
+    {"cause": "Original normal recovery had no recovery_execution_ref or associated actual transport trace", "ref": {"path": "C:/tmp/rf-u4-recovery-trace-before.xml", "sha256": "eb65b6dfbea710d65a221eaacea8eeade49f1576b07a8eda996d1a8e627c6f77"}},
+    {"cause": "Seven batch fixture failures: synthetic initial manifests omitted run identity. Fixtures were made representative; strict product identity checks retained", "ref": {"path": "C:/tmp/rf-u4-batch-integration-1.xml", "sha256": "c46eb805c4b27f1b586ebaf47ad0a7dbc50fb7a60155957e5f22fc37d7bedd2d"}},
+    {"cause": "Measurement's initial synthetic fixture used object checkpoint refs rather than production content-addressed strings", "record": "measurement-intent.json", "resolution": "Production load_v2_artifact reused; real CLI consumer verified"},
+    {"cause": "Historical tool result republication and incomplete new protocol fixtures", "record": "lineage-result.json", "resolution": "Original output content/hash equality preserved; existing protocol not weakened"},
+    {"cause": "Independent review found already measured recovery execution_refs erased known cost as if extra unmeasured calls", "resolution": "Exact ref membership separates measured history from extra cost; final regression passed"}
+  ],
+  "resource_scope": {"business_model_calls": 0, "sdk_business_executions": 0, "controlled_provider_responses": "test fixture responses through normal adapter/HTTP boundary", "platform_development_cost": "separate, not attributed to product task success", "human_active_minutes": null},
+  "independent_review": "Focused review found the accounted-recovery cost issue listed above; after exact-reference accounting fix, the reviewer confirmed it closed. No additional authorization or old-approval bypass found in the selected trace/finalization/batch scope.",
+  "claim_boundary": "Platform integration only. No new autonomous business repair, real-model recovery benefit, product superiority or U5 transfer result. Existing1531 negative result remains unchanged.",
+  "remaining": ["Use the fixed integrated version in a separately selected real task/experience comparison; no automatic replay of ended tasks", "Qualified temporary-probe execution environment remains unavailable", "Real autonomous investigation-to-action and correct delivery remain unproven", "U1-U5 and prior applicable requirements remain active; this is not whole-Goal or complete-U4 certification"],
+  "why": "为什么要有它：模型恢复后实际产生的决定和候选必须能进入正常交付、计量和评测；受控路径完成不能替代真实自主行为与业务结果。"
+}

@@ -11,6 +11,7 @@ from collections import Counter
 from pathlib import Path
 
 from src.mod_agent.evaluation.context_chain import _cost
+from src.mod_agent.task_agent_v2_state import load_v2_artifact
 from src.observability.dashboard.services.trace_service import TraceService
 from src.observability.patch_execution_index import project_product_execution
 
@@ -181,7 +182,69 @@ def _selected_calls(segments, manifests):
     return calls, orphan_requests, tools, duplicates
 
 
-def measure_product_task(*, allowed_root, run_root, run_id, continuation_roots=()):
+def _recovery_reference(ref, root):
+    path = _safe_reference(ref, root)
+    digest = ref.get("sha256")
+    if (not isinstance(digest, str) or len(digest) != 64
+            or any(char not in "0123456789abcdef" for char in digest)):
+        raise ValueError("Recovery execution reference needs a SHA256 binding.")
+    canonical = {"path": str(path), "sha256": digest}
+    return _read_bound(canonical, root), canonical
+
+
+def _recovery_segment(service, root, ref, known_identity, index):
+    document, selected_ref = _recovery_reference(ref, root)
+    if document.get("schema_version") != "task_agent_recovery_execution_v1":
+        raise ValueError("Selected recovery execution schema is invalid.")
+    for name in ("run_id", "request_id"):
+        if not known_identity.get(name) or document.get(name) != known_identity[name]:
+            raise ValueError(f"Recovery execution {name} identity mismatch.")
+    # These are reference integrity checks, not a successful-recovery gate.
+    # 为什么要有它：失败恢复仍须计入成本，交付资格由独立的候选链校验负责。
+    for name in ("resumed_from_checkpoint_ref", "v2_checkpoint_ref"):
+        load_v2_artifact(root / "a", document.get(name))
+    if document.get("native_execution_ref") is not None:
+        _recovery_reference(document["native_execution_ref"], root)
+    trace = document.get("execution_trace")
+    rows = document.get("execution_observations")
+    if (not isinstance(trace, dict) or not isinstance(trace.get("trace_id"), str)
+            or not trace["trace_id"] or not isinstance(rows, dict)):
+        raise ValueError("Recovery execution trace or observations are malformed.")
+    for key, row in rows.items():
+        if (not isinstance(row, dict) or not isinstance(key, str) or not key
+                or row.get("id") != key or row.get("trace_id") != trace["trace_id"]
+                or not isinstance(row.get("kind"), str) or not isinstance(row.get("name"), str)
+                or not isinstance(row.get("attributes", {}), dict)):
+            raise ValueError("Recovery observation identity or attributes are malformed.")
+        details = row.get("attributes", {}).get("local_detail_refs", {})
+        if not isinstance(details, dict):
+            raise ValueError("Recovery local detail references are malformed.")
+        for detail in details.values():
+            _safe_reference(detail, root)
+            if service._local_ref_summary(detail, root=root)["integrity"] != "verified_bytes":
+                raise ValueError("Recovery local detail reference is missing or changed.")
+    calls = []
+    for row in rows.values():
+        if row.get("kind") != "generation":
+            continue
+        parent_id = row.get("parent_id")
+        parent = rows.get(parent_id) if isinstance(parent_id, str) else None
+        if not isinstance(parent, dict) or parent.get("name") != "model.request":
+            raise ValueError("Recovery generation has no bound parent model.request observation.")
+        calls.append(service._product_call("recovery", root, parent, row, False))
+    count = document.get("model_calls_performed")
+    if type(count) is not int or count < 0 or count != len(calls):
+        raise ValueError("Recovery recorded generation count disagrees with observations.")
+    return {"segment_index": index, "run_root": str(root), "manifest_ref": None,
+        "result_ref": None, "execution_ref": selected_ref, "trace": trace,
+        "lineage": {"status": "explicit_recovery_execution_not_delivery_lineage"},
+        "calls": calls, "observation_coverage": "recorded",
+        "terminal": {"status": document.get("status"), "recorded_product_success": None,
+                     "product_record_status": "recovery_execution_only"},
+        "recorded_budget": None, "recorded_model_call_count": count}, document
+
+
+def measure_product_task(*, allowed_root, run_root, run_id, continuation_roots=(), execution_refs=()):
     """Measure selected records; do not invoke models, validators, or a workflow."""
     service = TraceService()
     allowed = service._existing_directory(_local_path(allowed_root), label="Allowed Runs Root")
@@ -245,6 +308,17 @@ def measure_product_task(*, allowed_root, run_root, run_id, continuation_roots=(
         })
         manifests.append(manifest)
 
+    selected_execution_refs = []
+    for ref in execution_refs:
+        segment, document = _recovery_segment(
+            service, original, ref, known_identity, len(segments))
+        if segment["execution_ref"] in selected_execution_refs:
+            duplicate_roots += 1
+            continue
+        selected_execution_refs.append(segment["execution_ref"])
+        segments.append(segment)
+        manifests.append(document)
+
     calls, orphans, tools, duplicate_observations = _selected_calls(segments, manifests)
     cost = _cost(calls, orphans)
     missing = [row["segment_index"] for row in segments if row["observation_coverage"] != "recorded"]
@@ -269,6 +343,7 @@ def measure_product_task(*, allowed_root, run_root, run_id, continuation_roots=(
         "read_only": True, "inspection_model_calls": 0,
         "selection_scope": "explicit_segments_only", "selected_scope_complete": None,
         "selected_segment_count": len(segments), "duplicate_selections_ignored": duplicate_roots,
+        "selected_execution_refs": selected_execution_refs,
         "duplicate_observations_ignored": duplicate_observations, "segments": segments,
         "model": {"generation_records": len(calls), "request_records_without_generation": orphans,
             "recorded_transport_started": sum(value is True for value in transport),

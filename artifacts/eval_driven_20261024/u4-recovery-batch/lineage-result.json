@@ -1,0 +1,36 @@
+{
+  "status": "focused_controlled_entry_verified",
+  "implementation": {
+    "helper": "src/mod_agent/evaluation/native_execution_lineage.py::validate_native_execution_lineage",
+    "consumer": "src/mod_agent/evaluation/strategy_native_export.py",
+    "scope": "Exact continuation lineage; initial frozen task conditions kept distinct from current candidate and actual delivery. No model or SDK execution.",
+    "checkpoint_only_origin": "When no initial execution.json ever existed, verify retained checkpoint and registered host with the existing U4 validators. Return initial_native_ref=null and explicit initial_checkpoint_ref; an explicitly requested initial native cannot be bypassed.",
+    "tool_result_identity": "The owner republishes historical tool results at native finalization. Changed result_ref is accepted only for verified equal bytes and the original completed event output hash; other tool origin fields remain exact."
+  },
+  "verification": [
+    {
+      "command": "python -m pytest tests/unit/test_native_execution_lineage.py -q --junitxml=C:/tmp/rf-u4-lineage-2.xml",
+      "result": "15 passed",
+      "reference": {"path": "C:/tmp/rf-u4-lineage-2.xml", "sha256": "27e7cf642fef266c0490a68f70337a25f3a31741d302c670478b15fd045f871e"}
+    },
+    {
+      "command": "python -m pytest tests/unit/test_strategy_native_export.py -q --junitxml=C:/tmp/rf-u4-export-1.xml",
+      "result": "4 passed; existing normal CLI export, frozen binding, unknown usage and adoption consumption",
+      "reference": {"path": "C:/tmp/rf-u4-export-1.xml", "sha256": "1afc557d10e432cfbe4725194fa9d489807300ab63191139d1eb4b95d7c4b459"}
+    },
+    {
+      "command": "python -m pytest tests/unit/test_strategy_native_export_recovery.py -q --basetemp=C:/tmp/rf-u4-export-recovery-5 --junitxml=C:/tmp/rf-u4-export-recovery-5.xml",
+      "result": "2 passed; normal CLI failed delivery rebase through final delivery/export, plus checkpoint-only interruption/recovery/export. Controlled responses and simulated builds only.",
+      "reference": {"path": "C:/tmp/rf-u4-export-recovery-5.xml", "sha256": "b60336f788d3e06bfe8c9c9508f759b0ea4a527505cc73410f01171d6ce12438"}
+    }
+  ],
+  "retained_failures": [
+    {"path": "C:/tmp/rf-u4-export-recovery-1.xml", "sha256": "764691a23a6574e46339f38fd71df5c81b7eadb0b0a696c582e2168beb2b7cac", "cause": "Over-strict result_ref equality rejected the owner's genuine historical-result republication."},
+    {"path": "C:/tmp/rf-u4-export-recovery-2.xml", "sha256": "bc706a849ff04fb9ad70a1e4d07fae074c71e17af19680a84d4db49f5cd4b201", "cause": "Additional diagnostic isolated the changing field as completed_tool_records[0].result_ref."},
+    {"path": "C:/tmp/rf-u4-export-recovery-3.xml", "sha256": "f89833634f5e3c5f432f34e2e7537f32df4ca8eae50969fc91592e002c60a6ea", "cause": "Checkpoint can precede result_ref materialization; second failure was incomplete diagnostic protocol fixture."},
+    {"path": "C:/tmp/rf-u4-export-recovery-4.xml", "sha256": "ae28fc61083f981f745cfd02202fdead5b0f6d62408d72c4c74d5ac44bbee91c", "cause": "Incomplete diagnostic protocol fixture; corrected against the existing planned-pair contract without weakening it."}
+  ],
+  "lint": "Ruff passed for all four changed Python files.",
+  "limitations": "Controlled platform evidence only. Batch delivery selection and recovery measurement integration belong to the parent task and are not declared complete here. No autonomous task success, independent business score, or product advantage is claimed.",
+  "why": "为什么要有它：正常恢复后的实际执行必须可验真、可计量，控制验证不能替代真实模型修复与交付结果。"
+}

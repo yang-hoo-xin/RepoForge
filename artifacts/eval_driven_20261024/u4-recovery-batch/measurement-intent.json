@@ -1,0 +1,22 @@
+{
+  "schema_version": "scoped_implementation_intent_v1",
+  "scope": "Extend measure_product_task with explicitly selected hash-bound recovery execution records in the original run; reuse native observation projection and accounting.",
+  "expected_effect": "Original and recovery calls are counted once, while conflicting identities and invalid bindings are rejected and incomplete usage remains unknown.",
+  "baseline": "Existing measurement of original manifest plus selected continuation directories; cumulative checkpoint budgets are not added costs.",
+  "verification": "Focused controlled task_measurement tests for recovery union, duplicate facts, identity, reference integrity, parent binding and unknown tails; no model or SDK execution.",
+  "verification_result": {
+    "command": ".venv/Scripts/python.exe -m pytest tests/unit/test_task_measurement.py -q --disable-warnings --maxfail=1",
+    "result": "47 passed, 1 warning in 4.92s; synthetic dict checkpoint fixture only, not the production checkpoint reference shape",
+    "lint_command": ".venv/Scripts/ruff.exe check src/mod_agent/evaluation/task_measurement.py tests/unit/test_task_measurement.py",
+    "lint_result": "All checks passed",
+    "model_calls": 0,
+    "sdk_executions": 0
+  },
+  "interface_correction": {
+    "finding": "Parent review found checkpoint references are content-addressed strings in run/a, unlike native_execution_ref path/hash objects; initial fixture did not expose this interface mismatch.",
+    "change": "Reuse load_v2_artifact(original_run_root/a, checkpoint_ref) for both checkpoint fields; retain native path/hash validation independently.",
+    "verification": "Same focused pytest command: 50 passed, 1 warning in 4.78s; Ruff clean. Checkpoints now created by production save_v2_artifact, with modified content, escaping path, dict and missing reference counterexamples.",
+    "scope": "Controlled production-shaped records; normal CLI integration remains the parent task's validation. No model or SDK execution."
+  },
+  "why": "为什么要有它：恢复后的新增真实调用不能漏计，也不能把累计预算、旧调用或未完成请求伪装成新增已知成本。"
+}

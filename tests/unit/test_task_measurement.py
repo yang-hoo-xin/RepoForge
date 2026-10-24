@@ -10,6 +10,7 @@ import pytest
 
 from scripts.measure_product_task import main
 from src.mod_agent.evaluation.task_measurement import measure_product_task
+from src.mod_agent.task_agent_v2_state import save_v2_artifact
 
 
 @pytest.fixture(autouse=True)
@@ -315,3 +316,111 @@ def test_continuation_terminal_hash_is_checked_even_without_request_identity(tmp
     _write(continuation / "run_result.json", tampered)
     with pytest.raises(ValueError, match="Terminal result hash mismatch"):
         _measure(root, continuation)
+
+
+def _recovery(root, *, trace="3" * 32, observations=None):
+    manifest = _read(root, "run_manifest.json")
+    rows = observations if observations is not None else manifest["execution_observations"]
+    if observations is None:
+        for row in rows.values():
+            row["trace_id"] = trace
+    checkpoint = save_v2_artifact(root / "a", "session-checkpoint",
+        {"schema": "task-agent-session-checkpoint.v2", "run_id": "run-one"})
+    document = {"schema_version": "task_agent_recovery_execution_v1",
+        "run_id": "run-one", "request_id": "request-one", "status": "failed",
+        "resumed_from_checkpoint_ref": checkpoint, "v2_checkpoint_ref": checkpoint,
+        "native_execution_ref": None, "execution_trace": {"trace_id": trace},
+        "execution_observations": rows,
+        "model_calls_performed": sum(row.get("kind") == "generation" for row in rows.values()),
+        "model_call_budget": {"consumed": 999}}
+    return _write(root / "recoveries/execution.json", document)
+
+
+def _measure_recovery(root, *refs):
+    return measure_product_task(allowed_root=root.parent, run_root=root, run_id=root.name,
+                                execution_refs=refs)
+
+
+def test_recovery_costs_merge_without_terminal_success_or_cumulative_budget(tmp_path):
+    root, _ = _fixture(tmp_path)
+    ref = _recovery(root)
+    before = {path: path.read_bytes() for path in root.rglob("*") if path.is_file()}
+    report = _measure_recovery(root, ref, ref)
+    assert report["model"]["generation_records"] == 2
+    assert report["model"]["usage"]["input_tokens"]["total"] == 20
+    assert report["tools"]["observed_calls"] == 2
+    assert report["selected_execution_refs"] == [ref]
+    assert report["duplicate_selections_ignored"] == 1
+    assert report["segments"][1]["manifest_ref"] is None
+    assert report["segments"][1]["execution_ref"] == ref
+    assert report["last_selected_terminal"]["recorded_product_success"] is None
+    assert {path: path.read_bytes() for path in root.rglob("*") if path.is_file()} == before
+
+
+def test_recovery_duplicate_observations_deduplicate_and_changed_facts_reject(tmp_path):
+    root, _ = _fixture(tmp_path)
+    rows = _read(root, "run_manifest.json")["execution_observations"]
+    ref = _recovery(root, trace="1" * 32, observations=rows)
+    report = _measure_recovery(root, ref)
+    assert report["model"]["generation_records"] == 1
+    assert report["duplicate_observations_ignored"] == 3
+    rows["generation"]["attributes"]["usage"]["input_tokens"] = 999
+    changed = _recovery(root, trace="1" * 32, observations=rows)
+    with pytest.raises(ValueError, match="conflicting recorded facts"):
+        _measure_recovery(root, changed)
+
+
+def test_failed_recovery_orphan_transport_preserves_unknown_tail(tmp_path):
+    root, _ = _fixture(tmp_path)
+    rows = {"tail": {"id": "tail", "name": "model.request", "kind": "span",
+        "trace_id": "3" * 32, "attributes": {"transport_started": True}}}
+    ref = _recovery(root, observations=rows)
+    report = _measure_recovery(root, ref)
+    assert report["model"]["usage"]["input_tokens"] == {
+        "total": None, "known_subtotal": 10, "observed_calls": 1}
+    assert len(report["model"]["request_records_without_generation"]) == 1
+    assert report["model"]["usage"]["generation_elapsed_ms_sum"] is None
+
+
+@pytest.mark.parametrize("damage", ["run", "request", "hash", "outside", "parent", "trace",
+    "row_key", "attributes", "details", "detail_hash", "detail_outside", "count", "checkpoint",
+    "checkpoint_outside", "checkpoint_dict", "checkpoint_missing"])
+def test_recovery_invalid_selected_evidence_rejected(tmp_path, damage):
+    root, _ = _fixture(tmp_path)
+    ref = _recovery(root)
+    document = json.loads(Path(ref["path"]).read_text())
+    rows = document["execution_observations"]
+    if damage in {"run", "request"}:
+        document[f"{damage}_id"] = "different"
+    elif damage == "parent":
+        del rows["request"]
+    elif damage == "trace":
+        rows["generation"]["trace_id"] = "other-trace"
+    elif damage == "row_key":
+        rows["generation"]["id"] = "other-id"
+    elif damage == "attributes":
+        rows["generation"]["attributes"] = []
+    elif damage == "details":
+        rows["generation"]["attributes"]["local_detail_refs"] = []
+    elif damage == "detail_hash":
+        rows["generation"]["attributes"]["local_detail_refs"]["request"]["sha256"] = "0" * 64
+    elif damage == "detail_outside":
+        rows["generation"]["attributes"]["local_detail_refs"]["request"]["path"] = str(tmp_path / "outside")
+    elif damage == "count":
+        document["model_calls_performed"] = 999
+    elif damage == "checkpoint":
+        checkpoint_path = root / "a" / document["v2_checkpoint_ref"]
+        checkpoint_path.write_text('{"schema":"tampered"}', encoding="utf-8")
+    elif damage == "checkpoint_outside":
+        document["resumed_from_checkpoint_ref"] = "../outside.json"
+    elif damage == "checkpoint_dict":
+        document["resumed_from_checkpoint_ref"] = {"path": "fake.json", "sha256": "0" * 64}
+    elif damage == "checkpoint_missing":
+        document["resumed_from_checkpoint_ref"] = None
+    ref = _write(Path(ref["path"]), document)
+    if damage == "hash":
+        ref["sha256"] = "0" * 64
+    elif damage == "outside":
+        ref = _write(tmp_path / "outside.json", document)
+    with pytest.raises(ValueError):
+        _measure_recovery(root, ref)

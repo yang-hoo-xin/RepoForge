@@ -11,6 +11,7 @@ from pathlib import Path
 from src.libs.llm.agent_turn import AgentUsage
 from src.mod_agent.artifacts import ArtifactRef, ArtifactStore
 from src.mod_agent.domain.full_project_compilation import _ref, _save
+from src.mod_agent.evaluation.native_execution_lineage import validate_native_execution_lineage
 from src.mod_agent.model_call_budget import validate_budget
 from src.mod_agent.model_qualification import canonical_hash, read_bound_json
 from src.mod_agent.task_agent_execution import _admitted_response, _read
@@ -196,11 +197,15 @@ def _project(request):
         selected_event = item["previous_event_ref"]
     _require(resource_event is not None and resource_event["contract_ref"] == state.contract_ref,
         "RESOURCE_EVENT_NOT_IN_NATIVE_HISTORY")
-    host, freeze = _host_and_freeze(state, native, request)
-    baseline = state.load(state.contract["baseline_manifest_ref"])
+    lineage = validate_native_execution_lineage(artifact_store_root=root, native_execution_ref=native_ref)
+    initial_state, initial_native = lineage["initial_state"], lineage["initial_native"]
+    initial_host, freeze = _host_and_freeze(initial_state, initial_native, request)
+    host = (state.load(state.head["operations"]["host-recovery-config"]["result"]["host_config_ref"])
+        if state.head["operations"].get("host-recovery-config") else None)
+    baseline = initial_state.load(initial_state.contract["baseline_manifest_ref"])
     source = read_bound_json(selected["source_ref"])
-    original_request = state.load(state.contract["original_request_ref"])["original_request"]
-    actual_conditions = _actual_conditions(state, native, host, original_request, baseline)
+    original_request = initial_state.load(initial_state.contract["original_request_ref"])["original_request"]
+    actual_conditions = _actual_conditions(initial_state, initial_native, initial_host, original_request, baseline)
     expected_source = {"source_files_sha256": canonical_hash({path: row["sha256"] for path, row in baseline["files"].items()}),
         "original_request_sha256": canonical_hash(original_request)}
     _require(all(source[key] == value for key, value in expected_source.items() if key in source), "PLANNED_TASK_SOURCE_CHANGED")
@@ -285,6 +290,8 @@ def _project(request):
             "task_contract_ref": state.contract_ref, "candidate_ref": revision},
         "model_request_ref": event["request_ref"], "experience_snapshot_ref": snapshot_ref,
         "native_execution_ref": native_ref, "native_call_id": call["call_id"], "known_cost": costs,
+        "execution_lineage": {"initial_native_ref": lineage["initial_native_ref"],
+            "initial_checkpoint_ref": lineage["initial_checkpoint_ref"], "chain": lineage["chain"]},
         "human_technical_interventions": None,
         "resource_evidence": {"budget_after": final_budget, "known_usage_sums": known_sums,
             "unknown_usage_calls": unknown_calls, "unknown_learning_usage_calls": unknown_learning,

@@ -230,29 +230,39 @@ def _verify_v2_delivery(adapter_result, run_root, run_id, initial_result, judge_
 
     为什么要有它：v2候选身份和正式交付回执须经原owner验证，旧Plan检查不能替代也不能阻断新协议。
     """
+    from src.mod_agent.evaluation.native_execution_lineage import validate_native_execution_lineage
     from src.mod_agent.evaluation.strategy_adoption import _evaluator_evidence
     from src.mod_agent.evaluation.strategy_native_export import validate_native_strategy_execution
     from src.mod_agent.task_agent_v2_delivery import read_completed_v2_delivery
 
-    native_ref = initial_result.get("task_agent_execution_ref") or initial_result.get("task_agent_outcome", {}).get("execution_ref")
+    initial_ref = initial_result.get("task_agent_execution_ref") or initial_result.get("task_agent_outcome", {}).get("execution_ref")
+    initial = json.loads(_read_reference(initial_ref, root=run_root))
+    verdict_ref = adapter_result.get("verification_report_ref")
+    verdict = json.loads(_read_reference(verdict_ref, root=run_root))
+    execution = json.loads(_read_reference(verdict["execution_ref"], root=run_root))
+    native_ref = execution["native_execution_ref"]
     native = json.loads(_read_reference(native_ref, root=run_root))
     if native.get("schema_version") != "task-agent-product-execution.v2" or native.get("run_id") != run_id:
         raise ValueError("V2 trial native execution identity mismatch.")
+    if (initial.get("run_id") != run_id or initial.get("schema_version") != "task-agent-product-execution.v2"
+            or native.get("request_id") != initial.get("request_id")):
+        raise ValueError("V2 trial recovery task identity mismatch.")
+    lineage = None
+    if native_ref != initial_ref:
+        lineage = validate_native_execution_lineage(artifact_store_root=run_root / "a",
+            native_execution_ref=native_ref, initial_native_ref=initial_ref)
     receipt = adapter_result.get("v2_delivery_receipt_ref")
     if not isinstance(receipt, str):
         raise ValueError("V2 trial requires the original completed delivery receipt.")
     delivered = read_completed_v2_delivery(artifact_store_root=run_root / "a", receipt_ref=receipt,
         native_execution_ref=native_ref)
     live_submission = _verify_v2_live_submission(run_root, native, delivered, measurement)
-    verdict_ref = adapter_result.get("verification_report_ref")
-    verdict = json.loads(_read_reference(verdict_ref, root=run_root))
     if (verdict.get("schema_version") != "independent_strategy_verdict_v1"
             or verdict.get("independent") is not True or verdict.get("batch_complete") is not True
             or verdict.get("evaluator_ref") != judge_ref or verdict.get("task_success") is not True
             or verdict.get("preservation_passed") is not True
             or verdict.get("candidate_source_id") != delivered["candidate_source_id"]):
         raise ValueError("V2 trial independent verdict is not bound to its delivered candidate and selected judge.")
-    execution = json.loads(_read_reference(verdict["execution_ref"], root=run_root))
     if (execution.get("native_execution_ref") != native_ref
             or execution.get("candidate_source_id") != delivered["candidate_source_id"]
             or execution.get("candidate_state", {}).get("candidate_ref") != delivered["candidate_ref"]):
@@ -267,7 +277,40 @@ def _verify_v2_delivery(adapter_result, run_root, run_id, initial_result, judge_
         "native_execution_ref": native_ref, "delivery_receipt_ref": receipt,
         "candidate_source_id": delivered["candidate_source_id"], "candidate_ref": delivered["candidate_ref"],
         "verification_report_ref": verdict_ref, "evaluator_evidence": verified,
-        "live_submission": live_submission, "native_evidence": native_evidence}
+        "live_submission": live_submission, "native_evidence": native_evidence,
+        "initial_native_execution_ref": initial_ref,
+        "recovery_chain": lineage["chain"] if lineage is not None else []}
+
+
+def _recovery_execution_refs(run_root, run_id, request_id):
+    """Read only explicitly indexed continuation receipts, never pick a directory.
+
+    为什么要有它：恢复成本从已有终态索引消费，不能猜最新路径或重复累加累计账本。
+    """
+    manifest = json.loads((run_root / "run_manifest.json").read_bytes())
+    if manifest.get("run_id") != run_id or manifest.get("request_id") != request_id:
+        raise ValueError("Recovery measurement task identity mismatch.")
+    selected = []
+    for reference in manifest.get("outcome_boundaries", []):
+        boundary = json.loads(_read_reference(reference, root=run_root))
+        if (boundary.get("schema") != "run_outcome_boundary_v1" or boundary.get("run_id") != run_id
+                or boundary.get("request_id") != request_id):
+            raise ValueError("Recovery boundary task identity mismatch.")
+        receipt = boundary.get("result", {}).get("recovery_execution_ref")
+        if receipt is None and boundary.get("event") == "recovery_return":
+            raise ValueError("Recovery execution observations are unavailable.")
+        if receipt is not None and receipt not in selected:
+            _read_reference(receipt, root=run_root)
+            selected.append(receipt)
+    return selected
+
+
+def _measurement_metrics(measurement):
+    usage = measurement["model"]["usage"]
+    return {"input_tokens": usage["input_tokens"]["total"],
+        "output_tokens": usage["output_tokens"]["total"], "model_generation_records": measurement["model"]["generation_records"],
+        "observed_tool_calls": measurement["tools"]["selected_record_total"],
+        "model_elapsed_ms_sum": usage["generation_elapsed_ms_sum"], "full_delivery_cost": False}
 
 
 def _delivery(adapter_result, run_root, run_id, measurement, initial_result, judge_ref=None):
@@ -283,12 +326,17 @@ def _delivery(adapter_result, run_root, run_id, measurement, initial_result, jud
     refs = adapter_result.get("evidence_refs", [])
     for reference in refs:
         _read_reference(reference, root=run_root)
-    public_records = [json.loads(_read_reference(ref, root=run_root)) for ref in adapter_result.get("execution_refs", [])]
+    execution_refs = adapter_result.get("execution_refs", [])
+    public_records = [json.loads(_read_reference(ref, root=run_root)) for ref in execution_refs]
+    selected = {(_path(ref["path"]), ref["sha256"]) for ref in measurement.get("selected_execution_refs", [])}
+    accounted = [(_path(ref["path"]), ref["sha256"]) in selected for ref in execution_refs]
+    # 为什么要有它：已核验计量的恢复调用不再算未计量增量；未计量的交付调用仍须保留未知。
     known_zero_models = bool(public_records) and all(record.get("run_id") == run_id
-        and record.get("model_calls_performed") == 0 for record in public_records)
+        and (counted or record.get("model_calls_performed") == 0)
+        for record, counted in zip(public_records, accounted, strict=True))
     observed = {(row["trace_id"], row["observation_id"]) for row in measurement["tools"]["observations"]}
     tool_count, tools_known = 0, known_zero_models
-    for record in public_records:
+    for record, counted in zip(public_records, accounted, strict=True):
         native = record.get("execution_observations")
         trace_id = (record.get("execution_trace") or {}).get("trace_id")
         if not isinstance(native, dict) or not trace_id:
@@ -297,7 +345,7 @@ def _delivery(adapter_result, run_root, run_id, measurement, initial_result, jud
         for key, observation in native.items():
             if observation.get("id") != key:
                 raise ValueError("Delivery observation identity mismatch.")
-            if observation.get("kind") == "generation":
+            if observation.get("kind") == "generation" and not counted:
                 known_zero_models = False
             if observation.get("kind") == "tool" and (trace_id, key) not in observed:
                 tool_count += 1
@@ -396,11 +444,7 @@ def run_product_trial_batch(spec, *, execute=False, delivery_adapter=None, comma
                 row["comparison_identity"]["requested_operation_flags"] = sorted(flag for flag in spec_row["business_argv"]
                     if flag in {"--confirm-isolated-write", "--allow-build", "--allow-game-launch",
                         "--allow-game-directory-write", "--run-gtfo-runtime", "--defer-approval"})
-            usage = measurement["model"]["usage"]
-            row["metrics"] = {"input_tokens": usage["input_tokens"]["total"],
-                "output_tokens": usage["output_tokens"]["total"], "model_generation_records": measurement["model"]["generation_records"],
-                "observed_tool_calls": measurement["tools"]["selected_record_total"],
-                "model_elapsed_ms_sum": usage["generation_elapsed_ms_sum"], "full_delivery_cost": False}
+            row["metrics"] = _measurement_metrics(measurement)
             if completed.returncode != 0 or result.get("status") not in {"awaiting_approval", "awaiting_delivery", "completed", "built"}:
                 row.update(status="product_failed", success=False, terminal_status=result.get("status"))
                 continue
@@ -411,11 +455,23 @@ def run_product_trial_batch(spec, *, execute=False, delivery_adapter=None, comma
                     "initial_result": deepcopy(result), "initial_manifest": deepcopy(manifest), "judge_ref": deepcopy(judge_ref)})
             finally:
                 row["delivery_seconds"] = time.perf_counter() - delivery_started
+                try:
+                    recovery_refs = _recovery_execution_refs(run_root, row["run_id"], manifest.get("request_id"))
+                    measurement = measure_product_task(allowed_root=spec_row["allowed_root"], run_root=run_root,
+                        run_id=row["run_id"], execution_refs=recovery_refs)
+                    row["recovery_execution_refs"] = recovery_refs
+                    row["metrics"] = _measurement_metrics(measurement)
+                except Exception as error:
+                    # 为什么要有它：恢复计量故障不能保留看似完整的旧成本，也不能覆盖适配器的原始异常。
+                    row["delivery_measurement_failure"] = {"type": type(error).__name__, "message": str(error)}
+                    row["metrics"] = dict.fromkeys(row["metrics"])
+                    row["metrics"]["full_delivery_cost"] = False
             _read_reference(judge_ref)
             delivery = _delivery(raw_delivery, run_root, row["run_id"], measurement, result, judge_ref)
             row.update(delivery=delivery, status=delivery["status"], success=delivery["success"])
-            row["metrics"]["full_delivery_cost"] = delivery["model_cost_known_zero"]
-            if not delivery["model_cost_known_zero"]:
+            row["metrics"]["full_delivery_cost"] = (delivery["model_cost_known_zero"]
+                and not row.get("delivery_measurement_failure"))
+            if not row["metrics"]["full_delivery_cost"]:
                 for key in ("input_tokens", "output_tokens", "model_generation_records"):
                     row["metrics"][key] = None
             extra_tools = delivery["additional_observed_tools"]

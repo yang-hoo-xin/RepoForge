@@ -1,0 +1,10 @@
+{
+  "scope": "U4 normal recovery through final delivery and batch consumption; U1-U5 retained",
+  "baseline": "bb6abea; product batch validates initial native only and measures before delivery; normal CLI resume does not activate ExecutionTrace",
+  "expected_effect": "Resumed technical requests retain actual transport references. Final delivery resolves to its own verified native execution, linked back to the original task; recovery calls are counted once rather than omitted or treated as zero.",
+  "first_dependency": "Reuse existing Trace configuration for one immutable local recovery execution receipt, without replacing original manifest/trace or changing solver input.",
+  "verification": "Existing controlled normal CLI interruption/recovery and applied-public-failure recovery; verify actual HTTP request/response references, zero-call replay, same task and cumulative budget. Then integrate final native/rebase identity and shared measurement, with wrong task/candidate, old receipt, duplicate and unknown cost counterexamples.",
+  "real_model_scope": "No new business model or SDK benchmark in this platform-only change. Do not restart ended1531,1552,RestSharp,Polly orSerilog trials. A later model validation requires a separately selected question and frozen conditions.",
+  "remaining_dependencies": ["Batch final native must come from validated delivery receipt rather than initial candidate", "Rebase export must retain original source registration and historical execution chain", "Shared measurement must consume resumed trace receipts without duplicating original provider turns"],
+  "why": "为什么要有它：恢复后真实产生的新候选必须能进入同一交付和评测流程，真实传输、版本与累计成本不能在调用者边界丢失；局部回归不计自主成功。"
+}

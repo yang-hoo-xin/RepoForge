@@ -1,0 +1,8 @@
+{
+  "scope": "Read-only native continuation lineage and strategy export after delivery rebase",
+  "expected_effect": "Accept proven same-task continuations without substituting the applied baseline for preregistered initial conditions; reject unrelated executions with matching IDs.",
+  "baseline": "Batch pins initial native; native strategy export compares the rebased baseline with preregistered initial source.",
+  "verification": "Focused controlled native-lineage counterexamples and existing normal-entry strategy export tests. No model or SDK execution.",
+  "boundaries": "Reuse validate_v2_delivery_rebase for authority, actual source and resource validation. Do not change historical records or count controlled tests as autonomous success.",
+  "why": "为什么要有它：合法恢复必须保持初始比较条件及最终候选身份，不能用同名任务或重新计费冒充连续执行。"
+}

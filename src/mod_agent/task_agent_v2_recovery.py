@@ -563,6 +563,50 @@ def _activate_delivery_rebase(root, rebase_ref):
     return ref
 
 
+@contextmanager
+def _recovery_execution_trace(owner, host, checkpoint_ref):
+    """Retain one recovery invocation without replacing the original run trace.
+
+    为什么要有它：恢复模型的真实发送内容及新增用量也必须可核验，不能由旧调用的真实性代替。
+    """
+    from src.mod_agent.patch_execution_trace import PatchExecutionTraceConfiguration
+
+    graph = host["graph_state"]
+    configuration = PatchExecutionTraceConfiguration()
+    observations, returned = {}, {}
+    trace = configuration.make_trace(run_id=graph["run_id"], request_id=graph["request_id"],
+        feature_id=graph["feature_id"], artifact_store_root=owner.store.root,
+        recorder=lambda row: observations.update({row["id"]: row}), root_name="product.recovery")
+    trace.context.metadata["local_body_root"] = str(owner.output_root)
+    failure = None
+    try:
+        with trace.activate():
+            yield returned
+    except BaseException as error:
+        failure = error
+        raise
+    finally:
+        summary = configuration.finish(trace)
+        summary.update(trace_id=trace.context.trace_id, session_id=trace.session_id, environment=trace.environment)
+        receipt = getattr(owner, "_receipt", None)
+        document = {"schema_version": "task_agent_recovery_execution_v1",
+            "run_id": graph["run_id"], "request_id": graph["request_id"],
+            "resumed_from_checkpoint_ref": checkpoint_ref,
+            "v2_checkpoint_ref": owner.v2_checkpoint_ref,
+            "native_execution_ref": receipt.execution_ref if receipt is not None else None,
+            "status": "failed" if failure else "returned", "error_type": type(failure).__name__ if failure else None,
+            "execution_trace": summary, "execution_observations": observations,
+            "model_calls_performed": sum(row.get("kind") == "generation" for row in observations.values()),
+            "model_call_count_basis": "observed_transport_started_in_this_invocation_not_cumulative_budget"}
+        try:
+            returned["recovery_execution_ref"] = owner._save("recovery-execution.json", document)
+            if failure is not None:
+                failure.recovery_execution_ref = returned["recovery_execution_ref"]
+        except Exception as error:
+            returned["recovery_execution_status"] = "unavailable"
+            returned["recovery_execution_error"] = type(error).__name__
+
+
 def resume_v2_task_agent(*, artifact_store_root, checkpoint_ref):
     from src.mod_agent.run_outcome_finalization import finalize_continuation
 
@@ -653,18 +697,19 @@ def _resume_v2_task_agent(*, artifact_store_root, checkpoint_ref):
         _require(asdict(owner.policy) == host["policy"], "POLICY_CHANGED")
         owner._resume_v2 = loaded
         owner._resume_lock_held = True
-        outcome = owner(deepcopy(host["graph_state"]))
-        if outcome.status == "candidate_ready":
-            from src.mod_agent.task_agent_v2_delivery import finish_resumed_v2_handoff
-            result = finish_resumed_v2_handoff(owner=owner, outcome=outcome, state=deepcopy(host["graph_state"]))
-        else:
-            result = {"status": outcome.status, "run_id": host["graph_state"]["run_id"],
-                "request_id": host["graph_state"]["request_id"], "outcome": outcome.to_dict()}
-        learning = owner.complete_terminal_learning()
-        timing_ref = owner.observe_task_boundary("resumed_product_return", status=result["status"])
+        with _recovery_execution_trace(owner, host, loaded["checkpoint_ref"]) as recovery_trace:
+            outcome = owner(deepcopy(host["graph_state"]))
+            if outcome.status == "candidate_ready":
+                from src.mod_agent.task_agent_v2_delivery import finish_resumed_v2_handoff
+                result = finish_resumed_v2_handoff(owner=owner, outcome=outcome, state=deepcopy(host["graph_state"]))
+            else:
+                result = {"status": outcome.status, "run_id": host["graph_state"]["run_id"],
+                    "request_id": host["graph_state"]["request_id"], "outcome": outcome.to_dict()}
+            learning = owner.complete_terminal_learning()
+            timing_ref = owner.observe_task_boundary("resumed_product_return", status=result["status"])
         return {**result, "v2_checkpoint_ref": owner.v2_checkpoint_ref,
             **({"resumed_from_rebase_ref": rebase_ref} if rebase_ref else {}),
             "resumed_from_checkpoint_ref": loaded["checkpoint_ref"], "new_task_created": False,
             "strategy_learning": learning,
-            "task_timing_ref": timing_ref,
+            "task_timing_ref": timing_ref, **recovery_trace,
             "cumulative_resources": loaded["state"].head["resources"]}

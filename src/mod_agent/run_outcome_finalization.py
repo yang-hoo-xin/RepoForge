@@ -145,7 +145,7 @@ def finalize_continuation(*, artifact_store_root, event, result=None, checkpoint
             "status", "run_id", "request_id", "feature_id", "new_task_created", "replayed",
             "receipt_ref", "candidate_source_id", "whole_task_delivered", "v2_checkpoint_ref",
             "v2_delivery_checkpoint_ref", "resumed_from_checkpoint_ref", "resumed_from_rebase_ref",
-            "resumed_from_delivery_receipt_ref", "task_timing_ref") if key in original}
+            "resumed_from_delivery_receipt_ref", "task_timing_ref", "recovery_execution_ref") if key in original}
         outcome = original.get("task_agent_outcome", original.get("outcome", {}))
         if isinstance(outcome, dict) and outcome.get("execution_ref"):
             payload["native_execution_ref"] = outcome["execution_ref"]
@@ -170,6 +170,8 @@ def finalize_continuation(*, artifact_store_root, event, result=None, checkpoint
             except (OSError, ValueError, TypeError, AttributeError):
                 boundary["checkpoint_status"] = "unavailable_or_unverified"
         if error is not None:
+            if getattr(error, "recovery_execution_ref", None) is not None:
+                boundary["result"]["recovery_execution_ref"] = error.recovery_execution_ref
             boundary.update(status="blocked", error_type=type(error).__name__,
                 execution_status="not_executed" if event == "recovery_admission_rejected" else "unknown",
                 reason="Resume was not dispatched" if event == "recovery_admission_rejected"

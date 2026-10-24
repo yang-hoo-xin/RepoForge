@@ -175,11 +175,31 @@ def test_normal_entry_interruption_reconstructs_owner_and_finishes_same_product(
             str(store), reference], check=True, capture_output=True, text=True)
         assert json.loads(child.stdout) == {"turns": 5, "contract": saved["task_contract_ref"]}
     from src.mod_agent import cli
+    manifest_path = store.parent / "run_manifest.json"
+    original_manifest = json.loads(manifest_path.read_bytes())
     exit_code = cli.main(["run-request", "--resume-task-agent", reference, "--artifact-store-root", str(store)])
     result = json.loads(capsys.readouterr().out)
     assert exit_code == 0, result
     assert result["status"] == "awaiting_delivery", result.get("outcome", {}).get("termination", result)
     assert result["new_task_created"] is False
+    from src.mod_agent.model_qualification import read_bound_json
+    recovery_execution = read_bound_json(result["recovery_execution_ref"])
+    assert recovery_execution["run_id"] == result["run_id"]
+    assert recovery_execution["request_id"] == result["request_id"]
+    assert recovery_execution["resumed_from_checkpoint_ref"] == result["resumed_from_checkpoint_ref"]
+    assert recovery_execution["execution_trace"]["logical_request_id"] == result["request_id"]
+    assert recovery_execution["execution_observations"]
+    after_manifest = json.loads(manifest_path.read_bytes())
+    for key in ("execution_trace", "execution_observations"):
+        assert after_manifest[key] == original_manifest[key]
+    resumed_native = read_bound_json(result["task_agent_outcome"]["execution_ref"])
+    new_turns = [turn for turn in resumed_native["provider_turns"]
+        if Path(turn["request_ref"]["path"]).parent == Path(result["task_agent_outcome"]["execution_ref"]["path"]).parent]
+    assert new_turns
+    assert recovery_execution["model_calls_performed"] == len(new_turns)
+    for turn in new_turns:
+        read_bound_json(turn["provider_request_ref"])
+        read_bound_json(turn["response_ref"])
     assert result["request_id"] == host["graph_state"]["request_id"]
     assert result["run_id"] == host["graph_state"]["run_id"]
     expected_turns = 20 if boundary == "history_receipt" else 13
@@ -192,6 +212,43 @@ def test_normal_entry_interruption_reconstructs_owner_and_finishes_same_product(
     assert len(state_views) == expected_turns
     assert state_views[0]["current_revision_ref"] == final["state"].contract["baseline_manifest_ref"]
     assert state_views[-1]["current_revision_ref"] == final["state"].current_revision_ref
+
+
+@pytest.mark.parametrize("storage_fails", [False, True])
+def test_recovery_trace_preserves_original_exception_and_unknown_response(tmp_path, storage_fails):
+    from types import SimpleNamespace
+
+    from src.core.trace.execution_trace import current_trace
+    from src.mod_agent.domain.full_project_compilation import _save
+    from src.mod_agent.model_qualification import read_bound_json
+    from src.mod_agent.task_agent_v2_recovery import _recovery_execution_trace
+
+    def save(name, value):
+        if storage_fails:
+            raise OSError("controlled storage failure")
+        return _save(tmp_path / name, value)
+
+    owner = SimpleNamespace(store=SimpleNamespace(root=tmp_path), output_root=tmp_path,
+        v2_checkpoint_ref="checkpoint-after", _receipt=None, _save=save)
+    host = {"graph_state": {"run_id": "run", "request_id": "request", "feature_id": "feature"}}
+    error = RuntimeError("controlled transport failure")
+    with pytest.raises(RuntimeError) as caught:
+        with _recovery_execution_trace(owner, host, "checkpoint-before") as projection:
+            with current_trace().model_call({"provider": "controlled", "usage_available": False}) as call:
+                call.transport_started()
+                raise error
+    assert caught.value is error
+    if storage_fails:
+        assert projection["recovery_execution_status"] == "unavailable"
+        assert not hasattr(error, "recovery_execution_ref")
+    else:
+        record = read_bound_json(error.recovery_execution_ref)
+        assert record["status"] == "failed" and record["error_type"] == "RuntimeError"
+        assert record["model_calls_performed"] == 1
+        generations = [row for row in record["execution_observations"].values() if row["kind"] == "generation"]
+        assert len(generations) == 1 and generations[0]["status"] == "failed"
+        assert "usage" not in generations[0]["attributes"]
+    assert current_trace() is None
 
 
 @pytest.mark.parametrize("drift", ["source", "worker", "deadline"])
@@ -471,13 +528,35 @@ def test_cli_resumes_applied_public_failure_from_actual_source_and_requires_new_
                 {"function": {"name": name, "arguments": args}}]}})
 
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", transport)
+    from src.mod_agent.evaluation.task_measurement import measure_product_task
+    initial_measurement = measure_product_task(allowed_root=store.parent.parent, run_root=store.parent,
+        run_id=old_checkpoint["run_id"])
     code = cli.main(["run-request", "--resume-task-agent", failed["receipt_ref"], "--artifact-store-root", str(store)])
     result = json.loads(capsys.readouterr().out)
     assert code == 0 and result["status"] == "awaiting_delivery", result
     assert len(requests) == 5 and result["cumulative_resources"]["model_calls"] == 18
+    from src.mod_agent.model_qualification import read_bound_json
+    recovery_execution = read_bound_json(result["recovery_execution_ref"])
+    assert recovery_execution["model_calls_performed"] == 5
+    assert recovery_execution["native_execution_ref"] == result["task_agent_outcome"]["execution_ref"]
+    recovered_measurement = measure_product_task(allowed_root=store.parent.parent, run_root=store.parent,
+        run_id=old_checkpoint["run_id"], execution_refs=[result["recovery_execution_ref"]])
+    assert recovered_measurement["model"]["generation_records"] == initial_measurement["model"]["generation_records"] + 5
+    assert len(recovered_measurement["model"]["calls"]) == recovered_measurement["model"]["generation_records"]
+    assert all(call["local_evidence"]["provider_request"]["integrity"] == "verified_bytes"
+        for call in recovered_measurement["model"]["calls"])
     assert result["run_id"] == old_checkpoint["run_id"] and result["request_id"] == old_checkpoint["request_id"]
     checkpoint_ref = result["v2_delivery_checkpoint_ref"]
     new_delivery = load_v2_artifact(store, checkpoint_ref)
+    from src.mod_agent.evaluation.native_execution_lineage import validate_native_execution_lineage
+    from src.mod_agent.evaluation.product_trial_batch import _verify_v2_live_submission
+    lineage = validate_native_execution_lineage(artifact_store_root=store,
+        native_execution_ref=result["task_agent_outcome"]["execution_ref"],
+        initial_native_ref=old_checkpoint["handoff"]["execution_ref"])
+    live = _verify_v2_live_submission(store.parent, lineage["final_native"], {
+        "candidate_ref": new_delivery["handoff"]["candidate_ref"]}, recovered_measurement)
+    assert live["call_id"] == lineage["final_state"].validate_candidate(
+        new_delivery["handoff"]["candidate_ref"])["model_origin"]["call_id"]
     new_state = TaskAgentV2State(store, new_delivery["handoff"]["task_contract_ref"])
     assert new_state.load(new_state.contract["baseline_manifest_ref"])["source_root"] == applied["applied_source_root"]
     assert new_delivery["resource_record"]["delivery_applies"] == new_delivery["resource_record"]["delivery_builds"] == 1
@@ -513,6 +592,10 @@ def test_cli_resumes_applied_public_failure_from_actual_source_and_requires_new_
     assert built["resource_record"]["delivery_applies"] == built["resource_record"]["delivery_builds"] == 2
     assert built["resource_record"]["model_budget"]["consumed"] == 18
     assert built["delivered_artifact_refs"]
+    from src.mod_agent.task_agent_v2_delivery import read_completed_v2_delivery
+    delivered = read_completed_v2_delivery(artifact_store_root=store, receipt_ref=built["receipt_ref"],
+        native_execution_ref=result["task_agent_outcome"]["execution_ref"])
+    assert delivered["candidate_source_id"] == built["candidate_source_id"]
     import hashlib
     for artifact in built["delivered_artifact_refs"]:
         assert Path(artifact["path"]).resolve().is_relative_to(Path(built["applied_source_root"]).resolve())
@@ -521,3 +604,8 @@ def test_cli_resumes_applied_public_failure_from_actual_source_and_requires_new_
     code = cli.main(["run-request", "--resume-task-agent", failed["receipt_ref"], "--artifact-store-root", str(store)])
     replay = json.loads(capsys.readouterr().out)
     assert code == 0 and replay["cumulative_resources"]["model_calls"] == 18 and len(requests) == 5, replay
+    assert read_bound_json(replay["recovery_execution_ref"])["model_calls_performed"] == 0
+    replay_measurement = measure_product_task(allowed_root=store.parent.parent, run_root=store.parent,
+        run_id=old_checkpoint["run_id"], execution_refs=[result["recovery_execution_ref"],
+            result["recovery_execution_ref"], replay["recovery_execution_ref"]])
+    assert replay_measurement["model"]["generation_records"] == recovered_measurement["model"]["generation_records"]

@@ -66,7 +66,8 @@ def _runner(log, *, failed_arm=None, missing_run=False, changed_budget=False):
         if missing_run:
             return SimpleNamespace(returncode=2, stderr="startup failed")
         root.mkdir(parents=True)
-        manifest = {"request": "same task", "source_snapshot_sha256": "s" * 64,
+        manifest = {"run_id": root.name, "request_id": "request-" + root.name,
+            "request": "same task", "source_snapshot_sha256": "s" * 64,
             "ollama_patch_generation_profile": {"model": "model", "context_window": 32768, "output_budget": 4096, "timeout_seconds": 180},
             "nuget_isolated_build_profile": {"timeout_seconds": 120},
             "model_admission": {"model": "model", "model_digest": "m" * 64, "provider": "local",
@@ -116,7 +117,7 @@ def test_prepare_preserves_original_argv_and_performs_no_execution(tmp_path):
     assert output["summary"]["by_arm"]["baseline"]["completion_fraction"] is None
 
 
-@pytest.mark.parametrize("damage", [None, "receipt", "candidate", "judge", "native", "unqualified"])
+@pytest.mark.parametrize("damage", [None, "receipt", "candidate", "judge", "native", "unqualified", "resume", "unlinked_resume"])
 def test_v2_pending_delivery_reaches_native_receipt_and_independent_verdict(tmp_path, monkeypatch, damage):
     from src.mod_agent.evaluation import product_trial_batch as batch
 
@@ -127,6 +128,16 @@ def test_v2_pending_delivery_reaches_native_receipt_and_independent_verdict(tmp_
     monkeypatch.setattr(batch, "_verify_v2_live_submission", lambda *_: {"scope": "controlled_origin_fixture"})
     monkeypatch.setattr("src.mod_agent.evaluation.strategy_native_export.validate_native_strategy_execution",
         lambda _: {"status": "native_execution_verified"})
+    lineage_calls = []
+
+    def lineage(**kwargs):
+        lineage_calls.append(kwargs)
+        assert kwargs["native_execution_ref"] != kwargs["initial_native_ref"]
+        if damage == "unlinked_resume":
+            raise ValueError("controlled unrelated recovery")
+        return {"chain": [{"kind": "checkpoint_resume"}]}
+
+    monkeypatch.setattr("src.mod_agent.evaluation.native_execution_lineage.validate_native_execution_lineage", lineage)
 
     def run(command, **kwargs):
         result = ordinary_runner(command, **kwargs)
@@ -152,6 +163,9 @@ def test_v2_pending_delivery_reaches_native_receipt_and_independent_verdict(tmp_
         result = ordinary_delivery(context)
         root = Path(context["run_root"])
         native = context["initial_result"]["task_agent_execution_ref"]
+        if damage in {"resume", "unlinked_resume"}:
+            native = _save(root / "a/task-agent-execution/resume/execution.json", {
+                "schema_version": "task-agent-product-execution.v2", "run_id": root.name})
         execution = _save(root / "delivery/export.json", {"native_execution_ref": {} if damage == "native" else native,
             "candidate_source_id": "source", "candidate_state": {"candidate_ref": "candidate"}})
         verdict = _save(root / "delivery/verdict.json", {"schema_version": "independent_strategy_verdict_v1",
@@ -164,13 +178,121 @@ def test_v2_pending_delivery_reaches_native_receipt_and_independent_verdict(tmp_
 
     report = run_product_trial_batch(spec, execute=True, command_runner=run, delivery_adapter=deliver)
     assert [kind for kind, _ in log] == ["normal", "delivery"] * 2
-    assert all(row["status"] == ("delivered" if damage is None else "infrastructure_failure") for row in report["trials"])
-    if damage is None:
+    assert all(row["status"] == ("delivered" if damage in {None, "resume"} else "infrastructure_failure") for row in report["trials"])
+    if damage in {None, "resume"}:
         assert len(verified) == 2
         assert all(row["delivery"]["proposal_origin"]["verification"] == "native_v2_delivery_and_qualified_independent_verdict"
             for row in report["trials"])
+        if damage == "resume":
+            assert len(lineage_calls) == 2
+            assert all(row["delivery"]["proposal_origin"]["recovery_chain"] for row in report["trials"])
     else:
         assert not any(row["success"] for row in report["trials"])
+
+
+@pytest.mark.parametrize("adapter_fails", [False, True])
+def test_delivery_recovery_cost_is_remeasured_even_when_adapter_fails(tmp_path, monkeypatch, adapter_fails):
+    from src.mod_agent.evaluation import product_trial_batch as batch
+
+    log, measurements = [], []
+
+    def measurement(**kwargs):
+        refs = kwargs.get("execution_refs", [])
+        measurements.append(refs)
+        value = _measurement(**kwargs)
+        if refs:
+            value["model"]["usage"]["input_tokens"]["total"] = 175
+            value["model"]["usage"]["output_tokens"]["total"] = 17
+            value["model"]["generation_records"] = 3
+        return value
+
+    monkeypatch.setattr(batch, "measure_product_task", measurement)
+
+    def delivery(context):
+        root = Path(context["run_root"])
+        reference = _save(root / "a/resume/recovery-execution.json", {"controlled": True})
+        boundary = _save(root / "run-continuations/recovery.json", {"schema": "run_outcome_boundary_v1",
+            "run_id": root.name, "request_id": context["initial_manifest"]["request_id"],
+            "result": {"recovery_execution_ref": reference}})
+        manifest = json.loads((root / "run_manifest.json").read_bytes())
+        _save(root / "run_manifest.json", {**manifest, "outcome_boundaries": [boundary, boundary]})
+        if adapter_fails:
+            raise RuntimeError("controlled adapter failure after recovery")
+        return {"status": "failed", "reason": "controlled independent rejection"}
+
+    report = run_product_trial_batch(_spec(tmp_path), execute=True, command_runner=_runner(log), delivery_adapter=delivery)
+    for row in report["trials"]:
+        assert len(row["recovery_execution_refs"]) == 1
+        if adapter_fails:
+            assert row["failure"]["message"] == "controlled adapter failure after recovery"
+            assert row["metrics"]["input_tokens"] == 175
+            assert row["metrics"]["output_tokens"] == 17
+        else:
+            assert row["status"] == "failed"
+            # No public delivery execution receipt: unmeasured extra cost is unknown.
+            assert row["metrics"]["input_tokens"] is None
+    assert sum(bool(refs) for refs in measurements) == 2
+
+
+def test_missing_recovery_cost_does_not_invent_zero_or_erase_verified_delivery(tmp_path, monkeypatch):
+    from src.mod_agent.evaluation import product_trial_batch as batch
+
+    log = []
+    monkeypatch.setattr(batch, "measure_product_task", _measurement)
+    deliver = _delivery(log)
+
+    def adapter(context):
+        root = Path(context["run_root"])
+        manifest = json.loads((root / "run_manifest.json").read_bytes())
+        boundary = _save(root / "run-continuations/missing-observations.json", {
+            "schema": "run_outcome_boundary_v1", "run_id": root.name,
+            "request_id": manifest["request_id"], "event": "recovery_return", "result": {}})
+        _save(root / "run_manifest.json", {**manifest, "outcome_boundaries": [boundary]})
+        return deliver(context)
+
+    report = run_product_trial_batch(_spec(tmp_path), execute=True, command_runner=_runner(log), delivery_adapter=adapter)
+    for row in report["trials"]:
+        assert row["success"] is True
+        assert "unavailable" in row["delivery_measurement_failure"]["message"]
+        assert row["metrics"]["input_tokens"] is None
+        assert row["metrics"]["full_delivery_cost"] is False
+
+
+def test_already_measured_recovery_receipt_does_not_erase_known_cost(tmp_path, monkeypatch):
+    from src.mod_agent.evaluation import product_trial_batch as batch
+
+    log = []
+
+    def measurement(**kwargs):
+        value = _measurement(**kwargs)
+        value["selected_execution_refs"] = kwargs.get("execution_refs", [])
+        if value["selected_execution_refs"]:
+            value["model"]["usage"]["input_tokens"]["total"] = 175
+            value["model"]["generation_records"] = 3
+        return value
+
+    monkeypatch.setattr(batch, "measure_product_task", measurement)
+    deliver = _delivery(log)
+
+    def adapter(context):
+        root = Path(context["run_root"])
+        reference = _save(root / "a/resume/recovery-execution.json", {"run_id": root.name,
+            "model_calls_performed": 1, "execution_trace": {"trace_id": "recovery"},
+            "execution_observations": {"new-model": {"id": "new-model", "kind": "generation"}}})
+        manifest = json.loads((root / "run_manifest.json").read_bytes())
+        boundary = _save(root / "run-continuations/recovery.json", {"schema": "run_outcome_boundary_v1",
+            "run_id": root.name, "request_id": manifest["request_id"], "event": "recovery_return",
+            "result": {"recovery_execution_ref": reference}})
+        _save(root / "run_manifest.json", {**manifest, "outcome_boundaries": [boundary]})
+        result = deliver(context)
+        result["execution_refs"].append(reference)
+        return result
+
+    report = run_product_trial_batch(_spec(tmp_path), execute=True, command_runner=_runner(log), delivery_adapter=adapter)
+    for row in report["trials"]:
+        assert row["success"] is True and row["metrics"]["full_delivery_cost"] is True
+        assert row["metrics"]["input_tokens"] == 175
+        assert row["metrics"]["model_generation_records"] == 3
 
 
 def test_meter_only_identity_is_explicit_not_missing_or_invented():
