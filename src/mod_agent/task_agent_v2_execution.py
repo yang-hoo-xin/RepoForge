@@ -149,10 +149,15 @@ class TaskAgentExecutionV2(TaskAgentExecution):
         return self._save("task-observation-" + uuid4().hex + ".json", value)
 
     def prepare_decision_request(self, request, session):
-        from src.mod_agent.task_agent_v2_context import model_plan_view, project_history
+        from src.mod_agent.task_agent_v2_context import (
+            investigation_observations,
+            model_plan_view,
+            project_history,
+        )
         from src.mod_agent.task_agent_v2_experiment_tools import experiment_configuration_facts
 
         state = session.state
+        observation_facts = investigation_observations(request, state.current_revision_ref)
         request, history_projection = project_history(request, state)
         registry = state.validate_registry(state.registry_ref)
         current_check = state.load(session.current_check) if session.current_check is not None else None
@@ -163,6 +168,7 @@ class TaskAgentExecutionV2(TaskAgentExecution):
             "technical_plan_ref": state.head["plan_ref"], "baseline_revision_ref": state.contract["baseline_manifest_ref"],
             "model_technical_plan": model_plan_view(state),
             "history_projection": history_projection,
+            "investigation_observations": observation_facts,
             "cumulative_resources": deepcopy(state.head["resources"]),
             "model_call_budget": validate_budget(self.budget_snapshot()),
             "execution_window": {"deadline_utc": getattr(self, "deadline_utc", None),

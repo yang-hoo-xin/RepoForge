@@ -1,0 +1,19 @@
+{
+  "schema_version": "public_issue_contract_qualification_intent_v1",
+  "status": "registered_before_new_controls_or_builds",
+  "task_id": "spectreconsole__spectre-console-1531",
+  "decision": "Retain the original377 public behaviors and eight public reproduction cases. Do not rewrite or discard34 unrelated no-custom-version help snapshots to match upstream reference output.",
+  "public_basis": [
+    "The issue requests removal of a conflicting built-in --version help option when the command already owns --version|-v; it does not request global removal from applications without a custom version option.",
+    "Pinned ConfiguratorExtensions.cs SetApplicationVersion XML says it overrides the auto-detected application version; lack of explicit configuration alone does not establish that the built-in version behavior is unwanted.",
+    "Saved public-only execution: the reference passed8 new cases but changed34 original help instances without custom-version setup; execution also wrote received snapshots into source and retained its original incomplete integrity outcome."
+  ],
+  "question": "Can a control implementation derived independently from the public requirement satisfy the new reproduction while retaining the frozen original public behavior, and can an independently authored evaluator accept correct/equivalent controls while rejecting wrong ones?",
+  "implementation_scope": "Reuse the current Backend, profile and evaluator qualification APIs. Controls and new independent tests stay evaluation-only. Do not copy upstream hidden tests or their updated expected snapshots into public inputs. Do not send any control implementation or developer repair advice to either product model.",
+  "public_conditions": "All377 original tests and their expectations unchanged, plus the v2 public fixture. If snapshot diagnostics need an output relocation, change only diagnostic location for every public/control arm, prove expected snapshot bytes unchanged, and retain original integrity failures. No arbitrary filtering or normalization of failed expectations.",
+  "independent_acceptance": "A separately authored public-issue-behavior evaluator with provenance and positive/equivalent/wrong controls. New private assertions derive from public requirements, not upstream reference output. Preserve both this evaluator and prior upstream qualification results separately.",
+  "resource": {"model_calls": 0, "owned_wall_seconds": 900, "per_command_max_seconds": 300, "automatic_extension": false, "scope": "one new environment/acceptance preparation phase after material contract correction; not continuation or reset of prior1200-second window"},
+  "claim_boundary": "This is the public issue reproduction task, not an official SWE-Sharp-Bench score or qualification. Preserve original source/version and the official inputs unopened on the solver side; no new repository-transfer claim.",
+  "failure_return": "If the public contract and independent controls cannot be established in the bounded phase, retain the unresolved acceptance issue and do not dispatch products against an invalid checker; continue other independently executable U1-U4 work.",
+  "why": "为什么要有它：参考答案不能压过有来源的需求和保留义务；先核准真实任务验收，不能通过删测试或复制隐藏期望制造可运行成绩。"
+}

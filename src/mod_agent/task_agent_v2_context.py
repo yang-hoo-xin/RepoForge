@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from dataclasses import asdict, replace
 
 from src.libs.llm.agent_turn import AgentTurnProviderError, _parse_ollama_tool_call
@@ -12,6 +13,48 @@ HISTORY_BYTES = 12000
 
 def _text(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+def investigation_observations(request, current_revision_ref, *, max_views=8):
+    """Count returned immutable read views, never inferred investigation progress.
+
+    为什么要有它：有限上下文可以省略旧正文，但不应让重复读取伪装成新的观察；是否继续重读仍由模型决定。
+    """
+    views, seen_calls, completed = {}, set(), 0
+    exchanges = [*request.historical_tool_exchanges]
+    results = [row for exchange in exchanges for row in exchange.tool_results] + list(request.tool_results)
+    for result in results:
+        output = result.output
+        if (result.name not in {"source_read", "candidate_read"} or not isinstance(output, dict)
+                or output.get("execution") != "executed"):
+            continue
+        value = output.get("value")
+        if (not isinstance(value, dict) or value.get("schema") != "task-agent-source-view.v2"
+                or value.get("parent_revision_ref") != current_revision_ref
+                or not isinstance(value.get("source_view_ref"), str)):
+            continue
+        call = (result.name, result.call_id)
+        if call in seen_calls:
+            continue
+        seen_calls.add(call)
+        completed += 1
+        reference = value["source_view_ref"]
+        fact = views.pop(reference, None)
+        if fact is None:
+            fact = {key: deepcopy(value[key]) for key in ("source_view_ref", "parent_revision_ref", "root_id", "path",
+                "file_sha256", "offset", "next_offset", "total_chars", "read_window") if key in value}
+            fact.update(first_call_id=result.call_id, returned_count=0)
+        fact.update(last_call_id=result.call_id, returned_count=fact["returned_count"] + 1)
+        views[reference] = fact
+    if not completed:
+        return None
+    selected = list(views.values())[-max_views:]
+    return {"scope": "executed_current_revision_source_reads_only", "current_revision_ref": current_revision_ref,
+        "completed_read_returns": completed, "distinct_returned_views": len(views),
+        "repeated_view_returns": completed - len(views), "recent_views": selected,
+        "views_truncated": len(selected) < len(views),
+        "meaning": "Counts exact immutable returned views, not model understanding, novel knowledge or task progress. "
+            "Re-reading may reconfirm facts but does not expose a later page. No action is required or forbidden by this index."}
 
 
 def _action_facts(exchanges):

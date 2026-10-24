@@ -1,0 +1,79 @@
+{
+  "all_new_files_are_received_snapshots": true,
+  "analysis_ref": {
+    "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261024\\product-pilot\\evaluation\\public-failure-analysis.json",
+    "sha256": "b78b9913bcc87f8ae5ce39c2dcd6357ffdacbdb1e1d9459a3ec283969a49ee65"
+  },
+  "build_calls": 0,
+  "documentation": {
+    "line": 85,
+    "source_ref": {
+      "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\src\\Spectre.Console.Cli\\ConfiguratorExtensions.cs",
+      "sha256": "462dd783c3a208d251b4bcd402537b216ef80e37c8b6c7538945f6a2db5621a7"
+    },
+    "text": "Overrides the auto-detected version of the application."
+  },
+  "exact_custom_version_option_declarations_in_original_public_Data": [
+    {
+      "line": 5,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Data\\Settings\\VersionSettings.cs",
+        "sha256": "a646bf27e20f9217aa2426c86d6c0277f97f339c89f5bd1ad52a8919655afee9"
+      },
+      "template": "-v|--version"
+    }
+  ],
+  "failing_Help_file_references_that_fixture": false,
+  "integrity_status_still": "unknown",
+  "judgment": "public issue supports fixing custom-version conflicts, not blanket removal of default version help; retain baseline expectations under the current preservation contract",
+  "limits": "no other text differences in these 34 comparisons does not prove absence of unrelated regressions elsewhere",
+  "localized_test_instances": 10,
+  "localized_unique_snapshot_pairs": 4,
+  "model_calls": 0,
+  "new_file_paths_since_recorded_public_check_inputs": [
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/ArgumentOrder.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Custom_Help_Configured_By_Instance.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Custom_Help_Registered_By_Instance.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Default.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Default_Examples.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Default_Without_Args.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Default_Without_Args_Additional.Output_DE.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Default_Without_Args_Additional.Output_EN.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Default_Without_Args_Additional.Output_FR.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Default_Without_Args_Additional.Output_SV.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Default_Without_Args_Additional_Style_BoldHeadings.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Default_Without_Args_Additional_Style_Default.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Default_Without_Args_Additional_Style_None.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Description_No_Trailing_Period.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Hidden_Command_Options.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Hidden_Commands.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/NoDescription.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Root.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Root_Command.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Root_Examples.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Root_Examples_Children.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Root_Examples_Children_Eight.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Root_Examples_Children_None.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Root_Examples_Children_Twelve.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Root_Examples_Leafs.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Root_Examples_Leafs_Eight.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Root_Examples_Leafs_None.Output.DotNet8_0.received.txt",
+    "test/Spectre.Console.Cli.Tests/Expectations/Help/Root_Examples_Leafs_Twelve.Output.DotNet8_0.received.txt"
+  ],
+  "new_files": 28,
+  "original_terminal_still": "incomplete",
+  "other_missing_paths": [],
+  "schema_version": "saved_public_failure_analysis_addendum_v1",
+  "source_scope": "original public test Data and original public docs; no reference implementation or hidden files",
+  "source_setup_facts": {
+    "CommandAppTester_creates_fresh_CommandApp_per_Run": true,
+    "CommandAppTester_has_no_application_version_setter": true,
+    "custom_help_version_string_is_footer_only": true,
+    "custom_version_settings_or_command_mentions_in_Help": 0,
+    "explicit_version_setters_in_Help": 0
+  },
+  "unique_pair_categories": {
+    "builtin_version_row_removed_only": 11,
+    "builtin_version_row_removed_with_padding": 17
+  }
+}

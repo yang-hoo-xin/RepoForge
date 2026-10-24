@@ -1,0 +1,1778 @@
+{
+  "all_remainders_equal_after_horizontal_whitespace_normalization": true,
+  "build_calls": 0,
+  "categories": {
+    "builtin_version_row_removed_only": 17,
+    "builtin_version_row_removed_with_padding": 17
+  },
+  "custom_version_fixture_cases": 0,
+  "explicit_application_version_cases": 0,
+  "failed_test_instances": 34,
+  "judgment": {
+    "contract_inference": "the public issue requests removal of a conflict with a user-defined version option; it does not authorize changing all non-conflicting default help",
+    "decision_supported_by_public_evidence": "do not update or exclude the 34 snapshots solely to accept the reference control; retain applicable baseline expectations until an explicit compatibility decision",
+    "fact": "all observed failures concern non-custom-version help snapshots; old version row disappears",
+    "not_claimed": "no unrelated semantic differences in these snapshot remainders does not prove absence of regressions outside these observations",
+    "unknown": "the intended broader upstream API policy cannot be established from this issue alone"
+  },
+  "model_calls": 0,
+  "original_integrity_error_refs": [
+    {
+      "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\integrity-error.json",
+      "sha256": "6ac1eeb29f062dd6c90255f87e36e184c0c2d3118da95545a0b2834b4241a120"
+    }
+  ],
+  "original_terminal_status": "incomplete",
+  "originals_modified": false,
+  "public_requirement_ref": {
+    "path": "C:\\tmp\\rfext-spectre-1531-task\\solver-input\\problem_statement.txt",
+    "sha256": "78d7afbab5c0ba4fee6596ba3e106a1208c86cf9d4dfc7c0d92c77204503a60c"
+  },
+  "reference_production_source_or_hidden_materials_read": false,
+  "schema_version": "saved_public_failure_analysis_v1",
+  "scope": "only saved public tests, original public source and public verified/received outputs",
+  "snapshots": [
+    {
+      "category": "builtin_version_row_removed_with_padding",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Leafs.Output.DotNet8_0.received.txt",
+        "sha256": "50cb73155b6c9662ef62d1060e730decc1d89297da55987ae0f0fecbe141d10c"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Leafs.Output.verified.txt",
+        "sha256": "17849084b0fb092237962ab0d1aeb154a10a3bc56d9cd83b4a52bfac2577971f"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_only",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args.Output.DotNet8_0.received.txt",
+        "sha256": "d06f2093c7d10fbfa0ed321ee063a3ce01bf3f2e4ac673010992b6e42bc883da"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args.Output.verified.txt",
+        "sha256": "159e47993ee6bb1940a3f3593b2ea1361c6d414fc4ef2dcfef691f8d3f506f1d"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_only",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default.Output.DotNet8_0.received.txt",
+        "sha256": "d06f2093c7d10fbfa0ed321ee063a3ce01bf3f2e4ac673010992b6e42bc883da"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default.Output.verified.txt",
+        "sha256": "159e47993ee6bb1940a3f3593b2ea1361c6d414fc4ef2dcfef691f8d3f506f1d"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_with_padding",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Custom_Help_Configured_By_Instance.Output.DotNet8_0.received.txt",
+        "sha256": "7ed37f692387561a532c36c542434dd598c7bcefb8b1c17729f52bf59de4fd84"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Custom_Help_Configured_By_Instance.Output.verified.txt",
+        "sha256": "25912e9b49b24fda669ebaf1eacf7b59b9a1da9ccb6a2c85db68b66340d3e17c"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_with_padding",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Description_No_Trailing_Period.Output.DotNet8_0.received.txt",
+        "sha256": "c5dfd8b54dbdc3e01cf5713df93d1e5f326053ac64f0aff7d595bdd045c73051"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Description_No_Trailing_Period.Output.verified.txt",
+        "sha256": "fd1be7b6c08eb3ac4151efbf135c6ad6145fafe38e27f2e558cc0db88344a01d"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_with_padding",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Hidden_Command_Options.Output.DotNet8_0.received.txt",
+        "sha256": "6595bbce62a7dfffee389d81770e6fd106e05c312ce5852e4c07c3a6e210bd30"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Hidden_Command_Options.Output.verified.txt",
+        "sha256": "2154fa3182f827340323db3327c22872cc78a2b91d86be0b54741d50ccefb16c"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_with_padding",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Hidden_Commands.Output.DotNet8_0.received.txt",
+        "sha256": "2c0427286aec1ab64b04b6d62e98c8bda1926a436aa0d20789067eb74b21bddf"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Hidden_Commands.Output.verified.txt",
+        "sha256": "c62f9f69ed24610d13bffc2ceae3fc9f1e7186f9da7948cfa628972766599c19"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_with_padding",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Custom_Help_Registered_By_Instance.Output.DotNet8_0.received.txt",
+        "sha256": "7ed37f692387561a532c36c542434dd598c7bcefb8b1c17729f52bf59de4fd84"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Custom_Help_Registered_By_Instance.Output.verified.txt",
+        "sha256": "ed29955d0c3e707ec438cb101792ad5de15351581e2fdeb05614ea89735a8194"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_only",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_DE.DotNet8_0.received.txt",
+        "sha256": "af05e311edb56846c916d6aec08391414ddbdecf6bd7c6554ea40665f4938b54"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_DE.verified.txt",
+        "sha256": "7c56cc35b2a8973210f47b5c395cc870cfa3d88891cde70bdf32891809419ee3"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_with_padding",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root.Output.DotNet8_0.received.txt",
+        "sha256": "b2f32261dbff50862e43ae8ecf614e886712ad821e3ee091be2d21143d3b5ce6"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root.Output.verified.txt",
+        "sha256": "2e6e40896ab5a77b09b0a9831c51cf9703188c71745c12eb936a346c0f279560"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_only",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_FR.DotNet8_0.received.txt",
+        "sha256": "9b25089753ac87c616f223e52ace9d1b8ba3feb495396d406f5aa741d6062042"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_FR.verified.txt",
+        "sha256": "c8c151c5c4049ee543b6a69737138ab50877daf5acca8ef08de6c66f0f1f7e3b"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_with_padding",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Leafs_Eight.Output.DotNet8_0.received.txt",
+        "sha256": "2dec2a43302eabb41645b5501358b2907637a36e8abd7bb3d9345a5392456ea2"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Leafs_Eight.Output.verified.txt",
+        "sha256": "c2f5fd2d0514e8509306da4e4d1164bd132446922ae6709352087275e5a9316a"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_with_padding",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Children_Twelve.Output.DotNet8_0.received.txt",
+        "sha256": "390d9b26480cd982d15cb17bd0d3f9d1cdb263bafe9893e6570ebdd4ed1617b6"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Children_Twelve.Output.verified.txt",
+        "sha256": "1c4b753e6f7aca30935ec945fce66884dc06f42f03570c11d1df11c59e3847c9"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_only",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Examples.Output.DotNet8_0.received.txt",
+        "sha256": "632f5c4e3425498e78e6c5c5ddfc82337ca7b653297b6283dc48466a27b1d363"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Examples.Output.verified.txt",
+        "sha256": "1706178fa3e429ff07b19aebc4c225509f0604e6f9264ca59a028b8c05bf99d8"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_with_padding",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Children_None.Output.DotNet8_0.received.txt",
+        "sha256": "2c0427286aec1ab64b04b6d62e98c8bda1926a436aa0d20789067eb74b21bddf"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Children_None.Output.verified.txt",
+        "sha256": "f964f5a98324f0feeb6f2f1f1a8f5213ab0c8f7d8f1e2358aa989e7b4bacd97f"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_only",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_EN.DotNet8_0.received.txt",
+        "sha256": "9415441e48dd9604b25355a2897b6da56e63832b420cec922f1d835d4a4eb700"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_EN.verified.txt",
+        "sha256": "f699c46dd2db0da569c351baf86c88bb50162b687082d4ea9a2149c93fe20c74"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_only",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional_Style_BoldHeadings.Output.DotNet8_0.received.txt",
+        "sha256": "d093a5713d02c2ef282c575f2964c2f25927c8337157e23e1636f8f09a687458"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional_Style_BoldHeadings.Output.verified.txt",
+        "sha256": "5b31b953129cc411fbaf915b10dc370e21854b449101e0c95d619f4a66e4726c"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_only",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_SV.DotNet8_0.received.txt",
+        "sha256": "62679961be833e747cd5889a620a26c68a38d77496ef14599a5f2d30474f9b99"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_SV.verified.txt",
+        "sha256": "f5a5f04ed3eaaf544dd9fd60450e8809f999e8436c9f3f208ba444454c7f00b4"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_with_padding",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples.Output.DotNet8_0.received.txt",
+        "sha256": "390d9b26480cd982d15cb17bd0d3f9d1cdb263bafe9893e6570ebdd4ed1617b6"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples.Output.verified.txt",
+        "sha256": "ebad4e7529096ae4d44cf7224431d197f2be88cd2459b5d520029d3c2cabb0d6"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_with_padding",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Children_Eight.Output.DotNet8_0.received.txt",
+        "sha256": "686c76de0c90e39992e043377a3af32ef67909519e3db01234e3879e00cc78c4"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Children_Eight.Output.verified.txt",
+        "sha256": "8fcb0a158dce33d1fcb625e7dcf3f544c6debd2269ec55a1b2495006a3471eb4"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_with_padding",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\ArgumentOrder.Output.DotNet8_0.received.txt",
+        "sha256": "f3c11e04a7f7c8f4d1704728d5201bb7d0c020e2a3a42374827694d5ee25127a"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\ArgumentOrder.Output.verified.txt",
+        "sha256": "a6a12e1f11728f5b604a8f2fc9a1b6d6e09fbd8cbcaab9c3c613f3fb6a4c5833"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_with_padding",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Leafs_Twelve.Output.DotNet8_0.received.txt",
+        "sha256": "ed6796ec8042288bb180edc6fd26e0ca42e5e10eeffb850ea064930f08e979ab"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Leafs_Twelve.Output.verified.txt",
+        "sha256": "dc7fbdf93bce8519e408498a968a8333de2a1e2e43d6c38719d4a99fff2366ca"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_with_padding",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Children.Output.DotNet8_0.received.txt",
+        "sha256": "434c03770ee6f01da59ddfd8d31e6e1bb73f44939d4e933325f503c86f143722"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Children.Output.verified.txt",
+        "sha256": "efe943f5ac741e0a771035b2e351823c46f7039464c0cecd89c67516fe81d903"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_only",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional_Style_None.Output.DotNet8_0.received.txt",
+        "sha256": "ce8cb30b3568d3f1138d780a6c4a01a0fe3306426c7b9de00bbb22562527ab2c"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional_Style_None.Output.verified.txt",
+        "sha256": "0adbb66d5f2df06a61d40de00e9a74f9e01e65ad1ae43670545320882a6a0dc4"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_with_padding",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\NoDescription.Output.DotNet8_0.received.txt",
+        "sha256": "5a3125e43eef6169ea04d46982a9e7c3532ddefa4897f685698a01574de6eb23"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\NoDescription.Output.verified.txt",
+        "sha256": "17c10dbd993d723480f29e93d36a1b266e94e55257368ec0f525ae956496a40a"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_with_padding",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Leafs_None.Output.DotNet8_0.received.txt",
+        "sha256": "2c16b7f41030cf9ed28bc19ced26dd4a0b6e8dfd6766e4a23932585143993bab"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Leafs_None.Output.verified.txt",
+        "sha256": "2646dbbf62b2edfb513a9e170930897661052b37f2cfa3449fc0cb7d590e732d"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_only",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Command.Output.DotNet8_0.received.txt",
+        "sha256": "bbdb1deca062e280873cab31d609fd11eca46e3032789dc09ae8b95ad2f8c55e"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Command.Output.verified.txt",
+        "sha256": "de8f4de064973d81ad29441b5f4fc353d514caced77467dc64de496c03a08268"
+      }
+    },
+    {
+      "category": "builtin_version_row_removed_only",
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional_Style_Default.Output.DotNet8_0.received.txt",
+        "sha256": "aaae434be632814a7e4f1e20ff734be3f201fb78f4f419f805e0c5abbddee7b9"
+      },
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional_Style_Default.Output.verified.txt",
+        "sha256": "c73e3e81225f39f95ff0fa6501f2974301ecf8cad8ae6273722e477ba02729ff"
+      }
+    }
+  ],
+  "source_result_ref": {
+    "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct-result.json",
+    "sha256": "424663640506936d86023e903d24d594b559d33718874f01e2ba31e68e611552"
+  },
+  "supporting_public_source_refs": [
+    {
+      "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\src\\Spectre.Console.Testing\\Cli\\CommandAppTester.cs",
+      "sha256": "b7c7a27941523e7c79e305c2ccda6166e41f8ed1b345ebdf5bd141841c7be1de"
+    },
+    {
+      "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\src\\Spectre.Console.Cli\\ConfiguratorExtensions.cs",
+      "sha256": "462dd783c3a208d251b4bcd402537b216ef80e37c8b6c7538945f6a2db5621a7"
+    },
+    {
+      "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Data\\Help\\CustomHelpProvider.cs",
+      "sha256": "19295307ebf419c066b59b980b201df5c850124f6e28a6e9e40b7efb27c96a88"
+    },
+    {
+      "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Data\\Help\\RenderMarkupHelpProvider.cs",
+      "sha256": "72bb57936bc07af9004ff898544c40ceb98ac8a0eebdc1857019582e93188cf3"
+    },
+    {
+      "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Data\\Help\\RedirectHelpProvider.cs",
+      "sha256": "ec78e56834fe203a88cf6a972a69de394ad7c7649b32952049dceda10c992f68"
+    },
+    {
+      "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Data\\Settings\\VersionSettings.cs",
+      "sha256": "a646bf27e20f9217aa2426c86d6c0277f97f339c89f5bd1ad52a8919655afee9"
+    }
+  ],
+  "tests": [
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_with_padding",
+      "declared_command_or_settings_types": [
+        "AnimalSettings",
+        "DogCommand",
+        "HorseCommand"
+      ],
+      "full_diff": "--- Root_Examples_Leafs.Output.verified.txt\n\n+++ Root_Examples_Leafs.Output.DotNet8_0.received.txt\n\n@@ -9,8 +9,7 @@\n\n     myapp animal dog --name Daisy\n \n OPTIONS:\n-    -h, --help       Prints help information\n-    -v, --version    Prints version information\n+    -h, --help    Prints help information\n \n COMMANDS:\n     animal    The animal command",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Leafs.Output.DotNet8_0.received.txt",
+        "sha256": "50cb73155b6c9662ef62d1060e730decc1d89297da55987ae0f0fecbe141d10c"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version    Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"--help\"",
+      "source_excerpt": "public Task Should_Output_Examples_Defined_On_Leaves_If_No_Other_Examples_Are_Found()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddBranch<AnimalSettings>(\"animal\", animal =>\n                {\n                    animal.SetDescription(\"The animal command.\");\n\n                    // It should be capped to the first 5 examples by default\n\n                    animal.AddCommand<DogCommand>(\"dog\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Rufus\", \"--age\", \"12\", \"--good-boy\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Luna\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Charlie\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Bella\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Daisy\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Milo\");\n\n                    animal.AddCommand<HorseCommand>(\"horse\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Brutus\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Sugar\", \"--IsAlive\", \"false\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Cash\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Dakota\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Cisco\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Spirit\");\n                });\n            });\n\n            // When\n            var result = fixture.Run(\"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 722,
+      "source_line_start": 686,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Examples_Defined_On_Leaves_If_No_Other_Examples_Are_Found",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Examples_Defined_On_Leaves_If_No_Other_Examples_Are_Found",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 18,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Leafs.Output.verified.txt",
+        "sha256": "17849084b0fb092237962ab0d1aeb154a10a3bc56d9cd83b4a52bfac2577971f"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_only",
+      "declared_command_or_settings_types": [
+        "LionCommand"
+      ],
+      "full_diff": "--- Default_Without_Args.Output.verified.txt\n\n+++ Default_Without_Args.Output.DotNet8_0.received.txt\n\n@@ -11,7 +11,6 @@\n\n OPTIONS:\n                              DEFAULT\n     -h, --help                                   Prints help information\n-    -v, --version                                Prints version information\n     -a, --alive                                  Indicates whether or not the animal is alive\n     -n, --name <VALUE>\n         --agility <VALUE>    10                  The agility between 0 and 100",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args.Output.DotNet8_0.received.txt",
+        "sha256": "d06f2093c7d10fbfa0ed321ee063a3ce01bf3f2e4ac673010992b6e42bc883da"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version                                Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "",
+      "source_excerpt": "public Task Should_Output_Default_Command_When_Command_Has_Required_Parameters_And_Is_Called_Without_Args()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<LionCommand>();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n            });\n\n            // When\n            var result = fixture.Run();\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 251,
+      "source_line_start": 236,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Default_Command_When_Command_Has_Required_Parameters_And_Is_Called_Without_Args",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Default_Command_When_Command_Has_Required_Parameters_And_Is_Called_Without_Args",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 28,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args.Output.verified.txt",
+        "sha256": "159e47993ee6bb1940a3f3593b2ea1361c6d414fc4ef2dcfef691f8d3f506f1d"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_only",
+      "declared_command_or_settings_types": [
+        "LionCommand"
+      ],
+      "full_diff": "--- Default.Output.verified.txt\n\n+++ Default.Output.DotNet8_0.received.txt\n\n@@ -11,7 +11,6 @@\n\n OPTIONS:\n                              DEFAULT\n     -h, --help                                   Prints help information\n-    -v, --version                                Prints version information\n     -a, --alive                                  Indicates whether or not the animal is alive\n     -n, --name <VALUE>\n         --agility <VALUE>    10                  The agility between 0 and 100",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default.Output.DotNet8_0.received.txt",
+        "sha256": "d06f2093c7d10fbfa0ed321ee063a3ce01bf3f2e4ac673010992b6e42bc883da"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version                                Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"--help\"",
+      "source_excerpt": "public Task Should_Output_Default_Command_Correctly()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<LionCommand>();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n            });\n\n            // When\n            var result = fixture.Run(\"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 232,
+      "source_line_start": 217,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Default_Command_Correctly",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Default_Command_Correctly",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 40,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default.Output.verified.txt",
+        "sha256": "159e47993ee6bb1940a3f3593b2ea1361c6d414fc4ef2dcfef691f8d3f506f1d"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_with_padding",
+      "declared_command_or_settings_types": [
+        "DogCommand"
+      ],
+      "full_diff": "--- Custom_Help_Configured_By_Instance.Output.verified.txt\n\n+++ Custom_Help_Configured_By_Instance.Output.DotNet8_0.received.txt\n\n@@ -6,8 +6,7 @@\n\n     myapp [OPTIONS] <COMMAND>\n \n OPTIONS:\n-    -h, --help       Prints help information\n-    -v, --version    Prints version information\n+    -h, --help    Prints help information\n \n COMMANDS:\n     dog <AGE>    The dog command",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Custom_Help_Configured_By_Instance.Output.DotNet8_0.received.txt",
+        "sha256": "7ed37f692387561a532c36c542434dd598c7bcefb8b1c17729f52bf59de4fd84"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version    Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "",
+      "source_excerpt": "public Task Should_Output_Custom_Help_When_Configured_By_Instance()\n        {\n            var registrar = new DefaultTypeRegistrar();\n\n            // Given\n            var fixture = new CommandAppTester(registrar);\n            fixture.Configure(configurator =>\n            {\n                // Configure the custom help provider instance\n                configurator.SetHelpProvider(new CustomHelpProvider(configurator.Settings, \"1.0\"));\n\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddCommand<DogCommand>(\"dog\");\n            });\n\n            // When\n            var result = fixture.Run();\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 474,
+      "source_line_start": 454,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Custom_Help_When_Configured_By_Instance",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Custom_Help_When_Configured_By_Instance",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 49,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Custom_Help_Configured_By_Instance.Output.verified.txt",
+        "sha256": "25912e9b49b24fda669ebaf1eacf7b59b9a1da9ccb6a2c85db68b66340d3e17c"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_with_padding",
+      "declared_command_or_settings_types": [
+        "DogCommand",
+        "HorseCommand",
+        "GiraffeCommand"
+      ],
+      "full_diff": "--- Description_No_Trailing_Period.Output.verified.txt\n\n+++ Description_No_Trailing_Period.Output.DotNet8_0.received.txt\n\n@@ -2,8 +2,7 @@\n\n     myapp [OPTIONS] <COMMAND>\n \n OPTIONS:\n-    -h, --help       Prints help information\n-    -v, --version    Prints version information\n+    -h, --help    Prints help information\n \n COMMANDS:\n     dog <AGE>    The dog command.",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Description_No_Trailing_Period.Output.DotNet8_0.received.txt",
+        "sha256": "c5dfd8b54dbdc3e01cf5713df93d1e5f326053ac64f0aff7d595bdd045c73051"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version    Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"--help\"",
+      "source_excerpt": "public Task Should_Not_Trim_Description_Trailing_Period()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddCommand<DogCommand>(\"dog\");\n                configurator.AddCommand<HorseCommand>(\"horse\");\n                configurator.AddCommand<GiraffeCommand>(\"giraffe\")\n                    .WithExample(\"giraffe\", \"123\")\n                    .IsHidden();\n                configurator.TrimTrailingPeriods(false);\n            });\n\n            // When\n            var result = fixture.Run(\"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 97,
+      "source_line_start": 77,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Not_Trim_Description_Trailing_Period",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Not_Trim_Description_Trailing_Period",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 57,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Description_No_Trailing_Period.Output.verified.txt",
+        "sha256": "fd1be7b6c08eb3ac4151efbf135c6ad6145fafe38e27f2e558cc0db88344a01d"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_with_padding",
+      "declared_command_or_settings_types": [
+        "GenericCommand<HiddenOptionSettings"
+      ],
+      "full_diff": "--- Hidden_Command_Options.Output.verified.txt\n\n+++ Hidden_Command_Options.Output.DotNet8_0.received.txt\n\n@@ -5,6 +5,5 @@\n\n     <FOO>    Dummy argument FOO\n \n OPTIONS:\n-    -h, --help       Prints help information\n-    -v, --version    Prints version information\n-        --baz        Dummy option BAZ\n+    -h, --help    Prints help information\n+        --baz     Dummy option BAZ",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Hidden_Command_Options.Output.DotNet8_0.received.txt",
+        "sha256": "6595bbce62a7dfffee389d81770e6fd106e05c312ce5852e4c07c3a6e210bd30"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version    Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"--help\"",
+      "source_excerpt": "public Task Should_Not_Show_Hidden_Command_Options()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<GenericCommand<HiddenOptionSettings>>();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n            });\n\n            // When\n            var result = fixture.Run(\"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 970,
+      "source_line_start": 955,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Not_Show_Hidden_Command_Options",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Not_Show_Hidden_Command_Options",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 68,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Hidden_Command_Options.Output.verified.txt",
+        "sha256": "2154fa3182f827340323db3327c22872cc78a2b91d86be0b54741d50ccefb16c"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_with_padding",
+      "declared_command_or_settings_types": [
+        "DogCommand",
+        "HorseCommand",
+        "GiraffeCommand"
+      ],
+      "full_diff": "--- Hidden_Commands.Output.verified.txt\n\n+++ Hidden_Commands.Output.DotNet8_0.received.txt\n\n@@ -2,8 +2,7 @@\n\n     myapp [OPTIONS] <COMMAND>\n \n OPTIONS:\n-    -h, --help       Prints help information\n-    -v, --version    Prints version information\n+    -h, --help    Prints help information\n \n COMMANDS:\n     dog <AGE>    The dog command",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Hidden_Commands.Output.DotNet8_0.received.txt",
+        "sha256": "2c0427286aec1ab64b04b6d62e98c8bda1926a436aa0d20789067eb74b21bddf"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version    Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"--help\"",
+      "source_excerpt": "public Task Should_Skip_Hidden_Commands()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddCommand<DogCommand>(\"dog\");\n                configurator.AddCommand<HorseCommand>(\"horse\");\n                configurator.AddCommand<GiraffeCommand>(\"giraffe\")\n                    .WithExample(\"giraffe\", \"123\")\n                    .IsHidden();\n            });\n\n            // When\n            var result = fixture.Run(\"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 73,
+      "source_line_start": 54,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Skip_Hidden_Commands",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Skip_Hidden_Commands",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 72,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Hidden_Commands.Output.verified.txt",
+        "sha256": "c62f9f69ed24610d13bffc2ceae3fc9f1e7186f9da7948cfa628972766599c19"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_with_padding",
+      "declared_command_or_settings_types": [
+        "DogCommand"
+      ],
+      "full_diff": "--- Custom_Help_Registered_By_Instance.Output.verified.txt\n\n+++ Custom_Help_Registered_By_Instance.Output.DotNet8_0.received.txt\n\n@@ -6,8 +6,7 @@\n\n     myapp [OPTIONS] <COMMAND>\n \n OPTIONS:\n-    -h, --help       Prints help information\n-    -v, --version    Prints version information\n+    -h, --help    Prints help information\n \n COMMANDS:\n     dog <AGE>    The dog command",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Custom_Help_Registered_By_Instance.Output.DotNet8_0.received.txt",
+        "sha256": "7ed37f692387561a532c36c542434dd598c7bcefb8b1c17729f52bf59de4fd84"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version    Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "",
+      "source_excerpt": "public Task Should_Output_Custom_Help_When_Registered_By_Instance()\n        {\n            var registrar = new DefaultTypeRegistrar();\n\n            // Given\n            var fixture = new CommandAppTester(registrar);\n            fixture.Configure(configurator =>\n            {\n                // Create the custom help provider\n                var helpProvider = new CustomHelpProvider(configurator.Settings, \"1.0\");\n\n                // Register the custom help provider instance\n                registrar.RegisterInstance(typeof(IHelpProvider), helpProvider);\n\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddCommand<DogCommand>(\"dog\");\n            });\n\n            // When\n            var result = fixture.Run();\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 426,
+      "source_line_start": 403,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Custom_Help_When_Registered_By_Instance",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Custom_Help_When_Registered_By_Instance",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 73,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Custom_Help_Registered_By_Instance.Output.verified.txt",
+        "sha256": "ed29955d0c3e707ec438cb101792ad5de15351581e2fdeb05614ea89735a8194"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_only",
+      "declared_command_or_settings_types": [
+        "LionCommand",
+        "GiraffeCommand"
+      ],
+      "full_diff": "--- Default_Without_Args_Additional.Output_DE.verified.txt\n\n+++ Default_Without_Args_Additional.Output_DE.DotNet8_0.received.txt\n\n@@ -14,7 +14,6 @@\n\n OPTIONEN:\n                              STANDARDWERT\n     -h, --help                                   Zeigt Hilfe an\n-    -v, --version                                Zeigt Versionsinformationen an\n     -a, --alive                                  Indicates whether or not the animal is alive\n     -n, --name <VALUE>\n         --agility <VALUE>    10                  The agility between 0 and 100",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_DE.DotNet8_0.received.txt",
+        "sha256": "af05e311edb56846c916d6aec08391414ddbdecf6bd7c6554ea40665f4938b54"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version                                Zeigt Versionsinformationen an"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "",
+      "source_excerpt": "public Task Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(string culture, string expectationPrefix)\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<LionCommand>();\n            fixture.Configure(configurator =>\n            {\n                configurator.AddExample(\"20\", \"--alive\");\n                configurator.SetApplicationCulture(string.IsNullOrEmpty(culture) ? null : new CultureInfo(culture));\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddCommand<GiraffeCommand>(\"giraffe\");\n            });\n\n            // When\n            var result = fixture.Run();\n\n            // Then\n            var settings = new VerifySettings();\n            settings.DisableRequireUniquePrefix();\n            return Verifier.Verify(result.Output, settings).UseTextForParameters(expectationPrefix);\n        }",
+      "source_line_end": 285,
+      "source_line_start": 265,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(culture: \"de-DE\", expectationPrefix: \"DE\")",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 84,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_DE.verified.txt",
+        "sha256": "7c56cc35b2a8973210f47b5c395cc870cfa3d88891cde70bdf32891809419ee3"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_with_padding",
+      "declared_command_or_settings_types": [
+        "DogCommand",
+        "HorseCommand",
+        "GiraffeCommand"
+      ],
+      "full_diff": "--- Root.Output.verified.txt\n\n+++ Root.Output.DotNet8_0.received.txt\n\n@@ -2,8 +2,7 @@\n\n     myapp [OPTIONS] <COMMAND>\n \n OPTIONS:\n-    -h, --help       Prints help information\n-    -v, --version    Prints version information\n+    -h, --help    Prints help information\n \n COMMANDS:\n     dog <AGE>           The dog command",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root.Output.DotNet8_0.received.txt",
+        "sha256": "b2f32261dbff50862e43ae8ecf614e886712ad821e3ee091be2d21143d3b5ce6"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version    Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"--help\"",
+      "source_excerpt": "public Task Should_Output_Root_Correctly()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddCommand<DogCommand>(\"dog\");\n                configurator.AddCommand<HorseCommand>(\"horse\");\n                configurator.AddCommand<GiraffeCommand>(\"giraffe\");\n            });\n\n            // When\n            var result = fixture.Run(\"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 29,
+      "source_line_start": 12,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Root_Correctly",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Root_Correctly",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 105,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root.Output.verified.txt",
+        "sha256": "2e6e40896ab5a77b09b0a9831c51cf9703188c71745c12eb936a346c0f279560"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_only",
+      "declared_command_or_settings_types": [
+        "LionCommand",
+        "GiraffeCommand"
+      ],
+      "full_diff": "--- Default_Without_Args_Additional.Output_FR.verified.txt\n\n+++ Default_Without_Args_Additional.Output_FR.DotNet8_0.received.txt\n\n@@ -14,7 +14,6 @@\n\n OPTIONS:\n                              DÉFAUT\n     -h, --help                                   Affiche l'aide\n-    -v, --version                                Affiche la version\n     -a, --alive                                  Indicates whether or not the animal is alive\n     -n, --name <VALUE>\n         --agility <VALUE>    10                  The agility between 0 and 100",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_FR.DotNet8_0.received.txt",
+        "sha256": "9b25089753ac87c616f223e52ace9d1b8ba3feb495396d406f5aa741d6062042"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version                                Affiche la version"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "",
+      "source_excerpt": "public Task Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(string culture, string expectationPrefix)\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<LionCommand>();\n            fixture.Configure(configurator =>\n            {\n                configurator.AddExample(\"20\", \"--alive\");\n                configurator.SetApplicationCulture(string.IsNullOrEmpty(culture) ? null : new CultureInfo(culture));\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddCommand<GiraffeCommand>(\"giraffe\");\n            });\n\n            // When\n            var result = fixture.Run();\n\n            // Then\n            var settings = new VerifySettings();\n            settings.DisableRequireUniquePrefix();\n            return Verifier.Verify(result.Output, settings).UseTextForParameters(expectationPrefix);\n        }",
+      "source_line_end": 285,
+      "source_line_start": 265,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(culture: \"fr\", expectationPrefix: \"FR\")",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 130,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_FR.verified.txt",
+        "sha256": "c8c151c5c4049ee543b6a69737138ab50877daf5acca8ef08de6c66f0f1f7e3b"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_with_padding",
+      "declared_command_or_settings_types": [
+        "AnimalSettings",
+        "DogCommand",
+        "HorseCommand"
+      ],
+      "full_diff": "--- Root_Examples_Leafs_Eight.Output.verified.txt\n\n+++ Root_Examples_Leafs_Eight.Output.DotNet8_0.received.txt\n\n@@ -12,8 +12,7 @@\n\n     myapp animal horse --name Sugar --IsAlive false\n \n OPTIONS:\n-    -h, --help       Prints help information\n-    -v, --version    Prints version information\n+    -h, --help    Prints help information\n \n COMMANDS:\n     animal    The animal command",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Leafs_Eight.Output.DotNet8_0.received.txt",
+        "sha256": "2dec2a43302eabb41645b5501358b2907637a36e8abd7bb3d9345a5392456ea2"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version    Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"--help\"",
+      "source_excerpt": "public Task Should_Output_Eight_Examples_Defined_On_Leaves_If_No_Other_Examples_Are_Found()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddBranch<AnimalSettings>(\"animal\", animal =>\n                {\n                    animal.SetDescription(\"The animal command.\");\n\n                    // Show the first 8 examples defined on the direct children\n                    configurator.Settings.MaximumIndirectExamples = 8;\n\n                    animal.AddCommand<DogCommand>(\"dog\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Rufus\", \"--age\", \"12\", \"--good-boy\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Luna\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Charlie\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Bella\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Daisy\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Milo\");\n\n                    animal.AddCommand<HorseCommand>(\"horse\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Brutus\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Sugar\", \"--IsAlive\", \"false\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Cash\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Dakota\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Cisco\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Spirit\");\n                });\n            });\n\n            // When\n            var result = fixture.Run(\"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 763,
+      "source_line_start": 726,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Eight_Examples_Defined_On_Leaves_If_No_Other_Examples_Are_Found",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Eight_Examples_Defined_On_Leaves_If_No_Other_Examples_Are_Found",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 153,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Leafs_Eight.Output.verified.txt",
+        "sha256": "c2f5fd2d0514e8509306da4e4d1164bd132446922ae6709352087275e5a9316a"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_only",
+      "declared_command_or_settings_types": [
+        "LionCommand",
+        "GiraffeCommand"
+      ],
+      "full_diff": "--- Default_Without_Args_Additional.Output_FR.verified.txt\n\n+++ Default_Without_Args_Additional.Output_FR.DotNet8_0.received.txt\n\n@@ -14,7 +14,6 @@\n\n OPTIONS:\n                              DÉFAUT\n     -h, --help                                   Affiche l'aide\n-    -v, --version                                Affiche la version\n     -a, --alive                                  Indicates whether or not the animal is alive\n     -n, --name <VALUE>\n         --agility <VALUE>    10                  The agility between 0 and 100",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_FR.DotNet8_0.received.txt",
+        "sha256": "9b25089753ac87c616f223e52ace9d1b8ba3feb495396d406f5aa741d6062042"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version                                Affiche la version"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "",
+      "source_excerpt": "public Task Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(string culture, string expectationPrefix)\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<LionCommand>();\n            fixture.Configure(configurator =>\n            {\n                configurator.AddExample(\"20\", \"--alive\");\n                configurator.SetApplicationCulture(string.IsNullOrEmpty(culture) ? null : new CultureInfo(culture));\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddCommand<GiraffeCommand>(\"giraffe\");\n            });\n\n            // When\n            var result = fixture.Run();\n\n            // Then\n            var settings = new VerifySettings();\n            settings.DisableRequireUniquePrefix();\n            return Verifier.Verify(result.Output, settings).UseTextForParameters(expectationPrefix);\n        }",
+      "source_line_end": 285,
+      "source_line_start": 265,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(culture: \"fr-FR\", expectationPrefix: \"FR\")",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 154,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_FR.verified.txt",
+        "sha256": "c8c151c5c4049ee543b6a69737138ab50877daf5acca8ef08de6c66f0f1f7e3b"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_with_padding",
+      "declared_command_or_settings_types": [
+        "DogCommand",
+        "HorseCommand"
+      ],
+      "full_diff": "--- Root_Examples_Children_Twelve.Output.verified.txt\n\n+++ Root_Examples_Children_Twelve.Output.DotNet8_0.received.txt\n\n@@ -16,8 +16,7 @@\n\n     myapp horse --name Spirit\n \n OPTIONS:\n-    -h, --help       Prints help information\n-    -v, --version    Prints version information\n+    -h, --help    Prints help information\n \n COMMANDS:\n     dog <AGE>    The dog command",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Children_Twelve.Output.DotNet8_0.received.txt",
+        "sha256": "390d9b26480cd982d15cb17bd0d3f9d1cdb263bafe9893e6570ebdd4ed1617b6"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version    Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"--help\"",
+      "source_excerpt": "public Task Should_Output_All_Examples_Defined_On_Direct_Children_If_Root_Has_No_Examples()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n\n                // Show all examples defined on the direct children\n                configurator.Settings.MaximumIndirectExamples = int.MaxValue;\n\n                configurator.AddCommand<DogCommand>(\"dog\")\n                    .WithExample(\"dog\", \"--name\", \"Rufus\", \"--age\", \"12\", \"--good-boy\")\n                    .WithExample(\"dog\", \"--name\", \"Luna\")\n                    .WithExample(\"dog\", \"--name\", \"Charlie\")\n                    .WithExample(\"dog\", \"--name\", \"Bella\")\n                    .WithExample(\"dog\", \"--name\", \"Daisy\")\n                    .WithExample(\"dog\", \"--name\", \"Milo\");\n\n                configurator.AddCommand<HorseCommand>(\"horse\")\n                    .WithExample(\"horse\", \"--name\", \"Brutus\")\n                    .WithExample(\"horse\", \"--name\", \"Sugar\", \"--IsAlive\", \"false\")\n                    .WithExample(\"horse\", \"--name\", \"Cash\")\n                    .WithExample(\"horse\", \"--name\", \"Dakota\")\n                    .WithExample(\"horse\", \"--name\", \"Cisco\")\n                    .WithExample(\"horse\", \"--name\", \"Spirit\");\n            });\n\n            // When\n            var result = fixture.Run(\"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 644,
+      "source_line_start": 611,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_All_Examples_Defined_On_Direct_Children_If_Root_Has_No_Examples",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_All_Examples_Defined_On_Direct_Children_If_Root_Has_No_Examples",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 161,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Children_Twelve.Output.verified.txt",
+        "sha256": "1c4b753e6f7aca30935ec945fce66884dc06f42f03570c11d1df11c59e3847c9"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_only",
+      "declared_command_or_settings_types": [
+        "DogCommand"
+      ],
+      "full_diff": "--- Default_Examples.Output.verified.txt\n\n+++ Default_Examples.Output.DotNet8_0.received.txt\n\n@@ -18,7 +18,6 @@\n\n \n OPTIONS:\n     -h, --help            Prints help information\n-    -v, --version         Prints version information\n     -a, --alive           Indicates whether or not the animal is alive\n     -n, --name <VALUE>\n     -g, --good-boy",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Examples.Output.DotNet8_0.received.txt",
+        "sha256": "632f5c4e3425498e78e6c5c5ddfc82337ca7b653297b6283dc48466a27b1d363"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version         Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"--help\"",
+      "source_excerpt": "public Task Should_Output_Examples_Defined_On_Root_If_Default_Command_Is_Specified()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<DogCommand>();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n\n                // All root examples should be shown\n                configurator.AddExample(\"--name\", \"Rufus\", \"--age\", \"12\", \"--good-boy\");\n                configurator.AddExample(\"--name\", \"Luna\");\n                configurator.AddExample(\"--name\", \"Charlie\");\n                configurator.AddExample(\"--name\", \"Bella\");\n                configurator.AddExample(\"--name\", \"Daisy\");\n                configurator.AddExample(\"--name\", \"Milo\");\n            });\n\n            // When\n            var result = fixture.Run(\"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 913,
+      "source_line_start": 890,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Examples_Defined_On_Root_If_Default_Command_Is_Specified",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Examples_Defined_On_Root_If_Default_Command_Is_Specified",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 187,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Examples.Output.verified.txt",
+        "sha256": "1706178fa3e429ff07b19aebc4c225509f0604e6f9264ca59a028b8c05bf99d8"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_with_padding",
+      "declared_command_or_settings_types": [
+        "DogCommand",
+        "HorseCommand"
+      ],
+      "full_diff": "--- Root_Examples_Children_None.Output.verified.txt\n\n+++ Root_Examples_Children_None.Output.DotNet8_0.received.txt\n\n@@ -2,8 +2,7 @@\n\n     myapp [OPTIONS] <COMMAND>\n \n OPTIONS:\n-    -h, --help       Prints help information\n-    -v, --version    Prints version information\n+    -h, --help    Prints help information\n \n COMMANDS:\n     dog <AGE>    The dog command",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Children_None.Output.DotNet8_0.received.txt",
+        "sha256": "2c0427286aec1ab64b04b6d62e98c8bda1926a436aa0d20789067eb74b21bddf"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version    Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"--help\"",
+      "source_excerpt": "public Task Should_Not_Output_Examples_Defined_On_Direct_Children_If_Root_Has_No_Examples()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n\n                // Do not show examples defined on the direct children\n                configurator.Settings.MaximumIndirectExamples = 0;\n\n                configurator.AddCommand<DogCommand>(\"dog\")\n                    .WithExample(\"dog\", \"--name\", \"Rufus\", \"--age\", \"12\", \"--good-boy\")\n                    .WithExample(\"dog\", \"--name\", \"Luna\")\n                    .WithExample(\"dog\", \"--name\", \"Charlie\")\n                    .WithExample(\"dog\", \"--name\", \"Bella\")\n                    .WithExample(\"dog\", \"--name\", \"Daisy\")\n                    .WithExample(\"dog\", \"--name\", \"Milo\");\n\n                configurator.AddCommand<HorseCommand>(\"horse\")\n                    .WithExample(\"horse\", \"--name\", \"Brutus\")\n                    .WithExample(\"horse\", \"--name\", \"Sugar\", \"--IsAlive\", \"false\")\n                    .WithExample(\"horse\", \"--name\", \"Cash\")\n                    .WithExample(\"horse\", \"--name\", \"Dakota\")\n                    .WithExample(\"horse\", \"--name\", \"Cisco\")\n                    .WithExample(\"horse\", \"--name\", \"Spirit\");\n            });\n\n            // When\n            var result = fixture.Run(\"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 681,
+      "source_line_start": 648,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Not_Output_Examples_Defined_On_Direct_Children_If_Root_Has_No_Examples",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Not_Output_Examples_Defined_On_Direct_Children_If_Root_Has_No_Examples",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 189,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Children_None.Output.verified.txt",
+        "sha256": "f964f5a98324f0feeb6f2f1f1a8f5213ab0c8f7d8f1e2358aa989e7b4bacd97f"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_only",
+      "declared_command_or_settings_types": [
+        "LionCommand",
+        "GiraffeCommand"
+      ],
+      "full_diff": "--- Default_Without_Args_Additional.Output_EN.verified.txt\n\n+++ Default_Without_Args_Additional.Output_EN.DotNet8_0.received.txt\n\n@@ -14,7 +14,6 @@\n\n OPTIONS:\n                              DEFAULT\n     -h, --help                                   Prints help information\n-    -v, --version                                Prints version information\n     -a, --alive                                  Indicates whether or not the animal is alive\n     -n, --name <VALUE>\n         --agility <VALUE>    10                  The agility between 0 and 100",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_EN.DotNet8_0.received.txt",
+        "sha256": "9415441e48dd9604b25355a2897b6da56e63832b420cec922f1d835d4a4eb700"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version                                Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "",
+      "source_excerpt": "public Task Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(string culture, string expectationPrefix)\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<LionCommand>();\n            fixture.Configure(configurator =>\n            {\n                configurator.AddExample(\"20\", \"--alive\");\n                configurator.SetApplicationCulture(string.IsNullOrEmpty(culture) ? null : new CultureInfo(culture));\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddCommand<GiraffeCommand>(\"giraffe\");\n            });\n\n            // When\n            var result = fixture.Run();\n\n            // Then\n            var settings = new VerifySettings();\n            settings.DisableRequireUniquePrefix();\n            return Verifier.Verify(result.Output, settings).UseTextForParameters(expectationPrefix);\n        }",
+      "source_line_end": 285,
+      "source_line_start": 265,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(culture: \"en-EN\", expectationPrefix: \"EN\")",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 193,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_EN.verified.txt",
+        "sha256": "f699c46dd2db0da569c351baf86c88bb50162b687082d4ea9a2149c93fe20c74"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_only",
+      "declared_command_or_settings_types": [
+        "LionCommand",
+        "GiraffeCommand"
+      ],
+      "full_diff": "--- Default_Without_Args_Additional_Style_BoldHeadings.Output.verified.txt\n\n+++ Default_Without_Args_Additional_Style_BoldHeadings.Output.DotNet8_0.received.txt\n\n@@ -14,7 +14,6 @@\n\n []OPTIONS:[/]\n                                     []DEFAULT[/]\n     -h, --help                                                    Prints help information\n-    -v, --version                                                 Prints version information\n     -a, --alive                                                   Indicates whether or not the animal is alive\n     -n, --name []<VALUE>[/]\n         --agility []<VALUE>[/]      []10[/]                       The agility between 0 and 100",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional_Style_BoldHeadings.Output.DotNet8_0.received.txt",
+        "sha256": "d093a5713d02c2ef282c575f2964c2f25927c8337157e23e1636f8f09a687458"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version                                                 Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "",
+      "source_excerpt": "public Task Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Style_BoldHeadings()\n        {\n            // Bold headings in the help text\n            var styles = new HelpProviderStyle()\n            {\n                Description = new DescriptionStyle()\n                {\n                    Header = \"bold\",\n                },\n                Usage = new UsageStyle()\n                {\n                    Header = \"bold\",\n                },\n                Examples = new ExampleStyle()\n                {\n                    Header = \"bold\",\n                },\n                Arguments = new ArgumentStyle()\n                {\n                    Header = \"bold\",\n                },\n                Commands = new CommandStyle()\n                {\n                    Header = \"bold\",\n                },\n\n                // Omit OptionStyle to ensure coverage of at least one null style class\n            };\n\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<LionCommand>();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddExample(\"20\", \"--alive\");\n                configurator.AddCommand<GiraffeCommand>(\"giraffe\");\n                configurator.Settings.HelpProviderStyles = styles;\n                configurator.SetHelpProvider(new RenderMarkupHelpProvider(configurator.Settings));\n            });\n\n            // When\n            var result = fixture.Run();\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 357,
+      "source_line_start": 311,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Style_BoldHeadings",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Style_BoldHeadings",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 194,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional_Style_BoldHeadings.Output.verified.txt",
+        "sha256": "5b31b953129cc411fbaf915b10dc370e21854b449101e0c95d619f4a66e4726c"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_only",
+      "declared_command_or_settings_types": [
+        "LionCommand",
+        "GiraffeCommand"
+      ],
+      "full_diff": "--- Default_Without_Args_Additional.Output_SV.verified.txt\n\n+++ Default_Without_Args_Additional.Output_SV.DotNet8_0.received.txt\n\n@@ -14,7 +14,6 @@\n\n VAL:\n                              STANDARD\n     -h, --help                                   Skriver ut hjälpinformation\n-    -v, --version                                Skriver ut versionsnummer\n     -a, --alive                                  Indicates whether or not the animal is alive\n     -n, --name <VALUE>\n         --agility <VALUE>    10                  The agility between 0 and 100",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_SV.DotNet8_0.received.txt",
+        "sha256": "62679961be833e747cd5889a620a26c68a38d77496ef14599a5f2d30474f9b99"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version                                Skriver ut versionsnummer"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "",
+      "source_excerpt": "public Task Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(string culture, string expectationPrefix)\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<LionCommand>();\n            fixture.Configure(configurator =>\n            {\n                configurator.AddExample(\"20\", \"--alive\");\n                configurator.SetApplicationCulture(string.IsNullOrEmpty(culture) ? null : new CultureInfo(culture));\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddCommand<GiraffeCommand>(\"giraffe\");\n            });\n\n            // When\n            var result = fixture.Run();\n\n            // Then\n            var settings = new VerifySettings();\n            settings.DisableRequireUniquePrefix();\n            return Verifier.Verify(result.Output, settings).UseTextForParameters(expectationPrefix);\n        }",
+      "source_line_end": 285,
+      "source_line_start": 265,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(culture: \"sv-SE\", expectationPrefix: \"SV\")",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 212,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_SV.verified.txt",
+        "sha256": "f5a5f04ed3eaaf544dd9fd60450e8809f999e8436c9f3f208ba444454c7f00b4"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_with_padding",
+      "declared_command_or_settings_types": [
+        "DogCommand",
+        "HorseCommand"
+      ],
+      "full_diff": "--- Root_Examples.Output.verified.txt\n\n+++ Root_Examples.Output.DotNet8_0.received.txt\n\n@@ -16,8 +16,7 @@\n\n     myapp horse --name Spirit\n \n OPTIONS:\n-    -h, --help       Prints help information\n-    -v, --version    Prints version information\n+    -h, --help    Prints help information\n \n COMMANDS:\n     dog <AGE>    The dog command",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples.Output.DotNet8_0.received.txt",
+        "sha256": "390d9b26480cd982d15cb17bd0d3f9d1cdb263bafe9893e6570ebdd4ed1617b6"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version    Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"--help\"",
+      "source_excerpt": "public Task Should_Output_Examples_Defined_On_Root()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n\n                // All root examples should be shown\n                configurator.AddExample(\"dog\", \"--name\", \"Rufus\", \"--age\", \"12\", \"--good-boy\");\n                configurator.AddExample(\"dog\", \"--name\", \"Luna\");\n                configurator.AddExample(\"dog\", \"--name\", \"Charlie\");\n                configurator.AddExample(\"dog\", \"--name\", \"Bella\");\n                configurator.AddExample(\"dog\", \"--name\", \"Daisy\");\n                configurator.AddExample(\"dog\", \"--name\", \"Milo\");\n                configurator.AddExample(\"horse\", \"--name\", \"Brutus\");\n                configurator.AddExample(\"horse\", \"--name\", \"Sugar\", \"--IsAlive\", \"false\");\n                configurator.AddExample(\"horse\", \"--name\", \"Cash\");\n                configurator.AddExample(\"horse\", \"--name\", \"Dakota\");\n                configurator.AddExample(\"horse\", \"--name\", \"Cisco\");\n                configurator.AddExample(\"horse\", \"--name\", \"Spirit\");\n\n                configurator.AddCommand<DogCommand>(\"dog\");\n                configurator.AddCommand<HorseCommand>(\"horse\");\n            });\n\n            // When\n            var result = fixture.Run(\"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 533,
+      "source_line_start": 502,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Examples_Defined_On_Root",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Examples_Defined_On_Root",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 219,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples.Output.verified.txt",
+        "sha256": "ebad4e7529096ae4d44cf7224431d197f2be88cd2459b5d520029d3c2cabb0d6"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_with_padding",
+      "declared_command_or_settings_types": [
+        "DogCommand",
+        "HorseCommand"
+      ],
+      "full_diff": "--- Root_Examples_Children_Eight.Output.verified.txt\n\n+++ Root_Examples_Children_Eight.Output.DotNet8_0.received.txt\n\n@@ -12,8 +12,7 @@\n\n     myapp horse --name Sugar --IsAlive false\n \n OPTIONS:\n-    -h, --help       Prints help information\n-    -v, --version    Prints version information\n+    -h, --help    Prints help information\n \n COMMANDS:\n     dog <AGE>    The dog command",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Children_Eight.Output.DotNet8_0.received.txt",
+        "sha256": "686c76de0c90e39992e043377a3af32ef67909519e3db01234e3879e00cc78c4"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version    Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"--help\"",
+      "source_excerpt": "public Task Should_Output_Eight_Examples_Defined_On_Direct_Children_If_Root_Has_No_Examples()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n\n                // Show the first 8 examples defined on the direct children\n                configurator.Settings.MaximumIndirectExamples = 8;\n\n                configurator.AddCommand<DogCommand>(\"dog\")\n                    .WithExample(\"dog\", \"--name\", \"Rufus\", \"--age\", \"12\", \"--good-boy\")\n                    .WithExample(\"dog\", \"--name\", \"Luna\")\n                    .WithExample(\"dog\", \"--name\", \"Charlie\")\n                    .WithExample(\"dog\", \"--name\", \"Bella\")\n                    .WithExample(\"dog\", \"--name\", \"Daisy\")\n                    .WithExample(\"dog\", \"--name\", \"Milo\");\n\n                configurator.AddCommand<HorseCommand>(\"horse\")\n                    .WithExample(\"horse\", \"--name\", \"Brutus\")\n                    .WithExample(\"horse\", \"--name\", \"Sugar\", \"--IsAlive\", \"false\")\n                    .WithExample(\"horse\", \"--name\", \"Cash\")\n                    .WithExample(\"horse\", \"--name\", \"Dakota\")\n                    .WithExample(\"horse\", \"--name\", \"Cisco\")\n                    .WithExample(\"horse\", \"--name\", \"Spirit\");\n            });\n\n            // When\n            var result = fixture.Run(\"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 607,
+      "source_line_start": 574,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Eight_Examples_Defined_On_Direct_Children_If_Root_Has_No_Examples",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Eight_Examples_Defined_On_Direct_Children_If_Root_Has_No_Examples",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 222,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Children_Eight.Output.verified.txt",
+        "sha256": "8fcb0a158dce33d1fcb625e7dcf3f544c6debd2269ec55a1b2495006a3471eb4"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_only",
+      "declared_command_or_settings_types": [
+        "LionCommand",
+        "GiraffeCommand"
+      ],
+      "full_diff": "--- Default_Without_Args_Additional.Output_EN.verified.txt\n\n+++ Default_Without_Args_Additional.Output_EN.DotNet8_0.received.txt\n\n@@ -14,7 +14,6 @@\n\n OPTIONS:\n                              DEFAULT\n     -h, --help                                   Prints help information\n-    -v, --version                                Prints version information\n     -a, --alive                                  Indicates whether or not the animal is alive\n     -n, --name <VALUE>\n         --agility <VALUE>    10                  The agility between 0 and 100",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_EN.DotNet8_0.received.txt",
+        "sha256": "9415441e48dd9604b25355a2897b6da56e63832b420cec922f1d835d4a4eb700"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version                                Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "",
+      "source_excerpt": "public Task Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(string culture, string expectationPrefix)\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<LionCommand>();\n            fixture.Configure(configurator =>\n            {\n                configurator.AddExample(\"20\", \"--alive\");\n                configurator.SetApplicationCulture(string.IsNullOrEmpty(culture) ? null : new CultureInfo(culture));\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddCommand<GiraffeCommand>(\"giraffe\");\n            });\n\n            // When\n            var result = fixture.Run();\n\n            // Then\n            var settings = new VerifySettings();\n            settings.DisableRequireUniquePrefix();\n            return Verifier.Verify(result.Output, settings).UseTextForParameters(expectationPrefix);\n        }",
+      "source_line_end": 285,
+      "source_line_start": 265,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(culture: null, expectationPrefix: \"EN\")",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 225,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_EN.verified.txt",
+        "sha256": "f699c46dd2db0da569c351baf86c88bb50162b687082d4ea9a2149c93fe20c74"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_with_padding",
+      "declared_command_or_settings_types": [
+        "GenericCommand<ArgumentOrderSettings"
+      ],
+      "full_diff": "--- ArgumentOrder.Output.verified.txt\n\n+++ ArgumentOrder.Output.DotNet8_0.received.txt\n\n@@ -9,5 +9,4 @@\n\n     [QUX]\n \n OPTIONS:\n-    -h, --help       Prints help information\n-    -v, --version    Prints version information\n+    -h, --help    Prints help information",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\ArgumentOrder.Output.DotNet8_0.received.txt",
+        "sha256": "f3c11e04a7f7c8f4d1704728d5201bb7d0c020e2a3a42374827694d5ee25127a"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version    Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"--help\"",
+      "source_excerpt": "public Task Should_List_Arguments_In_Correct_Order()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<GenericCommand<ArgumentOrderSettings>>();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n            });\n\n            // When\n            var result = fixture.Run(\"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 951,
+      "source_line_start": 936,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_List_Arguments_In_Correct_Order",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_List_Arguments_In_Correct_Order",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 227,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\ArgumentOrder.Output.verified.txt",
+        "sha256": "a6a12e1f11728f5b604a8f2fc9a1b6d6e09fbd8cbcaab9c3c613f3fb6a4c5833"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_with_padding",
+      "declared_command_or_settings_types": [
+        "AnimalSettings",
+        "DogCommand",
+        "HorseCommand"
+      ],
+      "full_diff": "--- Root_Examples_Leafs_Twelve.Output.verified.txt\n\n+++ Root_Examples_Leafs_Twelve.Output.DotNet8_0.received.txt\n\n@@ -16,8 +16,7 @@\n\n     myapp animal horse --name Spirit\n \n OPTIONS:\n-    -h, --help       Prints help information\n-    -v, --version    Prints version information\n+    -h, --help    Prints help information\n \n COMMANDS:\n     animal    The animal command",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Leafs_Twelve.Output.DotNet8_0.received.txt",
+        "sha256": "ed6796ec8042288bb180edc6fd26e0ca42e5e10eeffb850ea064930f08e979ab"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version    Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"--help\"",
+      "source_excerpt": "public Task Should_Output_All_Examples_Defined_On_Leaves_If_No_Other_Examples_Are_Found()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddBranch<AnimalSettings>(\"animal\", animal =>\n                {\n                    animal.SetDescription(\"The animal command.\");\n\n                    // Show all examples defined on the direct children\n                    configurator.Settings.MaximumIndirectExamples = int.MaxValue;\n\n                    animal.AddCommand<DogCommand>(\"dog\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Rufus\", \"--age\", \"12\", \"--good-boy\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Luna\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Charlie\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Bella\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Daisy\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Milo\");\n\n                    animal.AddCommand<HorseCommand>(\"horse\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Brutus\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Sugar\", \"--IsAlive\", \"false\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Cash\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Dakota\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Cisco\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Spirit\");\n                });\n            });\n\n            // When\n            var result = fixture.Run(\"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 804,
+      "source_line_start": 767,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_All_Examples_Defined_On_Leaves_If_No_Other_Examples_Are_Found",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_All_Examples_Defined_On_Leaves_If_No_Other_Examples_Are_Found",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 230,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Leafs_Twelve.Output.verified.txt",
+        "sha256": "dc7fbdf93bce8519e408498a968a8333de2a1e2e43d6c38719d4a99fff2366ca"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_with_padding",
+      "declared_command_or_settings_types": [
+        "DogCommand",
+        "HorseCommand"
+      ],
+      "full_diff": "--- Root_Examples_Children.Output.verified.txt\n\n+++ Root_Examples_Children.Output.DotNet8_0.received.txt\n\n@@ -9,8 +9,7 @@\n\n     myapp dog --name Daisy\n \n OPTIONS:\n-    -h, --help       Prints help information\n-    -v, --version    Prints version information\n+    -h, --help    Prints help information\n \n COMMANDS:\n     dog <AGE>    The dog command",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Children.Output.DotNet8_0.received.txt",
+        "sha256": "434c03770ee6f01da59ddfd8d31e6e1bb73f44939d4e933325f503c86f143722"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version    Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"--help\"",
+      "source_excerpt": "public Task Should_Output_Examples_Defined_On_Direct_Children_If_Root_Has_No_Examples()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n\n                // It should be capped to the first 5 examples by default\n\n                configurator.AddCommand<DogCommand>(\"dog\")\n                    .WithExample(\"dog\", \"--name\", \"Rufus\", \"--age\", \"12\", \"--good-boy\")\n                    .WithExample(\"dog\", \"--name\", \"Luna\")\n                    .WithExample(\"dog\", \"--name\", \"Charlie\")\n                    .WithExample(\"dog\", \"--name\", \"Bella\")\n                    .WithExample(\"dog\", \"--name\", \"Daisy\")\n                    .WithExample(\"dog\", \"--name\", \"Milo\");\n\n                configurator.AddCommand<HorseCommand>(\"horse\")\n                    .WithExample(\"horse\", \"--name\", \"Brutus\")\n                    .WithExample(\"horse\", \"--name\", \"Sugar\", \"--IsAlive\", \"false\")\n                    .WithExample(\"horse\", \"--name\", \"Cash\")\n                    .WithExample(\"horse\", \"--name\", \"Dakota\")\n                    .WithExample(\"horse\", \"--name\", \"Cisco\")\n                    .WithExample(\"horse\", \"--name\", \"Spirit\");\n            });\n\n            // When\n            var result = fixture.Run(\"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 570,
+      "source_line_start": 538,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Examples_Defined_On_Direct_Children_If_Root_Has_No_Examples",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Examples_Defined_On_Direct_Children_If_Root_Has_No_Examples",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 242,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Children.Output.verified.txt",
+        "sha256": "efe943f5ac741e0a771035b2e351823c46f7039464c0cecd89c67516fe81d903"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_only",
+      "declared_command_or_settings_types": [
+        "LionCommand",
+        "GiraffeCommand"
+      ],
+      "full_diff": "--- Default_Without_Args_Additional.Output_EN.verified.txt\n\n+++ Default_Without_Args_Additional.Output_EN.DotNet8_0.received.txt\n\n@@ -14,7 +14,6 @@\n\n OPTIONS:\n                              DEFAULT\n     -h, --help                                   Prints help information\n-    -v, --version                                Prints version information\n     -a, --alive                                  Indicates whether or not the animal is alive\n     -n, --name <VALUE>\n         --agility <VALUE>    10                  The agility between 0 and 100",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_EN.DotNet8_0.received.txt",
+        "sha256": "9415441e48dd9604b25355a2897b6da56e63832b420cec922f1d835d4a4eb700"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version                                Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "",
+      "source_excerpt": "public Task Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(string culture, string expectationPrefix)\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<LionCommand>();\n            fixture.Configure(configurator =>\n            {\n                configurator.AddExample(\"20\", \"--alive\");\n                configurator.SetApplicationCulture(string.IsNullOrEmpty(culture) ? null : new CultureInfo(culture));\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddCommand<GiraffeCommand>(\"giraffe\");\n            });\n\n            // When\n            var result = fixture.Run();\n\n            // Then\n            var settings = new VerifySettings();\n            settings.DisableRequireUniquePrefix();\n            return Verifier.Verify(result.Output, settings).UseTextForParameters(expectationPrefix);\n        }",
+      "source_line_end": 285,
+      "source_line_start": 265,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(culture: \"\", expectationPrefix: \"EN\")",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 245,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_EN.verified.txt",
+        "sha256": "f699c46dd2db0da569c351baf86c88bb50162b687082d4ea9a2149c93fe20c74"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_only",
+      "declared_command_or_settings_types": [
+        "LionCommand",
+        "GiraffeCommand"
+      ],
+      "full_diff": "--- Default_Without_Args_Additional_Style_None.Output.verified.txt\n\n+++ Default_Without_Args_Additional_Style_None.Output.DotNet8_0.received.txt\n\n@@ -14,7 +14,6 @@\n\n []OPTIONS:[/]\n                                     []DEFAULT[/]\n     -h, --help                                                    Prints help information\n-    -v, --version                                                 Prints version information\n     -a, --alive                                                   Indicates whether or not the animal is alive\n     -n, --name []<VALUE>[/]\n         --agility []<VALUE>[/]      []10[/]                       The agility between 0 and 100",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional_Style_None.Output.DotNet8_0.received.txt",
+        "sha256": "ce8cb30b3568d3f1138d780a6c4a01a0fe3306426c7b9de00bbb22562527ab2c"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version                                                 Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "",
+      "source_excerpt": "public Task Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Style_None()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<LionCommand>();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddExample(\"20\", \"--alive\");\n                configurator.AddCommand<GiraffeCommand>(\"giraffe\");\n                configurator.Settings.HelpProviderStyles = null;\n                configurator.SetHelpProvider(new RenderMarkupHelpProvider(configurator.Settings));\n            });\n\n            // When\n            var result = fixture.Run();\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 380,
+      "source_line_start": 361,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Style_None",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Style_None",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 251,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional_Style_None.Output.verified.txt",
+        "sha256": "0adbb66d5f2df06a61d40de00e9a74f9e01e65ad1ae43670545320882a6a0dc4"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_only",
+      "declared_command_or_settings_types": [
+        "LionCommand",
+        "GiraffeCommand"
+      ],
+      "full_diff": "--- Default_Without_Args_Additional.Output_SV.verified.txt\n\n+++ Default_Without_Args_Additional.Output_SV.DotNet8_0.received.txt\n\n@@ -14,7 +14,6 @@\n\n VAL:\n                              STANDARD\n     -h, --help                                   Skriver ut hjälpinformation\n-    -v, --version                                Skriver ut versionsnummer\n     -a, --alive                                  Indicates whether or not the animal is alive\n     -n, --name <VALUE>\n         --agility <VALUE>    10                  The agility between 0 and 100",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_SV.DotNet8_0.received.txt",
+        "sha256": "62679961be833e747cd5889a620a26c68a38d77496ef14599a5f2d30474f9b99"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version                                Skriver ut versionsnummer"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "",
+      "source_excerpt": "public Task Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(string culture, string expectationPrefix)\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<LionCommand>();\n            fixture.Configure(configurator =>\n            {\n                configurator.AddExample(\"20\", \"--alive\");\n                configurator.SetApplicationCulture(string.IsNullOrEmpty(culture) ? null : new CultureInfo(culture));\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddCommand<GiraffeCommand>(\"giraffe\");\n            });\n\n            // When\n            var result = fixture.Run();\n\n            // Then\n            var settings = new VerifySettings();\n            settings.DisableRequireUniquePrefix();\n            return Verifier.Verify(result.Output, settings).UseTextForParameters(expectationPrefix);\n        }",
+      "source_line_end": 285,
+      "source_line_start": 265,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(culture: \"sv\", expectationPrefix: \"SV\")",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 267,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_SV.verified.txt",
+        "sha256": "f5a5f04ed3eaaf544dd9fd60450e8809f999e8436c9f3f208ba444454c7f00b4"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_only",
+      "declared_command_or_settings_types": [
+        "LionCommand",
+        "GiraffeCommand"
+      ],
+      "full_diff": "--- Default_Without_Args_Additional.Output_EN.verified.txt\n\n+++ Default_Without_Args_Additional.Output_EN.DotNet8_0.received.txt\n\n@@ -14,7 +14,6 @@\n\n OPTIONS:\n                              DEFAULT\n     -h, --help                                   Prints help information\n-    -v, --version                                Prints version information\n     -a, --alive                                  Indicates whether or not the animal is alive\n     -n, --name <VALUE>\n         --agility <VALUE>    10                  The agility between 0 and 100",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_EN.DotNet8_0.received.txt",
+        "sha256": "9415441e48dd9604b25355a2897b6da56e63832b420cec922f1d835d4a4eb700"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version                                Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "",
+      "source_excerpt": "public Task Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(string culture, string expectationPrefix)\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<LionCommand>();\n            fixture.Configure(configurator =>\n            {\n                configurator.AddExample(\"20\", \"--alive\");\n                configurator.SetApplicationCulture(string.IsNullOrEmpty(culture) ? null : new CultureInfo(culture));\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddCommand<GiraffeCommand>(\"giraffe\");\n            });\n\n            // When\n            var result = fixture.Run();\n\n            // Then\n            var settings = new VerifySettings();\n            settings.DisableRequireUniquePrefix();\n            return Verifier.Verify(result.Output, settings).UseTextForParameters(expectationPrefix);\n        }",
+      "source_line_end": 285,
+      "source_line_start": 265,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(culture: \"en\", expectationPrefix: \"EN\")",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 281,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_EN.verified.txt",
+        "sha256": "f699c46dd2db0da569c351baf86c88bb50162b687082d4ea9a2149c93fe20c74"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_with_padding",
+      "declared_command_or_settings_types": [
+        "NoDescriptionCommand"
+      ],
+      "full_diff": "--- NoDescription.Output.verified.txt\n\n+++ NoDescription.Output.DotNet8_0.received.txt\n\n@@ -2,8 +2,7 @@\n\n     myapp [OPTIONS] <COMMAND>\n \n OPTIONS:\n-    -h, --help       Prints help information\n-    -v, --version    Prints version information\n+    -h, --help    Prints help information\n \n COMMANDS:\n     bar",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\NoDescription.Output.DotNet8_0.received.txt",
+        "sha256": "5a3125e43eef6169ea04d46982a9e7c3532ddefa4897f685698a01574de6eb23"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version    Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"--help\"",
+      "source_excerpt": "public Task Should_Not_Show_Truncated_Command_Table_If_Commands_Are_Missing_Description()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddCommand<NoDescriptionCommand>(\"bar\");\n            });\n\n            // When\n            var result = fixture.Run(\"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 932,
+      "source_line_start": 917,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Not_Show_Truncated_Command_Table_If_Commands_Are_Missing_Description",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Not_Show_Truncated_Command_Table_If_Commands_Are_Missing_Description",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 286,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\NoDescription.Output.verified.txt",
+        "sha256": "17c10dbd993d723480f29e93d36a1b266e94e55257368ec0f525ae956496a40a"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_with_padding",
+      "declared_command_or_settings_types": [
+        "AnimalSettings",
+        "DogCommand",
+        "HorseCommand"
+      ],
+      "full_diff": "--- Root_Examples_Leafs_None.Output.verified.txt\n\n+++ Root_Examples_Leafs_None.Output.DotNet8_0.received.txt\n\n@@ -2,8 +2,7 @@\n\n     myapp [OPTIONS] <COMMAND>\n \n OPTIONS:\n-    -h, --help       Prints help information\n-    -v, --version    Prints version information\n+    -h, --help    Prints help information\n \n COMMANDS:\n     animal    The animal command",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Leafs_None.Output.DotNet8_0.received.txt",
+        "sha256": "2c16b7f41030cf9ed28bc19ced26dd4a0b6e8dfd6766e4a23932585143993bab"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version    Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"--help\"",
+      "source_excerpt": "public Task Should_Not_Output_Examples_Defined_On_Leaves_If_No_Other_Examples_Are_Found()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddBranch<AnimalSettings>(\"animal\", animal =>\n                {\n                    animal.SetDescription(\"The animal command.\");\n\n                    // Do not show examples defined on the direct children\n                    configurator.Settings.MaximumIndirectExamples = 0;\n\n                    animal.AddCommand<DogCommand>(\"dog\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Rufus\", \"--age\", \"12\", \"--good-boy\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Luna\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Charlie\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Bella\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Daisy\")\n                        .WithExample(\"animal\", \"dog\", \"--name\", \"Milo\");\n\n                    animal.AddCommand<HorseCommand>(\"horse\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Brutus\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Sugar\", \"--IsAlive\", \"false\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Cash\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Dakota\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Cisco\")\n                        .WithExample(\"animal\", \"horse\", \"--name\", \"Spirit\");\n                });\n            });\n\n            // When\n            var result = fixture.Run(\"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 845,
+      "source_line_start": 808,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Not_Output_Examples_Defined_On_Leaves_If_No_Other_Examples_Are_Found",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Not_Output_Examples_Defined_On_Leaves_If_No_Other_Examples_Are_Found",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 307,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Examples_Leafs_None.Output.verified.txt",
+        "sha256": "2646dbbf62b2edfb513a9e170930897661052b37f2cfa3449fc0cb7d590e732d"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_only",
+      "declared_command_or_settings_types": [
+        "DogCommand",
+        "HorseCommand",
+        "GiraffeCommand"
+      ],
+      "full_diff": "--- Root_Command.Output.verified.txt\n\n+++ Root_Command.Output.DotNet8_0.received.txt\n\n@@ -10,7 +10,6 @@\n\n OPTIONS:\n                            DEFAULT\n     -h, --help                         Prints help information\n-    -v, --version                      Prints version information\n     -a, --alive                        Indicates whether or not the animal is alive\n     -n, --name <VALUE>\n     -d, --day <MON|TUE>",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Command.Output.DotNet8_0.received.txt",
+        "sha256": "bbdb1deca062e280873cab31d609fd11eca46e3032789dc09ae8b95ad2f8c55e"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version                      Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "\"horse\", \"--help\"",
+      "source_excerpt": "public Task Should_Output_Root_Command_Correctly()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddCommand<DogCommand>(\"dog\");\n                configurator.AddCommand<HorseCommand>(\"horse\");\n                configurator.AddCommand<GiraffeCommand>(\"giraffe\");\n            });\n\n            // When\n            var result = fixture.Run(\"horse\", \"--help\");\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 50,
+      "source_line_start": 33,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Root_Command_Correctly",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Root_Command_Correctly",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 339,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Root_Command.Output.verified.txt",
+        "sha256": "de8f4de064973d81ad29441b5f4fc353d514caced77467dc64de496c03a08268"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_only",
+      "declared_command_or_settings_types": [
+        "LionCommand",
+        "GiraffeCommand"
+      ],
+      "full_diff": "--- Default_Without_Args_Additional_Style_Default.Output.verified.txt\n\n+++ Default_Without_Args_Additional_Style_Default.Output.DotNet8_0.received.txt\n\n@@ -14,7 +14,6 @@\n\n [yellow]OPTIONS:[/]\n                                         [lime]DEFAULT[/]\n     -h, --help                                                                Prints help information\n-    -v, --version                                                             Prints version information\n     -a, --alive                                                               Indicates whether or not the animal is alive\n     -n, --name [silver]<VALUE>[/]\n         --agility [silver]<VALUE>[/]    [bold]10[/]                           The agility between 0 and 100",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional_Style_Default.Output.DotNet8_0.received.txt",
+        "sha256": "aaae434be632814a7e4f1e20ff734be3f201fb78f4f419f805e0c5abbddee7b9"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version                                                             Prints version information"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "",
+      "source_excerpt": "public Task Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Style_Default()\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<LionCommand>();\n            fixture.Configure(configurator =>\n            {\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddExample(\"20\", \"--alive\");\n                configurator.AddCommand<GiraffeCommand>(\"giraffe\");\n                configurator.SetHelpProvider(new RenderMarkupHelpProvider(configurator.Settings));\n            });\n\n            // When\n            var result = fixture.Run();\n\n            // Then\n            return Verifier.Verify(result.Output);\n        }",
+      "source_line_end": 307,
+      "source_line_start": 289,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Style_Default",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Style_Default",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 369,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional_Style_Default.Output.verified.txt",
+        "sha256": "c73e3e81225f39f95ff0fa6501f2974301ecf8cad8ae6273722e477ba02729ff"
+      }
+    },
+    {
+      "assigns_ApplicationVersion": false,
+      "calls_SetApplicationVersion": false,
+      "category": "builtin_version_row_removed_only",
+      "declared_command_or_settings_types": [
+        "LionCommand",
+        "GiraffeCommand"
+      ],
+      "full_diff": "--- Default_Without_Args_Additional.Output_DE.verified.txt\n\n+++ Default_Without_Args_Additional.Output_DE.DotNet8_0.received.txt\n\n@@ -14,7 +14,6 @@\n\n OPTIONEN:\n                              STANDARDWERT\n     -h, --help                                   Zeigt Hilfe an\n-    -v, --version                                Zeigt Versionsinformationen an\n     -a, --alive                                  Indicates whether or not the animal is alive\n     -n, --name <VALUE>\n         --agility <VALUE>    10                  The agility between 0 and 100",
+      "other_lines_equal_after_horizontal_whitespace_normalization": true,
+      "received_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_DE.DotNet8_0.received.txt",
+        "sha256": "af05e311edb56846c916d6aec08391414ddbdecf6bd7c6554ea40665f4938b54"
+      },
+      "received_version_rows": [],
+      "references_custom_version_fixture": false,
+      "removed_version_rows": [
+        "    -v, --version                                Zeigt Versionsinformationen an"
+      ],
+      "residual_nonversion_diff": "",
+      "run_expression": "",
+      "source_excerpt": "public Task Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(string culture, string expectationPrefix)\n        {\n            // Given\n            var fixture = new CommandAppTester();\n            fixture.SetDefaultCommand<LionCommand>();\n            fixture.Configure(configurator =>\n            {\n                configurator.AddExample(\"20\", \"--alive\");\n                configurator.SetApplicationCulture(string.IsNullOrEmpty(culture) ? null : new CultureInfo(culture));\n                configurator.SetApplicationName(\"myapp\");\n                configurator.AddCommand<GiraffeCommand>(\"giraffe\");\n            });\n\n            // When\n            var result = fixture.Run();\n\n            // Then\n            var settings = new VerifySettings();\n            settings.DisableRequireUniquePrefix();\n            return Verifier.Verify(result.Output, settings).UseTextForParameters(expectationPrefix);\n        }",
+      "source_line_end": 285,
+      "source_line_start": 265,
+      "source_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-public-v2\\test\\Spectre.Console.Cli.Tests\\Unit\\CommandAppTests.Help.cs",
+        "sha256": "a5e9e7e46254585c567b3552b5f3b3784fa18924c9e6f463eb5c9a02598cd730"
+      },
+      "test_method": "Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised",
+      "test_name": "Spectre.Console.Tests.Unit.Cli.CommandAppTests+Help.Should_Output_Default_Command_And_Additional_Commands_When_Default_Command_Has_Required_Parameters_And_Is_Called_Without_Args_Localised(culture: \"de\", expectationPrefix: \"DE\")",
+      "test_report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      },
+      "test_result_index": 373,
+      "verified_matches_original_public_bytes": true,
+      "verified_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\source\\test\\Spectre.Console.Cli.Tests\\Expectations\\Help\\Default_Without_Args_Additional.Output_DE.verified.txt",
+        "sha256": "7c56cc35b2a8973210f47b5c395cc870cfa3d88891cde70bdf32891809419ee3"
+      }
+    }
+  ],
+  "trx_ref": {
+    "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+    "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+  },
+  "unique_snapshot_pairs": 28,
+  "unique_test_methods": 25,
+  "whole_public_help_file_mentions_SetApplicationVersion": false,
+  "whole_public_help_file_mentions_version_fixture": false
+}

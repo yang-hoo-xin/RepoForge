@@ -12,7 +12,12 @@ from src.libs.llm.agent_turn import (
     AgentTurnRequest,
 )
 from src.mod_agent.task_agent_loop import TaskActionInputError
-from src.mod_agent.task_agent_v2_context import history_text, model_plan_view, project_history
+from src.mod_agent.task_agent_v2_context import (
+    history_text,
+    investigation_observations,
+    model_plan_view,
+    project_history,
+)
 from src.mod_agent.task_agent_v2_state import TaskAgentV2StateError
 from tests.unit.test_task_agent_v2_admission import action
 from tests.unit.test_task_agent_v2_admission import session as session  # noqa: F401
@@ -53,6 +58,52 @@ def test_small_history_needs_no_archive_or_writes(state):
     before = set(state.root.rglob("*"))
     projected, facts = project_history(original, state, history_bytes=100000)
     assert projected is original and facts is None and set(state.root.rglob("*")) == before
+
+
+def returned_read(identifier, view="view-1", *, revision="current", offset=0, execution="executed"):
+    return AgentToolResult(identifier, "source_read", {"execution": execution, "value": {
+        "schema": "task-agent-source-view.v2", "source_view_ref": view, "parent_revision_ref": revision,
+        "root_id": "target", "path": "source.cs", "file_sha256": "hash", "offset": offset,
+        "next_offset": offset + 100, "total_chars": 1000, "read_window": {"offset": offset, "end": offset + 100}}})
+
+
+def test_observation_facts_count_completed_pages_across_full_history_without_changing_requests():
+    first, second = returned_read("first"), returned_read("second")
+    third = returned_read("third", "view-2", offset=100)
+    original = AgentTurnRequest(messages=(AgentMessage("user", "Task"),),
+        historical_tool_exchanges=(AgentToolExchange((first, second), {}, 1),), tool_results=(third,))
+    before = deepcopy(asdict(original))
+    facts = investigation_observations(original, "current")
+    assert facts["completed_read_returns"] == 3 and facts["distinct_returned_views"] == 2
+    assert facts["repeated_view_returns"] == 1
+    assert facts["recent_views"][0]["returned_count"] == 2
+    assert facts["recent_views"][0]["first_call_id"] == "first"
+    assert facts["recent_views"][0]["last_call_id"] == "second"
+    assert facts["recent_views"][1]["offset"] == 100
+    assert asdict(original) == before
+    assert "hypothesis" not in facts and "suggested_action" not in facts
+    facts["recent_views"][0]["read_window"]["offset"] = 99
+    assert asdict(original) == before
+
+
+def test_observation_facts_exclude_unexecuted_old_revision_and_replayed_results():
+    current = returned_read("same")
+    original = AgentTurnRequest(messages=(AgentMessage("user", "Task"),),
+        tool_results=(current, current, returned_read("old", revision="old"),
+            returned_read("rejected", execution="rejected")))
+    facts = investigation_observations(original, "current")
+    assert facts["completed_read_returns"] == facts["distinct_returned_views"] == 1
+    assert facts["repeated_view_returns"] == 0
+    assert investigation_observations(original, "unobserved") is None
+
+
+def test_observation_index_is_bounded_but_totals_are_not_silently_truncated():
+    original = AgentTurnRequest(messages=(AgentMessage("user", "Task"),),
+        tool_results=tuple(returned_read(str(index), "view-" + str(index), offset=index * 100) for index in range(12)))
+    facts = investigation_observations(original, "current")
+    assert facts["completed_read_returns"] == facts["distinct_returned_views"] == 12
+    assert len(facts["recent_views"]) == 8 and facts["views_truncated"] is True
+    assert facts["recent_views"][0]["first_call_id"] == "4"
 
 
 def test_archived_search_index_keeps_exact_query_and_result_without_invented_interpretation(state):

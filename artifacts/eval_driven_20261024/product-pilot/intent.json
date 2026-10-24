@@ -1,0 +1,19 @@
+{
+  "schema_version": "product_configuration_pilot_intent_v1",
+  "status": "metadata_preselected_not_qualified_or_model_dispatched",
+  "question": "How many correct usable deliveries do RepoForge and an installed Codex local-provider configuration produce on the same newly selected task, with no outside solver technical hint or patch?",
+  "planned_repository_count": 1,
+  "planned_task_ids": ["spectreconsole__spectre-console-1531"],
+  "planned_attempts_per_product": 1,
+  "order": ["Codex_local", "RepoForge_B"],
+  "automatic_replacement_or_retry": false,
+  "selection": "spectre-1531-selection.json",
+  "comparison_type": "whole product configurations, not isolated architecture, context, model-quality or experience contribution",
+  "model_content": "qwen3-coder:30b digest06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca for both if still verified at freeze",
+  "known_configuration_difference": {"RepoForge": "explicit num_ctx65536, output4096, seed0 and temperature0 in prior native wire", "Codex_local": "probe observed loaded context4096 and fallback model metadata; sampling/output request settings not independently captured", "interpretation": "same weights are not identical inference configurations. Before either task arm starts, freeze actual settings and disclose unresolved differences; no isolated mechanism claim from this pilot."},
+  "common_conditions_to_freeze": {"source": "same pinned source plus documented common public/environment fixtures, fresh independent workspace for each arm", "requirement_and_feedback": "same public requirement and public acceptance; no reference patch or hidden labels in either solver", "authority": "same declared source-write and build scope; private evidence and tests protected; actual tool/sandbox differences and any unauthorized action separately reported", "resource": "one owned1800-second task window per product, cumulative meter_only; shared hardware/server serialized, no overlapping inference", "delivery": "final source plus usable corresponding build artifacts; exact source/artifact identity, independent acceptance and actual delivery all required", "learning": "no injected strategy or hidden/task-specific memory; auxiliary extraction not a prerequisite for task completion. Exact switches frozen before task runs; this pilot does not measure experience benefit.", "why": "为什么要有它：先固定共同条件与真实配置差异再运行两组，避免事后补对照，也不让长期学习研究挡住产品任务。"},
+  "five_data": {"correct_delivery": "all registered tasks retained per product; no-hint/no-patch distinct from hint-only and rescue", "human_and_waiting": "actual timing/declaration only; unknown human active time retained; all-task limited success and quality-matched waiting reported separately", "cost": "all task failures/retries/recovery/auxiliary use, qualification/evaluation and platform development separately; zero success has no finite unit cost", "counterexample_repair": "actual delivered diagnostic feedback plus ability/resources to continue define K; repeated/no-code attempts remain; compile and behavior split", "judgment_or_experience": "本批未覆盖独立机制贡献；不用离线/探针/历史结果替代任务收益"},
+  "readiness_return": "Only task-source, common public reproduction and independent acceptance qualification remain before freezing run inputs. Direct defects may be fixed from originals, not by starting a new provider, training, memory or evidence platform.",
+  "limited_claim": "one-task development pilot; repository is exposed, no U5 transfer or general product advantage. Closed1552 B is historical0/1, never retroactively one arm of this pair.",
+  "why": "为什么要有它：失败之后转向可回答产品价值的问题，仍保留内部改进和U1-U5责任，而不是继续同题求成功或把小试点当整体完成。"
+}

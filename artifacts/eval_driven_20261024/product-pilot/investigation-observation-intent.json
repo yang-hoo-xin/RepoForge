@@ -1,0 +1,13 @@
+{
+  "schema_version": "investigation_observation_feedback_trial_intent_v1",
+  "status": "registered_before_implementation",
+  "observed_problem": "Closed1552 real B completed36 reads of five distinct returned views; the same first page was requested7-8 times for several files. Actual requests contained source text, pagination and recent history; no single cause has been proved.",
+  "preferred_change": "In existing current_task_state, project a bounded factual index of actually executed read observations at the current revision: exact immutable view identity, returned page, repetition count and first/last call. Add one common tool-use reminder about repeated observations and pagination. No new storage or learning subsystem.",
+  "expected_effect": "Make repetition across archived history visible so the model may choose a different investigation, experiment, edit or justified confirmation. This does not establish that repetition caused failure or that the change will improve task success.",
+  "constraints": "No forced edit, fixed action sequence, mandatory explanation/plan field, new authority, budget reset or inferred hypothesis. Requested/rejected/unexecuted reads do not count. Replayed call IDs do not create extra executions. Different revision/window observations remain distinct. Exact source and native history remain unchanged.",
+  "baseline": "Frozen0143b78 real1552 originals are a historical diagnostic, not a newly randomized paired arm. Do not restart that ended task. New1531 remains a separate exposed-repository public-issue task, not held-out transfer.",
+  "verification": "Focused pure tests for faithful counting/version/page identity and bounded output; existing normal CLI controlled product path must actually send the field after read execution. Once public1531 acceptance is qualified, one genuine B uses frozen new conditions without outside repair hints. Report absolute task/decision results; no isolated contribution claim without a same-task comparable baseline.",
+  "adoption_scope": "Explicit frozen development trial version only; not a default-protocol migration decision, automated experience adoption or evidence of long-term learning. B and B+ receive the same basic tool guidance if later compared.",
+  "return": "After usable implementation and normal-entry check, run the registered genuine B when its acceptance is qualified. Whether positive or negative, preserve all costs and return to remaining U1-U4 integration; no same-task success loop or automatic new input subsystem.",
+  "why": "为什么要有它：针对已观察到的重复读取提供可核对事实，同时让调查、实验、修改和停止的技术判断仍由模型作出；平台提示不等于问题已经修好。"
+}

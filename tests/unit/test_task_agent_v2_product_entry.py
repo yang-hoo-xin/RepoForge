@@ -28,7 +28,8 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                                                                  exercise_correction=False, exercise_stale_view=False,
                                                                  exercise_feedback=False, expect_postcheck_failure=False,
                                                                  exercise_paging=False, exercise_history=False,
-                                                                 exercise_deadline=False, expect_unsent_deadline=False):
+                                                                 exercise_deadline=False, expect_unsent_deadline=False,
+                                                                 exercise_repeat=False):
     short_workspace = repository_workspace
     if real_sdk and os.environ.get("REPOFORGE_REAL_REPOSITORY_CLI_INTEGRATION") != "1":
         pytest.skip("Explicit SDK integration; decisions remain scripted.")
@@ -133,6 +134,24 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         tool_outputs = [json.loads(x["content"]) for x in payload["messages"] if x["role"] == "tool"]
         observed = [row.get("value", row) for row in tool_outputs]
         last = observed[-1] if observed else None
+        if exercise_repeat and last and last.get("schema") == "task-agent-source-view.v2":
+            current = next(json.loads(row["content"])["current_task_state"] for row in reversed(payload["messages"])
+                if row["role"] == "user" and '"current_task_state"' in row["content"])
+            if not memory.get("repeat_requests"):
+                memory["repeat_requests"] = 1
+                memory["repeated_view_ref"] = last["source_view_ref"]
+                return httpx.Response(200, request=request, json={"model": model,
+                    "message": {"role": "assistant", "content": "", "tool_calls": [{"id": "repeat-read-observation", "function": {
+                        "name": "source_read", "arguments": {"parent_revision_ref": last["parent_revision_ref"],
+                            "path": last["path"]}}}]}, "done": True,
+                    "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
+            if last["source_view_ref"] == memory["repeated_view_ref"]:
+                facts = current["investigation_observations"]
+                assert facts["current_revision_ref"] == last["parent_revision_ref"]
+                assert facts["completed_read_returns"] == 2 and facts["repeated_view_returns"] == 1
+                assert facts["recent_views"][0]["source_view_ref"] == last["source_view_ref"]
+                assert facts["recent_views"][0]["returned_count"] == 2
+                memory["repeat_observed_in_actual_request"] = True
         if exercise_history:
             current = next(json.loads(row["content"])["current_task_state"] for row in reversed(payload["messages"])
                 if row["role"] == "user" and '"current_task_state"' in row["content"])
@@ -233,6 +252,7 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                     {"function": {"name": name, "arguments": args}}]}, "done": True,
                 "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
         turn = (len(requests) - (3 if exercise_experiments else 0) - int(exercise_discovery)
+                - memory.get("repeat_requests", 0)
                 - memory.get("page_requests", 0)
                 - memory.get("history_requests", 0)
                 - int(exercise_correction and len(requests) > 4)
@@ -366,6 +386,7 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         "result_file": str(short_workspace / "v2-entry-result.json"), "status": pending.get("status"),
         "reason": pending.get("reason"), "outcome": pending.get("task_agent_outcome")}
     assert len(requests) == (13 + (3 if exercise_experiments else 0) + int(exercise_discovery)
+                             + memory.get("repeat_requests", 0)
                              + memory.get("page_requests", 0)
                              + memory.get("history_requests", 0)
                              + int(exercise_correction) + (2 if exercise_stale_view else 0) + int(exercise_feedback))
@@ -373,6 +394,9 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         assert pending["model_call_budget"]["consumed"] == 14
     if exercise_history:
         assert memory["history_read_observed"] is True
+    if exercise_repeat:
+        assert memory["repeat_observed_in_actual_request"] is True
+        assert pending["model_call_budget"]["consumed"] == 14
     if exercise_correction:
         assert pending["model_call_budget"]["consumed"] == 14
     if exercise_stale_view:
@@ -491,6 +515,11 @@ def test_normal_cli_deadline_expiring_during_preparation_does_not_send(repositor
 def test_normal_cli_source_pages_preserve_read_edit_recheck_and_handoff(repository_workspace, monkeypatch, capsys):
     test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
         repository_workspace, monkeypatch, capsys, False, exercise_paging=True)
+
+
+def test_normal_cli_repeated_read_facts_reach_actual_next_request_and_handoff(repository_workspace, monkeypatch, capsys):
+    test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
+        repository_workspace, monkeypatch, capsys, False, exercise_repeat=True)
 
 
 def test_normal_cli_archived_history_read_keeps_candidate_revision_and_handoff(repository_workspace, monkeypatch, capsys):

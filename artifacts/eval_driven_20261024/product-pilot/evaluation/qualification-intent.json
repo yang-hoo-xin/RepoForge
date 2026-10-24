@@ -1,0 +1,11 @@
+{
+  "schema_version": "repository_qualification_preparation_intent_v1",
+  "task_id": "spectreconsole__spectre-console-1531",
+  "base_commit": "c5e11626b521c47c45339d90ae7dcebc736a3224",
+  "baseline": "existing CSharpRepositoryBackend, repository evaluator qualification and snapshot-output adapter; no new execution backend",
+  "expected_effect": "qualify the new task with the actual full CLI/Console edit scope and both production artifacts, while keeping public feedback and independent acceptance separate",
+  "verification": "pure configuration validation first; after explicit blob-ready notification, separately registered 1200-second qualification using actual baseline/correct/equivalent/wrong and public correct/equivalent controls",
+  "current_state": "static_preparation_only_no_build_no_model",
+  "frozen_history": "do not modify 1552 files, inputs or qualifications",
+  "why": "为什么要有它：复用共享执行与验收能力，先核准新任务条件，不用旧任务成绩替代新题资格。"
+}

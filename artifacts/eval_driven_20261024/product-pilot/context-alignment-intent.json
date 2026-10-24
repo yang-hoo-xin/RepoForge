@@ -1,0 +1,25 @@
+{
+  "schema_version": "local_product_context_alignment_intent_v1",
+  "status": "registered_before_local_model_alias_creation_or_generation",
+  "question": "Can the installed Codex OSS entry actually load a 65536-token context on the same existing local model weights, without building another provider adapter?",
+  "baseline": "Closed marker-read probe1 observed Ollama context4096; RepoForge native wire used explicit num_ctx65536. Neither establishes a fair product comparison.",
+  "preferred_change": {
+    "method": "existing Ollama create API: a new local tag inheriting the installed original model plus explicit shared inference defaults; original tag unchanged",
+    "from": "qwen3-coder:30b",
+    "expected_original_digest": "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca",
+    "new_tag": "qwen3-coder-rf-pilot64k:30b",
+    "parameters": {"num_ctx": 65536, "num_predict": 4096, "temperature": 0, "seed": 0},
+    "both_product_arms": "use the same newly verified tag and weight layers if bounded validation succeeds; no old4096 versus65536 formal pair"
+  },
+  "verification": {
+    "before_create": "query original identity and ensure new tag does not exist; verify shared server idle",
+    "after_create": "check original digest unchanged; inherited weights/template/config identity and explicit parameters; no downloads or new weights",
+    "bounded_native_probe": "one installed Codex OSS invocation, only read a fresh public nonce file, at most180 seconds owned process window; explicit client model_context_window65536; inspect native events and actual Ollama loaded context",
+    "claim_boundary": "configuration readiness only, not business success, product advantage or learned experience. Defaults do not prove absence of undocumented request overrides; preserve that unknown unless actual wire establishes it.",
+    "failure_return": "retain all facts, no automatic extra provider/proxy/platform construction or repeated probe. Mark fair product comparison uncovered if alignment is not established; return to usable real B task conditions."
+  },
+  "scope": "new local model metadata tag and disposable probe workspace only; existing user-authorized local task/model work, no cloud calls, original model mutation, SDK/model download, deployment, game, or business task retry",
+  "accounting": "probe/setup separate from formal task and independent evaluation; actual known usage retained, missing cost or human active time never zero-filled",
+  "sources": ["https://learn.chatgpt.com/docs/config-file/config-advanced#oss-mode-local-providers", "https://docs.ollama.com/api/openai-compatibility", "https://docs.ollama.com/api/create"],
+  "why": "为什么要有它：披露16倍上下文差异不能消除混杂；先用已有配置能力有限验证，既不制造公平对照，也不让配置调查吞掉真实任务主线。"
+}

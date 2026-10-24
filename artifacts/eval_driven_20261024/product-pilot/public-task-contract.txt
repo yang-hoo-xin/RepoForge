@@ -1,0 +1,23 @@
+Public task contract: spectreconsole__spectre-console-1531
+
+Apply this contract together with the original public issue statement. Both product Agents receive the same text before their task starts.
+
+Requested result: resolve the help-display conflict when an application already declares its own --version|-v option. The custom option keeps its declared meaning and runtime behavior; help must not add a second conflicting built-in version option.
+
+Preservation: retain the original behavior in nonconflicting applications, including normal help, auto-detected or explicitly configured application version, command execution and unrelated-option rejection. All377 original public test expectations are retained. The eight additional public reproduction cases are available in the selected repository. Do not implement every unrelated output change made by an upstream reference patch: that patch is not part of this contract or solver input.
+
+为什么要有它：两款工具面对同一道公开题目，验收不能暗中要求一套与保留义务矛盾的参考实现变化。
+
+Source authority: modify only existing .cs files explicitly authorized in src/Spectre.Console.Cli/ and src/Spectre.Console/. Do not modify project/build configuration, tests, test expectations, dependencies or files outside this task. Source inspection, experiment choice and repair strategy are yours; no particular file, patch or action sequence is prescribed. Existing read-only fixtures and tool instructions are available to both products, not learned experience.
+
+为什么要有它：技术决策由模型作出，但调查或计划不能扩大实际文件和副作用授权。
+
+Diagnostics: use only the explicitly registered diagnostic output directory supplied with the execution configuration. Source, test code and expected snapshots remain protected. If expected files are copied for an approved test runner, their origins and copied bytes must be verified; diagnostics do not authorize modifying expected results. Build outputs belong in the normal bin/obj locations. Creating an arbitrary new source/test file is not legitimized by calling it a diagnostic.
+
+为什么要有它：正常诊断输出与改写评分依据必须分开，不能靠忽略所有新增文件获得通过。
+
+Verification and delivery: run the complete registered public checks, using the supplied .NET SDK8.0.302 with MinVerSkip=true and UseBuildTimeTools=false, original multi-target build and net8.0 test execution. Task Agent uses the selected repository execution profile; CLI consumers use the equivalent registered commands. Deliver final source and corresponding Release/net8.0 Spectre.Console.Cli.dll and Spectre.Console.dll through the product's actual authorized delivery path. A patch, self-reported success, partial test pass or independent evaluator rebuilding the code does not by itself establish product delivery.
+
+Resources and disclosure: one registered1800-second task window includes investigation, modification, testing and product delivery, with cumulative recorded usage. No outside technical repair hint or patch is supplied. Preserve failures, retries and unknown costs. No game, deployment, cloud call or unrestricted external access is authorized. Independent final checks are not available as a solver oracle.
+
+为什么要有它：独立验收与实际交付必须对应同一版本，正确性、全部资源和人工帮助都要能核对。

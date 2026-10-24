@@ -1,0 +1,326 @@
+{
+  "admission_errors": [
+    {
+      "original": "tool transcript",
+      "reason": "default GBK decoding of UTF-8 window JSON; no process dispatched; corrected explicit UTF-8",
+      "stage": "outer driver"
+    },
+    {
+      "reason": "SOURCE_OUTSIDE_WORKSPACE; preserved result; zero Build/test command dispatched",
+      "stage": "public-baseline v1 constructor"
+    },
+    {
+      "reason": "auto-review denied before process creation after fixture conflict; no bypass; preserved in tool transcript",
+      "stage": "public baseline v1 retry"
+    }
+  ],
+  "autonomous_success": false,
+  "base_commit": "c5e11626b521c47c45339d90ae7dcebc736a3224",
+  "completed_at": "2026-10-24T08:02:56.507505+00:00",
+  "configuration_ref": {
+    "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\qualification-config-ready-v2.json",
+    "sha256": "74609684c2feaa1a00dc430166d95f7b954dd5a849a902166ea70c4209b19004"
+  },
+  "controls": {
+    "v1_correct": {
+      "actual_tests": 388,
+      "elapsed_seconds": 130.28100000000086,
+      "error": null,
+      "error_type": null,
+      "failures": 3,
+      "integrity_error_refs": null,
+      "official_label_scope": null,
+      "official_labels_found": 3,
+      "official_preservation_labels": 0,
+      "official_target_instances": 3,
+      "official_target_labels": 3,
+      "official_target_passed": 3,
+      "original_other_failures": null,
+      "original_other_tests": null,
+      "public_passed": 5,
+      "public_tests": 8,
+      "report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\controls-v2\\correct\\checks\\5179a9aee8db4722ad4b6552d275800b\\report.json",
+        "sha256": "5068e8493e1ec6653e9bb15a5422d6f570148dddbf0324bbc7facf9d63717378"
+      },
+      "result_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\controls-v2\\correct-result.json",
+        "sha256": "5b6a7cac58ad56bf6ad35f948582f6a9ad234c700afca8be03926cf6fdd49b5d"
+      },
+      "retained_stage_refs": null,
+      "role": "correct",
+      "status": "behavior_failed",
+      "trx_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\controls-v2\\correct\\checks\\5179a9aee8db4722ad4b6552d275800b\\test-output\\tests.trx",
+        "sha256": "36272498a2ac671004d88bd1f27daecfb8919845bb0dfd3a735a51962890e5f1"
+      }
+    },
+    "v1_public_baseline_constructor": {
+      "actual_tests": null,
+      "elapsed_seconds": 4.921999999998661,
+      "error": "CSHARP_REPOSITORY_SOURCE_OUTSIDE_WORKSPACE",
+      "error_type": "ValueError",
+      "failures": null,
+      "integrity_error_refs": null,
+      "official_label_scope": null,
+      "official_labels_found": null,
+      "official_preservation_labels": null,
+      "official_target_instances": null,
+      "official_target_labels": null,
+      "official_target_passed": null,
+      "original_other_failures": null,
+      "original_other_tests": null,
+      "public_passed": null,
+      "public_tests": null,
+      "report_ref": null,
+      "result_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\public-baseline-result.json",
+        "sha256": "58137f20a0c0e2f12f09fd2068de78a3eeca4899f8e3c3448e2a096a64f2f8ea"
+      },
+      "retained_stage_refs": null,
+      "role": "public-baseline",
+      "status": "incomplete",
+      "trx_ref": null
+    },
+    "v2_correct": {
+      "actual_tests": 388,
+      "elapsed_seconds": 109.14099999999962,
+      "error": null,
+      "error_type": null,
+      "failures": 0,
+      "integrity_error_refs": [],
+      "official_label_scope": null,
+      "official_labels_found": 3,
+      "official_preservation_labels": 0,
+      "official_target_instances": 3,
+      "official_target_labels": 3,
+      "official_target_passed": 3,
+      "original_other_failures": 0,
+      "original_other_tests": 380,
+      "public_passed": 8,
+      "public_tests": 8,
+      "report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\controls-v2\\correct\\checks\\90294b2327ae4785b9e63c94861e7dd9\\report.json",
+        "sha256": "bbd832be12da66a61cd48fe0f9d88a22c7c1bf68d858fb01f403f00ce6d5ff68"
+      },
+      "result_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\controls-v2\\correct-result.json",
+        "sha256": "24296e6b403a94af7f2da7b7db8442015e95ca936ea820b3e113940daa4385bb"
+      },
+      "retained_stage_refs": [
+        {
+          "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\controls-v2\\correct\\checks\\90294b2327ae4785b9e63c94861e7dd9\\build-fact.json",
+          "sha256": "606dddb127acf48e0dff7e6180566854abfa7354d14ff2286ee6d1d3e8f4d061"
+        },
+        {
+          "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\controls-v2\\correct\\checks\\90294b2327ae4785b9e63c94861e7dd9\\raw_test_result-fact.json",
+          "sha256": "7641c6278589d476cf19bdecc144dbdb5c5c1cb42416d54bbd7dcf6c92e339c8"
+        },
+        {
+          "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\controls-v2\\correct\\checks\\90294b2327ae4785b9e63c94861e7dd9\\test_build-fact.json",
+          "sha256": "bdc01dfed7e7623ab1d7c9dc056037609c0877e7fd5c4b9b070f70fecd31de32"
+        },
+        {
+          "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\controls-v2\\correct\\checks\\90294b2327ae4785b9e63c94861e7dd9\\test_build_outputs-fact.json",
+          "sha256": "70505dbc1334cfb7585dd5017f3fe594d5784f6fd657289d4db8b5e50d703469"
+        },
+        {
+          "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\controls-v2\\correct\\checks\\90294b2327ae4785b9e63c94861e7dd9\\test_execution-fact.json",
+          "sha256": "7d5eda7f9b3873303513aa2a5f75fcad5a4766f1a53fea05b70fa0a1ddb10221"
+        }
+      ],
+      "role": "correct",
+      "status": "passed",
+      "trx_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\controls-v2\\correct\\checks\\90294b2327ae4785b9e63c94861e7dd9\\test-output\\tests.trx",
+        "sha256": "97f8eac877150c7f744f992057ce84c9ceb5208f09c49abebd06c5327c34ea69"
+      }
+    },
+    "v2_public_baseline": {
+      "actual_tests": 385,
+      "elapsed_seconds": 124.4369999999999,
+      "error": null,
+      "error_type": null,
+      "failures": 2,
+      "integrity_error_refs": [],
+      "official_label_scope": "not_applicable_public_only",
+      "official_labels_found": null,
+      "official_preservation_labels": null,
+      "official_target_instances": null,
+      "official_target_labels": null,
+      "official_target_passed": null,
+      "original_other_failures": 0,
+      "original_other_tests": 377,
+      "public_passed": 6,
+      "public_tests": 8,
+      "report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-baseline\\checks\\2e9cdc3c63fd41fbb188eb28df9de255\\report.json",
+        "sha256": "e685861a48a665a9eeec14cec98a6070dd1a54ddfb3480fcbcc83cd8f86d55c2"
+      },
+      "result_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-baseline-result.json",
+        "sha256": "fe4e9868e65be1547db09c495bd06e3cabff2c2d0c13f6afbee62e1cfeb438c8"
+      },
+      "retained_stage_refs": [
+        {
+          "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-baseline\\checks\\2e9cdc3c63fd41fbb188eb28df9de255\\build-fact.json",
+          "sha256": "056c403cf1db113539003feb9e0360493a433b642e7e2880d3646719e4ddb4b2"
+        },
+        {
+          "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-baseline\\checks\\2e9cdc3c63fd41fbb188eb28df9de255\\raw_test_result-fact.json",
+          "sha256": "315672f3a0b7ae68ea3617b8b2a1aa9bc0607b9b1072219c6a5ff50e0fb793ee"
+        },
+        {
+          "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-baseline\\checks\\2e9cdc3c63fd41fbb188eb28df9de255\\test_build-fact.json",
+          "sha256": "c7a0ce32865f6f101881f90c16c2718ea593bc79fb3211b854e38ed9e0bd5982"
+        },
+        {
+          "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-baseline\\checks\\2e9cdc3c63fd41fbb188eb28df9de255\\test_build_outputs-fact.json",
+          "sha256": "3912276f17fea53d4d8d40fd627af44b0a6359061e67c003afa217a20d39cc66"
+        },
+        {
+          "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-baseline\\checks\\2e9cdc3c63fd41fbb188eb28df9de255\\test_execution-fact.json",
+          "sha256": "a3363f23724e18306c1984677f41cd20e67baa5b7d4b47f19592824517e98de8"
+        }
+      ],
+      "role": "public-baseline",
+      "status": "behavior_failed",
+      "trx_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-baseline\\checks\\2e9cdc3c63fd41fbb188eb28df9de255\\test-output\\tests.trx",
+        "sha256": "901cd094e2e1dfeff47acd9a43cd07674d126dc2dc4c3985fdf9ebcf8ef9f265"
+      }
+    },
+    "v2_public_correct": {
+      "actual_tests": 385,
+      "elapsed_seconds": 117.51599999999962,
+      "error": "CSHARP_REPOSITORY_FIXED_INPUTS_CHANGED",
+      "error_type": "ValueError",
+      "failures": 34,
+      "integrity_error_refs": [
+        {
+          "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\integrity-error.json",
+          "sha256": "6ac1eeb29f062dd6c90255f87e36e184c0c2d3118da95545a0b2834b4241a120"
+        }
+      ],
+      "official_label_scope": "not_applicable_public_only",
+      "official_labels_found": null,
+      "official_preservation_labels": null,
+      "official_target_instances": null,
+      "official_target_labels": null,
+      "official_target_passed": null,
+      "original_other_failures": 34,
+      "original_other_tests": 377,
+      "public_passed": 8,
+      "public_tests": 8,
+      "report_ref": null,
+      "result_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct-result.json",
+        "sha256": "424663640506936d86023e903d24d594b559d33718874f01e2ba31e68e611552"
+      },
+      "retained_stage_refs": [
+        {
+          "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\build-fact.json",
+          "sha256": "9d00a3d7ab6937c9d925e2c34ee465dbf8f48fad6e8612c35e246711e46171d5"
+        },
+        {
+          "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\raw_test_result-fact.json",
+          "sha256": "dd52606797554df8fe0a561b1e98053731e94a22283e5d7d12b33ee2a4240786"
+        },
+        {
+          "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test_build-fact.json",
+          "sha256": "2cf91a1cf036ac6163da0441d27ad5b53f637666abc31802057ad8f0bc66a14a"
+        },
+        {
+          "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test_build_outputs-fact.json",
+          "sha256": "60cfe6ab1d908be63737e01b8dbba60a976c7eae65b2946a73f305949097d68f"
+        },
+        {
+          "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test_execution-fact.json",
+          "sha256": "5fc5e215c5aa0d87eb47af99f20a2a7ed1fb6ef2dada0b6523d5f98898de525e"
+        }
+      ],
+      "role": "public-correct",
+      "status": "incomplete",
+      "trx_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct\\checks\\776074def04749fab040816e400ffca9\\test-output\\tests.trx",
+        "sha256": "3efe1f3cb6bc3c046a4522c6303bf76e05c614773e2543d883a72847baa65110"
+      }
+    }
+  },
+  "cost_scope": "qualification only; owned windows include preparation and Build/test; cache copy, developer investigation and active human time not inferred",
+  "fixture_change_ref": {
+    "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\public-v2-change.json",
+    "sha256": "fe909b1a69aa2726840eb479971af37e15a3eeb9d3beef5c659d801da522d991"
+  },
+  "fixture_v1_observations_ref": {
+    "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\public-fixture-v1-scope-observations.json",
+    "sha256": "74656e2623fb54f6d648b554b86f311957711118a5d370e021f44136ce36edb8"
+  },
+  "limitations": [
+    "official PASS_TO_PASS is empty; no official preservation claim",
+    "full public checker rejects the reference control on 34 existing tests despite new public 8/8; applicability unresolved",
+    "received snapshot files caused postcheck identity failure; raw facts retained, no trusted business-failure conversion",
+    "host SDK execution, not OS sandbox or official Linux result",
+    "original 1200-second window not extended; no further Build without explicit disposition"
+  ],
+  "model_calls": 0,
+  "not_executed": [
+    "independent_baseline",
+    "equivalent",
+    "wrong",
+    "public-equivalent"
+  ],
+  "original_source_unchanged": true,
+  "process_refs": [
+    {
+      "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\prepare-process\\process.json",
+      "sha256": "c4e8b35cd49eefa9e8ef94d7abb532f2d70b52f62194a29138612af12c8ca70c"
+    },
+    {
+      "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\public-baseline-process\\process.json",
+      "sha256": "4fc8226c48d0ec7a110a140c9d4e681c934535b1ab23c6d84dfb38d716712d72"
+    },
+    {
+      "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\controls-v2\\correct-process\\process.json",
+      "sha256": "ab79cac12b5c74a49963e7e93db5b5ba5531cb0b34747571ba486ea972ce5e53"
+    },
+    {
+      "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\prepare-v2-process\\process.json",
+      "sha256": "9ce2a0f6f0f9aeaff889d98aad8cbe06f9fcf4e3187bc0fb3b624e63b58f7807"
+    },
+    {
+      "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-baseline-process\\process.json",
+      "sha256": "d869e1764a6adfff3f239d2fdd11a5cb15e287b8bb8d5e483b44a0627a1680f6"
+    },
+    {
+      "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\controls-v2\\correct-process\\process.json",
+      "sha256": "1fe1d821ee6cf86582532395d195deea260a9787046c9f0be4401fd30347c6d3"
+    },
+    {
+      "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct-process\\process.json",
+      "sha256": "149c35a953372cfa3a5e3addf4d27c614c11b9af0e768ea1bbfeffb88a0dbeb3"
+    }
+  ],
+  "profile_ref": {
+    "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\profile.json",
+    "sha256": "49998f815ff78fee48421dcbddc4b89ef5c2d4c989b11a54fb2490c082dcdc60"
+  },
+  "public_preparation_ref": {
+    "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\public-preparation-v2.json",
+    "sha256": "d16f714dbe5435cf7391a38f03c193611da5605b8fe29fd3070f9c2532634553"
+  },
+  "public_source_root": "C:/tmp/rfext-spectre-1531-public-v2",
+  "recorded_owned_process_seconds": 607.1260000000002,
+  "schema_version": "product_pilot_repository_qualification_summary_v1",
+  "source_files": 1468,
+  "status": "not_qualified_public_acceptance_scope_unresolved",
+  "task_id": "spectreconsole__spectre-console-1531",
+  "verification_ref": {
+    "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\static-unit-3.xml",
+    "sha256": "c6ec4cacfb9c287768ebe06120c9b65c74386d07aa4d0a930a39ed653e9e52b9"
+  },
+  "window_ref": {
+    "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\qualification-window.json",
+    "sha256": "f0e51fa5af7b628bc1cbcaf8804f5bbcdcb3271d72f92c6d00a620f86e8b9073"
+  }
+}

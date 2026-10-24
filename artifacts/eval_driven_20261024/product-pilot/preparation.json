@@ -1,0 +1,41 @@
+{
+  "schema_version": "external_task_product_pilot_preparation_v1",
+  "status": "source_verified_acceptance_qualification_pending_no_product_arm_started",
+  "instance_id": "spectreconsole__spectre-console-1531",
+  "opening_ref": {"path": "C:/tmp/rfext-spectre-1531-task/task-opened.json", "sha256": "8010f550c23ec2ea5080376d5f2e8c52fc6b4cb4a30aec1e29ff72101a48082f"},
+  "public_problem_ref": {"path": "C:/tmp/rfext-spectre-1531-task/solver-input/problem_statement.txt", "sha256": "78d7afbab5c0ba4fee6596ba3e106a1208c86cf9d4dfc7c0d92c77204503a60c"},
+  "source": {
+    "root": "C:/tmp/rfext-spectre-1531",
+    "revision": "c5e11626b521c47c45339d90ae7dcebc736a3224",
+    "archive": "C:/tmp/rfext-spectre-1531-task/source.zip",
+    "url": "https://codeload.github.com/spectreconsole/spectre.console/zip/c5e11626b521c47c45339d90ae7dcebc736a3224",
+    "archive_sha256": "9f1c272da9388e253b8cd44610fefc9b2789bae509e9f708a362be7a74f82eb7",
+    "download_bytes": 5879445,
+    "download_seconds": 130.661865,
+    "files": 1468,
+    "expanded_bytes": 9441013,
+    "github_blob_mismatches": 0,
+    "github_tree_ref": {"path": "C:/tmp/rfext-spectre-1531-task/github-tree.json", "sha256": "355a02ef6b95700b95d582d642d92c31761141c64c5db4719d9ccb5c374ed469"},
+    "archive_validation": "all paths under exact fresh root; no traversal, alternate streams, Unix symlinks or case-insensitive duplicate files; expanded size below 512MiB; every Git blob checked"
+  },
+  "exposure": {
+    "repository_development_exposed": true,
+    "public_requirement_read_by_main_developer": true,
+    "reference_patch_or_hidden_tests_read_by_main_developer": false,
+    "private_acceptance_materials": "independent qualification only; not solver inputs",
+    "model_training_exposure": "unknown",
+    "claim": "one new issue in an exposed repository; not unseen-repository U5 transfer"
+  },
+  "public_fixture_scope_concern": {
+    "status": "confirmed_public_fixture_v1_overreach_corrected_before_solver_runs_v2_qualification_pending",
+    "observation": "The public reproduction explicitly sets application version as well as defining a custom --version|-v option; the issue does not explicitly require that combination.",
+    "v1_actual_public_observation_ref": {"path": "C:/tmp/rfext-spectre-1531-evaluation/public-fixture-v1-scope-observations.json", "sha256": "74656e2623fb54f6d648b554b86f311957711118a5d370e021f44136ce36edb8"},
+    "correction_basis": "Issue describes a custom option without requiring explicit built-in application-version configuration. Existing public Unit/CommandAppTests.Version.cs distinguishes root built-in version from default-command routing; v1 incorrectly expected the default command to print the built-in version.",
+    "v2_changes": "Do not explicitly configure built-in version for custom-option reproduction. Test built-in version preservation using the documented existing public root case with no default command. Keep all eight public behavioral cases; no reference implementation or hidden assertion imported.",
+    "next_action": "Qualify revised fixture against correct/equivalent and baseline using original owned qualification deadline; preserve v1 observations and refusals."
+  },
+  "environment": {"sdk": "C:/tmp/rf-dotnet-8.0.302/sdk/dotnet.exe", "upstream_sdk": "8.0.200", "roll_forward": "latestFeature", "properties": {"MinVerSkip": "true", "UseBuildTimeTools": "false"}, "scope": "original multi-target build; net8.0 test execution; not official multi-platform benchmark"},
+  "comparison": {"type": "whole product configurations", "same_weight_digest_intended": "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca", "inference_settings": "known differences retained and frozen before dispatch; not an isolated mechanism comparison", "arms_started": 0},
+  "return_point": "Complete source/public-check/independent-acceptance preparation, freeze both arm configurations, then execute the registered real-task product pilot; do not expand learning inputs because strategy quality was insufficient.",
+  "why": "为什么要有它：准备记录证明使用的是哪份源码和题面，不把材料核验当作模型自主交付，也不把隐藏验收或额外条件偷偷加入公开任务。"
+}

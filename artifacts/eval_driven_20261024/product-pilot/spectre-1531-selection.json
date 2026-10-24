@@ -1,0 +1,20 @@
+{
+  "schema_version": "external-acceptance-selection.v2",
+  "status": "metadata_selected_task_content_unopened",
+  "instance_id": "spectreconsole__spectre-console-1531",
+  "repo": "spectreconsole/spectre.console",
+  "base_commit": "c5e11626b521c47c45339d90ae7dcebc736a3224",
+  "created_at": "2024-04-25T17:54:55Z",
+  "metadata_path": "artifacts/eval_driven_20261015/business-evaluation/swe-sharp-qualification/official-input-v1/task-metadata.json",
+  "metadata_sha256": "ce0a9fd3621bb053cab5075d96c64775932c37d0a1e8d52bf60363859606eff6",
+  "dataset_source_sha256": "95324e8ca8112d8b17232cbde178f179fda3ae012f9e533d58d1a23434025e50",
+  "product_commit_at_selection": "1c1bc73ad1c34db0aa4c5f97ed544bcc5acb005d",
+  "selection_basis": "First remaining metadata row in the already prepared repository, excluding the closed1552 task. Reuse environment and evaluator plumbing for a finite product pilot; no problem, patch, labels or results read to choose identity.",
+  "exposure_status": "new issue content unopened at selection; repository already development-exposed by1552; not an unseen-repository or U5 migration sample; training exposure unknown",
+  "task_content_read": false,
+  "reference_patch_read": false,
+  "hidden_tests_read": false,
+  "intended_use": "one-task development product-configuration pilot, not internal mechanism attribution or general superiority claim",
+  "resource_policy": "meter_only; task/evaluation/development costs separate; independent frozen windows for each new arm; no earlier allowance transferred",
+  "why": "为什么要有它：产品比较先用一个新的、按元数据固定的真实问题推进，复用已可用环境而不重跑旧题；范围小不代表整个目标缩小或迁移收益成立。"
+}

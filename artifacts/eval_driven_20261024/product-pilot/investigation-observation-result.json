@@ -1,0 +1,20 @@
+{
+  "schema_version": "investigation_observation_feedback_trial_result_v1",
+  "status": "implemented_normal_entry_controlled_verification_passed_real_B_pending",
+  "change": "Existing current_task_state includes a bounded index of executed current-revision source read views, repeat counts, original call identities and pagination; common tool guidance does not mandate an action or edit.",
+  "boundaries": "No new authority, model budget, source mutation or storage subsystem. Requested, rejected, old-version and replayed records are not counted as extra current reads. The index does not assert understanding, semantic novelty or business progress.",
+  "normal_entry_actual_request": "Controlled normal CLI returned the same current immutable page under two distinct call IDs. The next actual captured loopback HTTP request contained completed_read_returns2, repeated_view_returns1, returned_count2 and the exact source_view_ref; the same run continued through edits, public checking and Proposal/Review/Dry-run handoff.",
+  "verification": {
+    "first": {"result": "10 passed,1 failed", "junit_ref": {"path": "C:/tmp/rf-investigation-observation-check1.xml", "sha256": "914c019525b11b94dc32b790e4fa91c66c4dca3c62886a24d2e8ab86fae31466"}, "cause": "Controlled repeated tool response omitted a distinct native call ID; deterministic mock identity triggered existing TASK_AGENT_REPEATED_TOOL_CALL. No public SDK or real model ran."},
+    "correction": "Only the controlled mock supplied a distinct repeat-read-observation call ID. Platform replay admission was not weakened.",
+    "second": {"result": "10 passed; Ruff clean", "command": "python -m pytest tests/unit/test_task_agent_v2_context.py tests/unit/test_task_agent_v2_product_entry.py::test_normal_cli_repeated_read_facts_reach_actual_next_request_and_handoff -q -p no:cacheprovider", "junit_ref": {"path": "C:/tmp/rf-investigation-observation-check2.xml", "sha256": "ee4e7d957fe8ca08e2326d56723acec16d06c8b5ae97a0dd6ad9115bc488bfca"}},
+    "unchanged_paging_path": "Passed in the first selection; read pagination, exact editing, recheck and handoff retained.",
+    "focused_independent_review": "No blocker found in execution-only filtering, page/version identity, pre-projection full history, recovery continuity or absence of forced-action/authority changes. Review only, not model success.",
+    "final_affected_selection": {"result": "20 passed", "scope": "context projection, actual normal CLI request/handoff and pilot controller; no real model or SDK", "junit_ref": {"path": "C:/tmp/rf-investigation-observation-final.xml", "sha256": "1fd2136c997b9bb03337ad51684e4d3ed274365f0cc2cf843022155f6b359a0b"}, "lint_first_failure": "New test used uppercase B in Python function name; renamed lowercase without changing behavior.", "final_lint": "Ruff passed on all seven changed Python owners/callers/tests; controller10 pure tests re-passed after naming correction."}
+  },
+  "real_model_choices": {"classification": "本批未覆盖", "runs": 0, "result": null},
+  "independent_business_acceptance": {"classification": "本批未覆盖", "correct_delivery": null},
+  "mechanism_contribution": {"classification": "证据不足", "reason": "Historical1552 diagnostic is not a randomized same-task baseline; controlled request assertions do not demonstrate task benefit."},
+  "return_point": "Freeze this usable development version; when1531 public-contract qualification is valid, execute the separately registered genuine B. Do not wait for Codex baseline tool readiness or all learning modules; do not count controlled actions as autonomous success.",
+  "why": "为什么要有它：明确记录平台新增了什么事实投影、实际请求送达了什么，同时保留模型行动改变和正确交付仍未证明的边界。"
+}
