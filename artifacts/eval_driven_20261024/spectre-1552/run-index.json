@@ -1,6 +1,6 @@
 {
   "schema_version": "real_repository_run_index_v1",
-  "status": "running_not_final",
+  "status": "terminal_timed_out_no_candidate",
   "task_id": "spectreconsole__spectre-console-1552",
   "run_id": "dsh_fb2b072fba7a4264aafcf806b79ebace",
   "frozen_git_head": "0143b78bd08813116e5c90c47b8079b8fa50ad70",
@@ -270,11 +270,16 @@
   "capability_boundaries": {
     "platform": "v2 investigation, authorized target choice, current-version edits, experiments, public checks and exact handoff are available; no new learning construction in this batch",
     "model": "actual choices must be read from actual responses; no external repair hint or patch sent",
-    "independent_business_result": "pending complete candidate and actual delivery; control qualification is not model success",
+    "independent_business_result": "not_executed_no_candidate",
     "product_comparison": "本批未覆盖",
     "internal_improvement_causal_result": "本批未覆盖",
-    "correct_deliveries": null,
+    "correct_deliveries": 0,
     "human_active_minutes": null
   },
-  "continuation": "Poll existing process session and exact run; do not restart on observation timeout. After terminal, retain all outcomes; only grade if a complete actual candidate exists, and continue authorized same-version delivery within original task window."
+  "continuation": "Original attempt closed. Do not resume or rerun it. Preserve unknown43rd call. Next is separately registered finite product-baseline provider/tool qualification, not another learning/input construction chain.",
+  "original_process_session_status": "completed_timed_out",
+  "terminal_result_ref": {
+    "path": "C:/Users/10160/.codex/visualizations/2026/08/11/019ff15f-9eac-7b13-aad5-faffde4b36b7/rag_capability_mainline/artifacts/eval_driven_20261024/spectre-1552/result.json",
+    "sha256": "69ef2f4df506c6a11624f590e13583735a225a3ca7220774977b9e1ce326b64c"
+  }
 }

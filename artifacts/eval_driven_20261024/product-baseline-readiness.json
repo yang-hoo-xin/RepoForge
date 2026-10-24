@@ -1,6 +1,6 @@
 {
   "schema_version": "product_comparison_baseline_readiness_v1",
-  "status": "installed_candidate_not_model_qualified_or_paired_result",
+  "status": "local_provider_and_file_read_observed_context_differs_no_paired_task_result",
   "purpose": "Prepare the product-level comparison separately from internal mechanism attribution; do not wait for mature strategy experience or training.",
   "candidate": {
     "tool": "Codex CLI",
@@ -12,16 +12,17 @@
     "preferred_question": "If protocol compatibility and common conditions can be established, compare RepoForge and Codex CLI using the same local qwen3-coder:30b model content. This compares complete harness/product configurations, not one isolated mechanism.",
     "model_name": "qwen3-coder:30b",
     "model_digest": "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca",
-    "same_local_model_compatibility": "not_yet_executed_or_proven"
+    "same_local_model_compatibility": "one actual local provider/read probe succeeded; business-task behavior unproven, observed context4096 differs from RepoForge65536"
   },
   "official_source": {
     "search_query": "Codex CLI oss local-provider exec",
     "fetched_url": "https://learn.chatgpt.com/docs/config-file/config-advanced#oss-mode-local-providers",
     "established": "OSS mode supports local providers; noninteractive exec needs an explicitly selected provider or configured default.",
-    "not_established": "Specific qwen model protocol compatibility, equal effective context/output limits, actual tool behavior, account-independent local operation and comparable task performance still require real evidence."
+    "not_established_by_documentation": "Specific model, limits and tool behavior were not established by docs. The later finite probe observes local provider/read operation; equal inference settings and business-task performance remain unproven."
   },
-  "this_readiness_check": {"model_calls": 0, "task_runs": 0, "builds": 0, "downloads": 0, "global_config_changes": 0, "current_real_B_modified": false, "activities": "local command discovery, --version, exec --help, existing driver inspection and official documentation only"},
-  "minimum_next_action": "After the current real B and its outstanding local model request are terminal, preregister one bounded protocol/tool-accounting check for this exact local model and provider. Do not send a task or load another model concurrently on the current shared Ollama server. Then freeze a fresh paired task batch before either arm starts.",
+  "initial_installation_and_documentation_check": {"model_calls": 0, "task_runs": 0, "builds": 0, "downloads": 0, "global_config_changes": 0, "current_real_B_modified": false, "activities": "local command discovery, --version, exec --help, existing driver inspection and official documentation only; later model probe has separate result and cost"},
+  "finite_probe_result": "artifacts/eval_driven_20261024/codex-local-provider-probe1-result.json",
+  "minimum_next_action": "The one bounded protocol/read probe is complete. Freeze a fresh paired task and both actual product configurations before either arm starts. Declare differing contexts and fallback metadata if comparing real product defaults; do not claim matched inference or an isolated harness effect. This does not require mature experience, training or all long-term modules.",
   "pair_contract": ["same initial source and public requirements", "same public feedback and independent acceptance", "explicit actual permission and delivery policies", "model content and effective context/output settings verified", "same wall/resource policy without transferring ended allowances", "all preregistered tasks, failures, recoveries and assistance retained", "task, independent evaluation and platform-development costs separate"],
   "current_Spectre_B": "Absolute preregistered run only. Do not retrospectively turn it into a product comparison or an internal causal result.",
   "scope_decision": "If this model/provider is unsupported, preserve the finite qualification result and select an actually available product configuration with differences disclosed; do not build a new provider or learning platform merely to complete comparison columns.",

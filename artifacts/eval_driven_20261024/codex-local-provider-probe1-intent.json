@@ -1,0 +1,23 @@
+{
+  "schema_version": "local_product_baseline_probe_intent_v1",
+  "scope": "one controlled local provider and actual read-tool qualification, not a business task, product comparison or internal contribution result",
+  "root": "C:/tmp/rf-codex-local-provider-probe1",
+  "workspace": "C:/tmp/rf-codex-local-provider-probe1/workspace",
+  "question": "Can the installed Codex CLI use explicit Ollama/qwen3-coder:30b and read one known local file with observable tool execution?",
+  "baseline": "RepoForge used the same model content, but no task-level paired comparison is registered here. Prior real B remains closed0/1 with its unknown tail retained.",
+  "expected_effect": "A successful finite protocol/read check establishes an available comparison configuration only; not better task quality or same effective context/output limits.",
+  "executable": "C:/Users/10160/AppData/Local/OpenAI/Codex/bin/37f54d68e5533a51/codex.exe",
+  "observed_version": "codex-cli0.163.0-alpha.11.2",
+  "provider": "ollama",
+  "model": "qwen3-coder:30b",
+  "expected_model_digest": "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca",
+  "planned_attempts": 1,
+  "wall_seconds": 180,
+  "resource_policy": "meter_only; new independent owned window, not unused B allowance; all SDK/transport/model failures and unknown use retained",
+  "verification": ["actual explicit provider/model argv", "one real file-read tool and correct marker response", "marker unchanged and no unauthorized task writes", "native JSONL/last-message and any usage or transport errors retained", "no external product models, hidden task data, SDK/model/image download or source repair"],
+  "permission_scope": "read-only probe workspace; trusted log/output writer outside workspace; original benchmark private roots denied; do not relax sandbox to get a positive",
+  "task_model_noninterference": "Original B parent terminal exit124; service api/ps showed zero loaded models at2026-10-24T06:48:55.0948911Z before this new probe. Old43rd-call outcome and use stay unknown.",
+  "if_unsupported": "close finite probe; disclose unavailable configuration and select an actually available product baseline with differences stated, rather than build a new provider stack",
+  "return_condition": "after this check freeze the next paired product batch before either arm starts; experience maturity, training and all long-term modules are not prerequisites",
+  "why": "为什么要有它：产品比较先需要一个实际可调用的工具配置，但兼容性检查不算开发任务成功，也不能成为新的无界准备链。"
+}

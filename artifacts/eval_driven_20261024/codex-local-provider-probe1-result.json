@@ -1,0 +1,23 @@
+{
+  "schema_version": "local_product_baseline_probe_result_v1",
+  "status": "local_provider_and_actual_read_tool_observed_not_task_quality",
+  "scope": "one controlled marker-file probe; never count as business task or correct delivery",
+  "intent": "artifacts/eval_driven_20261024/codex-local-provider-probe1-intent.json",
+  "plan_ref": {"path": "C:/tmp/rf-codex-local-provider-probe1/plan.json", "sha256": "80c4f58c9ec92728b41591088a435289223440687fc5dfeb2f4cf40a563cb779"},
+  "process_ref": {"path": "C:/tmp/rf-codex-local-provider-probe1/execution/process.json", "sha256": "b9897b11bcb59ef390db550d3d10b27d0b68da81878388ecc80404c51b709781"},
+  "stdout_ref": {"path": "C:/tmp/rf-codex-local-provider-probe1/execution/stdout.bin", "sha256": "aae1ce86e5a41c0b852a9ea0f6595439b03eb77f22763ec4a3047fbb0561f6ff"},
+  "stderr_ref": {"path": "C:/tmp/rf-codex-local-provider-probe1/execution/stderr.bin", "sha256": "ece335ab871b052faa25878d730cee9b68f83765fc8608e633e2d248ea3a7d47"},
+  "process": {"started_at": "2026-10-24T07:01:59.551417+00:00", "finished_at": "2026-10-24T07:02:52.980831+00:00", "wall_seconds": 53.437, "exit_code": 0, "timeout": false},
+  "installed_executable_ref": {"path": "C:/Users/10160/AppData/Local/OpenAI/Codex/bin/37f54d68e5533a51/codex.exe", "sha256": "c81ed464e5e7cafd09a5fa26af390c480bed8e9fab2a87a54b285fbd56e7122a"},
+  "model_provider": {"native_argv": "--oss --local-provider ollama --model qwen3-coder:30b", "observed_digest": "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca", "server_observed_context_length": 4096, "observation_time_utc": "2026-10-24T07:03:38.9362321Z", "RepoForge_actual_context_length": 65536, "equal_effective_context_claim": false, "native_warning": "Model metadata not found; fallback metadata used", "other_warning": "telemetry tag rejects model-name colon; retained, no external CLI source patch"},
+  "native_actions": {"thread_id": "01a16cb7-6417-7593-ae7d-6bc906f88e07", "command_execution": "PowerShell type marker.txt", "command_exit_code": 0, "command_output_contains_actual_marker": true, "native_turn_completed": true, "marker_unchanged": true, "workspace_new_files": 0},
+  "final_message_ref": {"path": "C:/tmp/rf-codex-local-provider-probe1/last-message.txt", "sha256": "fe4c8f8e13b7fd0e891dd5e7ebb64df14880e7a9d0891e96f9ff20ccfe7d75fa"},
+  "marker_ref": {"path": "C:/tmp/rf-codex-local-provider-probe1/workspace/marker.txt", "sha256": "d98f3c985c2c18cc02c87224ce78d93c4a6e8c4f069c549447f3f605f996ba96"},
+  "format_scope": {"marker_bytes": 41, "final_message_bytes": 40, "exact_text_equal": false, "text_equal_after_removing_terminal_line_ending": true, "interpretation": "actual read and correct marker text observed; do not call final message byte-identical to source because trailing LF omitted"},
+  "native_usage": {"input_tokens": 5895, "output_tokens": 45, "known_total_tokens": 5940, "cached_input_tokens": 2898, "cache_write_input_tokens": 0, "reasoning_output_tokens": 0, "scope": "native Codex turn aggregate, not independently captured HTTP requests", "transport_request_count": null, "money": null, "cost_partition": "product_baseline_qualification_not_business_task_or_RepoForge_solver"},
+  "metadata_check_failure": "codex features list does not accept exec-only --ignore-user-config/--ignore-rules; corrected metadata command before this single model probe; model calls from failed help/list check0",
+  "permission_and_effects": {"original_driver_reused": true, "workspace_write_disabled": true, "private_benchmark_roots_denied": true, "sandbox_disabled": false, "global_config_or_credentials_changed": false, "SDK_model_or_image_downloads": 0, "source_or_hidden_task_material_supplied": false},
+  "adoption_scope": "Available for bounded local-provider/tool use only. No business-task success, product advantage, equal inference settings or internal mechanism contribution established.",
+  "next": "Freeze a fresh task batch and both actual product configurations before either arm runs. Same model weights do not mean same context/sampling/metadata. Report explicit configuration differences or qualify matching settings first; do not retrofit current Spectre B into a pair and do not build another provider/learning stack.",
+  "why": "为什么要有它：有限验证已经回答本地提供方和读工具能否工作；正结果只支持这个采用范围，不能把读标记文件与真实代码任务的0/1混成产品性能对比。"
+}
