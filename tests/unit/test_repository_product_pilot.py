@@ -9,7 +9,7 @@ import json
 import pytest
 
 from scripts import run_repository_product_pilot as pilot
-from src.mod_agent.domain.full_project_compilation import _save
+from src.mod_agent.domain.full_project_compilation import _ref, _save
 
 
 def test_absolute_real_b_does_not_require_external_product_readiness():
@@ -53,6 +53,48 @@ def test_changed_reference_is_rejected(tmp_path):
     (tmp_path / "bound.json").write_text('{"value":2}', encoding="utf-8")
     with pytest.raises(ValueError, match="BOUND_INPUT_CHANGED"):
         pilot._verify(reference)
+
+
+@pytest.mark.parametrize("failure", [None, "adapter_path", "qualification"])
+def test_frozen_qualification_uses_exact_original_adapter(tmp_path, monkeypatch, failure):
+    root = tmp_path / "frozen"
+    adapter = root / "src/mod_agent/evaluation/strategy_repository_evaluator.py"
+    adapter.parent.mkdir(parents=True)
+    for package in (root / "src", root / "src/mod_agent", adapter.parent):
+        (package / "__init__.py").write_text("", encoding="utf-8")
+    adapter.write_text("def _configuration(reference):\n"
+        "    import json\n"
+        "    from pathlib import Path\n"
+        "    value = json.loads(Path(reference['path']).read_text())\n"
+        "    assert value['adoption_adapter_ref']['path'] == str(Path(__file__).resolve())\n"
+        "    assert value['qualified']\n", encoding="utf-8")
+    calls = []
+
+    class Frozen:
+        def __init__(self, reference):
+            assert reference == {"frozen": True}
+            self.root = root
+
+        def verify_files(self):
+            calls.append("verified")
+
+    monkeypatch.setattr(pilot, "FrozenExecution", Frozen)
+    adapter_ref = _ref(adapter)
+    if failure == "adapter_path":
+        adapter_ref["path"] = str(tmp_path / "mutable/adapter.py")
+    evaluator_ref = _save(tmp_path / "evaluator.json", {
+        "adoption_adapter_ref": adapter_ref, "qualified": failure != "qualification"})
+    qualification = {"evaluator_ref": evaluator_ref, "snapshot_ref": {"frozen": True}}
+    if failure == "adapter_path":
+        with pytest.raises(ValueError, match="QUALIFIED_ADAPTER_OUTSIDE_FROZEN_PLATFORM"):
+            pilot.validate_frozen_evaluator(qualification)
+    elif failure == "qualification":
+        with pytest.raises(pilot.subprocess.CalledProcessError):
+            pilot.validate_frozen_evaluator(qualification)
+    else:
+        pilot.validate_frozen_evaluator(qualification)
+        assert calls == ["verified", "verified"]
+    assert not list(root.rglob("*.pyc"))
 
 
 def test_delivery_without_native_result_does_not_apply_or_build(tmp_path, monkeypatch):

@@ -1,0 +1,41 @@
+{
+  "schema_version": "repository_product_pilot_configuration_v1",
+  "mode": "absolute_real_B",
+  "pre_dispatch_verification": {"first": {"path": "C:/tmp/rf-pilot-frozen-adapter.xml", "sha256": "7c52bd9bbcd0b386e36852acd5d7a9572b65061c23fdef9f0e2dc283711e24ab", "passed": 12, "failed": 1, "cause": "new test fixture omitted package initializers; isolated import selected installed package"}, "final": {"path": "C:/tmp/rf-pilot-frozen-adapter-2.xml", "sha256": "3e8aafd8792e1cb8eb12721daf9155f50d5f6272b1d89a83cfe4e027eb267222", "passed": 13, "failed": 0}, "lint": "passed", "scope": "platform preparation only; no business model run"},
+  "pre_dispatch_failures": [{"stage": "freeze", "error": "STRATEGY_REPOSITORY_EVALUATOR_CHANGED", "cause": "mutable checkout adapter path differs from qualified frozen adapter path", "model_calls": 0, "run_root_created": false, "wall_seconds": null, "resolution": "validate using exact original frozen platform; no qualification records changed"}],
+  "root": "C:/tmp/rf1531",
+  "public_source_root": "C:/tmp/rfqual-final-1531/public-baseline/source",
+  "intent_ref": {
+    "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261024\\product-pilot\\real-B-intent.json",
+    "sha256": "9a80b52ada97fb662b07cde5ae86564c540fefac162e51f379ff3007f0b4c826"
+  },
+  "public_problem_ref": {
+    "path": "C:\\tmp\\rfext-spectre-1531-task\\solver-input\\problem_statement.txt",
+    "sha256": "78d7afbab5c0ba4fee6596ba3e106a1208c86cf9d4dfc7c0d92c77204503a60c"
+  },
+  "public_contract_ref": {
+    "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261024\\product-pilot\\public-task-contract.txt",
+    "sha256": "64f4a13ea56d6d67e147a485fe76c3d698f1cd0dc3cf94b1d7f5f15bcba38bd5"
+  },
+  "public_profile_ref": {
+    "path": "C:\\tmp\\rfqual-final-1531\\profile.json",
+    "sha256": "0b84cccbaac2ad1cbbd92d1b44f08a5a775a87f9164cd96a1645511c34a86b6f"
+  },
+  "qualification_ref": {
+    "path": "C:\\tmp\\rfqual-final-1531\\result.json",
+    "sha256": "8c1bb0ade10c3d4b625e3bcad75d4510d057689cacc7cc2528b00323afd32623"
+  },
+  "settings_ref": {
+    "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\config\\settings.yaml",
+    "sha256": "3e0a97524f6df4461a1872d08ebcb7c160686055cdf357262fe708edb539c454"
+  },
+  "environment": {
+    "PYTHONUTF8": "1",
+    "DOTNET_CLI_UI_LANGUAGE": "en-US",
+    "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+    "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+    "MSBUILDDISABLENODEREUSE": "1",
+    "DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER": "1"
+  },
+  "scope": "One preregistered real B attempt; public contract and public source only; no injected strategy, no private repair hint. Product comparison remains uncovered."
+}

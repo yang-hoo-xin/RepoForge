@@ -1,0 +1,305 @@
+{
+  "all_expected_source_and_copy_integrity_validated": true,
+  "autonomous_product_result": false,
+  "cases": {
+    "independent-correct": {
+      "diagnostics_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\independent-correct\\checks\\4c5c2e9ef8b040cd814a4ae0dcd52c3a\\diagnostic-validation.json",
+        "sha256": "b973c33e9009d0aac7d943362c026346591fc917c2dd4cf58dbb54f9075370ff"
+      },
+      "elapsed_seconds": 81.35899999999674,
+      "expected_copies": 89,
+      "failed": 0,
+      "independent_cases": 13,
+      "independent_passed": 13,
+      "integrity_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\independent-correct\\checks\\4c5c2e9ef8b040cd814a4ae0dcd52c3a\\integrity.json",
+        "sha256": "eef6676d5738ef2e317c56980a9544618782d9981b4894cfa159e0a66be6a083"
+      },
+      "original_cases": 377,
+      "original_failed": 0,
+      "public_cases": 8,
+      "public_passed": 8,
+      "receipt_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\receipts\\independent-correct.json",
+        "sha256": "fa6c202a3ec715ec76736f475c7079d2b3b04ba4c0fe8572bd52a57120110ace"
+      },
+      "received_files": 0,
+      "report_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\independent-correct\\checks\\4c5c2e9ef8b040cd814a4ae0dcd52c3a\\report.json",
+        "sha256": "02704d9ce5a9db573d14a9bf1a07ac20261ff3486b72d195ce45156e5ea7b8ad"
+      },
+      "status": "passed",
+      "tests": 398,
+      "trx_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\independent-correct\\checks\\4c5c2e9ef8b040cd814a4ae0dcd52c3a\\test-output\\tests.trx",
+        "sha256": "b3e24b5c5cfff4d628bb790157a85502d34a1097e3653a5e3e3b345073f878e0"
+      }
+    },
+    "independent-equivalent": {
+      "diagnostics_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\independent-equivalent\\checks\\5f11c02179da4cb2aa1f19da8e973165\\diagnostic-validation.json",
+        "sha256": "c7ac6415e518f3f826fe18d7a6f2f8cf8a1fb04e6d76d84e37badcc4044e2ee9"
+      },
+      "elapsed_seconds": 78.26599999999962,
+      "expected_copies": 89,
+      "failed": 0,
+      "independent_cases": 13,
+      "independent_passed": 13,
+      "integrity_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\independent-equivalent\\checks\\5f11c02179da4cb2aa1f19da8e973165\\integrity.json",
+        "sha256": "2628e8900bc1d154bf10e82066b4a9ac6328999184370d3a164f1b71d6d1c0df"
+      },
+      "original_cases": 377,
+      "original_failed": 0,
+      "public_cases": 8,
+      "public_passed": 8,
+      "receipt_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\receipts\\independent-equivalent.json",
+        "sha256": "09a077e25ee93b14eb2a0b80ac9be78cd5ef871eabfc281b5ae20a3821b014bb"
+      },
+      "received_files": 0,
+      "report_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\independent-equivalent\\checks\\5f11c02179da4cb2aa1f19da8e973165\\report.json",
+        "sha256": "d420efbfaaae5d08c914d212b125da2ab1b321170c3cd406805ab265d7e69092"
+      },
+      "status": "passed",
+      "tests": 398,
+      "trx_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\independent-equivalent\\checks\\5f11c02179da4cb2aa1f19da8e973165\\test-output\\tests.trx",
+        "sha256": "8d4a8844a7cd176da35c0cbf6f7620d6a08b6fe0119114de66924b160beb1caf"
+      }
+    },
+    "independent-wrong": {
+      "diagnostics_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\independent-wrong\\checks\\1911bddb77fd41998066e0783cafc609\\diagnostic-validation.json",
+        "sha256": "4e7609c31cbfe20d940ed49124ac9d544af64ab1ea80f4e59a87f8e3633a1d29"
+      },
+      "elapsed_seconds": 78.875,
+      "expected_copies": 89,
+      "failed": 2,
+      "independent_cases": 13,
+      "independent_passed": 11,
+      "integrity_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\independent-wrong\\checks\\1911bddb77fd41998066e0783cafc609\\integrity.json",
+        "sha256": "3d645da21aa3c2e3a7e6237db25adc0ca3fe3c0792effc0e2aa6d688f1db28ca"
+      },
+      "original_cases": 377,
+      "original_failed": 0,
+      "public_cases": 8,
+      "public_passed": 8,
+      "receipt_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\receipts\\independent-wrong.json",
+        "sha256": "4380a7294a3f9d5a7d791595a2456ccdf7cf9815b0cb8e0b9c982fd082962887"
+      },
+      "received_files": 0,
+      "report_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\independent-wrong\\checks\\1911bddb77fd41998066e0783cafc609\\report.json",
+        "sha256": "8685154f29a2184738ba63eeb17753769d8b38eb77e3a3756507bcbd8d932934"
+      },
+      "status": "behavior_failed",
+      "tests": 398,
+      "trx_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\independent-wrong\\checks\\1911bddb77fd41998066e0783cafc609\\test-output\\tests.trx",
+        "sha256": "d2fc2d405473f1efac70e1e9fa9bf2e1dd5b9ca8ce505713bdc63ed1cc2c20b6"
+      }
+    },
+    "public-baseline": {
+      "diagnostics_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\public-baseline\\checks\\a056537e541a4433beb803b2860ae4e8\\diagnostic-validation.json",
+        "sha256": "2820c1a96b9e2c93b7323812ebcbcacc101e8700ba57a4a2bc9d468f9029b14c"
+      },
+      "elapsed_seconds": 88.01599999999962,
+      "expected_copies": 89,
+      "failed": 2,
+      "independent_cases": 0,
+      "independent_passed": 0,
+      "integrity_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\public-baseline\\checks\\a056537e541a4433beb803b2860ae4e8\\integrity.json",
+        "sha256": "98c6e145789b2513f83d13f53e6d770b7a4aedda0174ee158616055c448064fb"
+      },
+      "original_cases": 377,
+      "original_failed": 0,
+      "public_cases": 8,
+      "public_passed": 6,
+      "receipt_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\receipts\\public-baseline.json",
+        "sha256": "2c7deffe295c8ff76bf3a62a16ff343f8b044b3233a843a6650143e6387b3ebf"
+      },
+      "received_files": 0,
+      "report_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\public-baseline\\checks\\a056537e541a4433beb803b2860ae4e8\\report.json",
+        "sha256": "00a5137331269cb67c2ff2f7d6e43802841e56c07ea69d144128572276fda7fa"
+      },
+      "status": "behavior_failed",
+      "tests": 385,
+      "trx_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\public-baseline\\checks\\a056537e541a4433beb803b2860ae4e8\\test-output\\tests.trx",
+        "sha256": "9006cb6e5097922f7b3e3e3884476316728112a6faac2331c22dd6cc3f9986bf"
+      }
+    },
+    "public-correct": {
+      "diagnostics_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\public-correct\\checks\\8420140356ae41cd81f4925215531914\\diagnostic-validation.json",
+        "sha256": "cda4a43b32b97cd907039ada786c815609b8bab0408673d8eeb9e1a0c78b348f"
+      },
+      "elapsed_seconds": 78.6720000000023,
+      "expected_copies": 89,
+      "failed": 0,
+      "independent_cases": 0,
+      "independent_passed": 0,
+      "integrity_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\public-correct\\checks\\8420140356ae41cd81f4925215531914\\integrity.json",
+        "sha256": "94cb1f20bedc5de75d0dd1efa335415bba0c144a943024866835c28b5ff0a692"
+      },
+      "original_cases": 377,
+      "original_failed": 0,
+      "public_cases": 8,
+      "public_passed": 8,
+      "receipt_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\receipts\\public-correct.json",
+        "sha256": "5cbd7da0bac6c7adac5fc4d854e40fbb3876026a2e356b59868fe2b9fa6f9b01"
+      },
+      "received_files": 0,
+      "report_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\public-correct\\checks\\8420140356ae41cd81f4925215531914\\report.json",
+        "sha256": "92fa678449f8cfb95231884a101096ab59ebe56f094d231dc86a22630a1f419a"
+      },
+      "status": "passed",
+      "tests": 385,
+      "trx_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\public-correct\\checks\\8420140356ae41cd81f4925215531914\\test-output\\tests.trx",
+        "sha256": "bc7a59e6e0d95ef3278bc357584b44cb69634dabe7470f912d78e03de9ceef0b"
+      }
+    },
+    "public-equivalent": {
+      "diagnostics_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\public-equivalent\\checks\\7f0efbc23c0144a4a0da42e6b5657689\\diagnostic-validation.json",
+        "sha256": "299439d7589e52a59c04a78258646d360167dac8653b66a448ad8330f910a1e5"
+      },
+      "elapsed_seconds": 79.67099999999846,
+      "expected_copies": 89,
+      "failed": 0,
+      "independent_cases": 0,
+      "independent_passed": 0,
+      "integrity_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\public-equivalent\\checks\\7f0efbc23c0144a4a0da42e6b5657689\\integrity.json",
+        "sha256": "009f03265973160b712a5d050ea20e1affb2bdfdc12d773f3f7dc447ad46e52e"
+      },
+      "original_cases": 377,
+      "original_failed": 0,
+      "public_cases": 8,
+      "public_passed": 8,
+      "receipt_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\receipts\\public-equivalent.json",
+        "sha256": "72f22793fabb8e178858202d7709c8a0c3f7ad3aea2518cff1d5e069f0685cc6"
+      },
+      "received_files": 0,
+      "report_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\public-equivalent\\checks\\7f0efbc23c0144a4a0da42e6b5657689\\report.json",
+        "sha256": "dfa9bbc68e6bad8bf91f2903a1ba8467c1f577220e6b678389946d07047af7a2"
+      },
+      "status": "passed",
+      "tests": 385,
+      "trx_ref": {
+        "path": "C:\\tmp\\rfqual-final-1531\\public-equivalent\\checks\\7f0efbc23c0144a4a0da42e6b5657689\\test-output\\tests.trx",
+        "sha256": "d882d0ea8d3cc139f026ed11b8765293da54497bbda6dcda230a287973ca8278"
+      }
+    }
+  },
+  "claim": "qualified for the frozen public issue contract and registered controls only",
+  "controller_ref": {
+    "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261024\\product-pilot\\evaluation\\final-environment-qualification-run.py",
+    "sha256": "931141885c3e1d6f1702a513ecb27c96f01644fd8cdbbeeaadcd52b14867a03a"
+  },
+  "developer_authored_controls": true,
+  "diagnostic_runtime_proof_ref": {
+    "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261024\\product-pilot\\evaluation\\diagnostic-integration-result.json",
+    "sha256": "339bbb340aac75c4d007572ff5602068fc138b333caccdc1725ecafdc9b930a9"
+  },
+  "evaluator_ref": {
+    "path": "C:\\tmp\\rfqual-final-1531\\qualification\\evaluator.json",
+    "sha256": "e8a27f64d4cbb361f1646edf592a5c4d7f9b71821a9623f75d9984e10d4cc319"
+  },
+  "fixed_selection": [
+    "public-baseline",
+    "public-correct",
+    "public-equivalent",
+    "independent-correct",
+    "independent-equivalent",
+    "independent-wrong"
+  ],
+  "fixed_six_completed": true,
+  "frozen_execution_check_ref": {
+    "path": "C:\\tmp\\rfqual-final-1531\\frozen-execution-check.json",
+    "sha256": "83c86bd3c506e563b550c369f992fdffd040e55e0dedbe4eadacccda6ce40723"
+  },
+  "frozen_execution_status": "verified",
+  "intent_ref": {
+    "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261024\\product-pilot\\final-environment-qualification-intent.json",
+    "sha256": "630b1b7fa831a48526e29dd8416d84b3532343552c80ca08cf0a251fd9be45f1"
+  },
+  "known_previous_failures_preserved": true,
+  "no_more_runs": true,
+  "official_benchmark_score": false,
+  "original_expected_bytes_unchanged": true,
+  "original_expected_snapshot_count": 89,
+  "original_public_test_cases": 377,
+  "owner_result_ref": {
+    "path": "C:\\tmp\\rfqual-final-1531\\result.json",
+    "sha256": "8c1bb0ade10c3d4b625e3bcad75d4510d057689cacc7cc2528b00323afd32623"
+  },
+  "paired_product_score": false,
+  "preparation_ref": {
+    "path": "C:\\tmp\\rfqual-final-1531\\prepared.json",
+    "sha256": "0b0edcafb60a6aaf42404ab1aff9312859a30b5acd6a5bd07f3ce0565a6bff6d"
+  },
+  "private_inputs_not_in_public_source": true,
+  "process_ref": {
+    "path": "C:\\tmp\\rfqual-final-1531\\process\\process.json",
+    "sha256": "8559efa5065b03c18edd0c182c41a8e2678cd16d3471898bc41b112a309bdc5b"
+  },
+  "profile_ref": {
+    "path": "C:\\tmp\\rfqual-final-1531\\profile.json",
+    "sha256": "0b84cccbaac2ad1cbbd92d1b44f08a5a775a87f9164cd96a1645511c34a86b6f"
+  },
+  "public_baseline_exactly_original_plus_v2_fixture_and_common_initializer": true,
+  "public_contract_ref": {
+    "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261024\\product-pilot\\public-task-contract.txt",
+    "sha256": "64f4a13ea56d6d67e147a485fe76c3d698f1cd0dc3cf94b1d7f5f15bcba38bd5"
+  },
+  "public_reproduction_cases": 8,
+  "public_source_origin_ref": {
+    "path": "C:\\tmp\\rfqual-final-1531\\inputs\\public-baseline-origin.json",
+    "sha256": "b1627d1796e54dbc63d817766077c8174ad17cef94e1a7fcfc83117d7885c804"
+  },
+  "public_source_root": "C:\\tmp\\rfqual-final-1531\\public-baseline\\source",
+  "public_source_snapshot_ref": {
+    "path": "C:\\tmp\\rfqual-final-1531\\inputs\\public-baseline-source.json",
+    "sha256": "9f1f7d6bf77a06c0f10bae5d96647a0bae71fe026f29d8890dd0f58ae22c2279"
+  },
+  "qualified": true,
+  "resource": {
+    "preparation_observed_wall_seconds": 112.759001,
+    "preparation_observation_basis": "owned process start 2026-10-24T09:27:53.155985+00:00 to immutable prepared.json write 2026-10-24T09:29:45.914986+00:00; filesystem-observed interval, not an active-time measurement",
+    "backend_case_elapsed_seconds_sum": 484.85899999999674,
+    "cache_copy_seconds": 31.48400000000038,
+    "cache_seed_count": 1,
+    "deadline_utc": 1792834973.154986,
+    "model_calls": 0,
+    "native_sdk_stages": {
+      "production_restore_build_ms": 176630,
+      "test_execution_ms": 22376,
+      "test_restore_build_ms": 202549
+    },
+    "other_preparation_and_finalization_seconds": "not separately timed; included in owned_total",
+    "owned_total_seconds": 632.7030000000013,
+    "scope": "platform environment/evaluator qualification only; nested durations not added to owned_total; no inferred human active time",
+    "timeout": false
+  },
+  "schema_version": "fixed_common_environment_qualification_summary_v1",
+  "snapshot_ref": {
+    "path": "C:/tmp/rfdiag-real-1531/platform/execution_snapshot.json",
+    "sha256": "f0f39c46dc3ade97b37d50fe5db638ccbc98dc2a05b5a8df98bfb24f1e90cd40"
+  }
+}

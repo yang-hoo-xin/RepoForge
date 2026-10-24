@@ -99,8 +99,7 @@ def freeze(configuration_ref):
     qualification = read_bound_json(config["qualification_ref"])
     if qualification.get("qualified") is not True:
         raise ValueError("QUALIFIED_ACCEPTANCE_REQUIRED")
-    from src.mod_agent.evaluation.strategy_repository_evaluator import _configuration
-    _configuration(qualification["evaluator_ref"])
+    validate_frozen_evaluator(qualification)
     root = Path(config["root"]).resolve()
     public = Path(config["public_source_root"]).resolve(strict=True)
     if root.exists() or root.is_relative_to(public) or public.is_relative_to(root):
@@ -111,7 +110,8 @@ def freeze(configuration_ref):
     if identity["digest"] != DIGEST:
         raise ValueError("MODEL_CHANGED")
     root.mkdir(parents=True)
-    common = Path(config["public_problem_ref"]["path"]).read_text(encoding="utf-8") + "\n\n" + config["public_usage"]
+    public_contract = Path(config["public_contract_ref"]["path"]).read_text(encoding="utf-8")
+    common = Path(config["public_problem_ref"]["path"]).read_text(encoding="utf-8") + "\n\n" + public_contract
     common_path = root / "common-request.txt"
     with common_path.open("x", encoding="utf-8") as stream:
         stream.write(common)
@@ -191,8 +191,30 @@ def _verify(reference):
         raise ValueError("BOUND_INPUT_CHANGED")
 
 
+def validate_frozen_evaluator(qualification):
+    """Consume qualification with its original adapter, not the mutable checkout.
+
+    为什么要有它：资格绑定的是实际执行版本及路径，消费端不能改写原件或放宽身份检查。
+    """
+    reference = qualification["evaluator_ref"]
+    evaluator = read_bound_json(reference)
+    frozen = FrozenExecution(qualification["snapshot_ref"])
+    frozen.verify_files()
+    expected = _ref(frozen.root / "src/mod_agent/evaluation/strategy_repository_evaluator.py")
+    if evaluator["adoption_adapter_ref"] != expected:
+        raise ValueError("QUALIFIED_ADAPTER_OUTSIDE_FROZEN_PLATFORM")
+    code = (
+        "import json,sys; sys.path.insert(0,sys.argv[1]); "
+        "from src.mod_agent.evaluation.strategy_repository_evaluator import _configuration; "
+        "_configuration(json.loads(sys.argv[2]))"
+    )
+    subprocess.run([sys.executable, "-I", "-B", "-c", code, str(frozen.root), json.dumps(reference)],
+        cwd=frozen.root, check=True, timeout=60, capture_output=True)
+    frozen.verify_files()
+
+
 def configuration_keys(config):
-    keys = ("intent_ref", "public_problem_ref", "public_profile_ref", "qualification_ref", "settings_ref")
+    keys = ("intent_ref", "public_problem_ref", "public_contract_ref", "public_profile_ref", "qualification_ref", "settings_ref")
     return (*keys, "codex_executable_ref") if config.get("mode", "matched_product_pair") == "matched_product_pair" else keys
 
 
