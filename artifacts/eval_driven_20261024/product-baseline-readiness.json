@@ -1,0 +1,30 @@
+{
+  "schema_version": "product_comparison_baseline_readiness_v1",
+  "status": "installed_candidate_not_model_qualified_or_paired_result",
+  "purpose": "Prepare the product-level comparison separately from internal mechanism attribution; do not wait for mature strategy experience or training.",
+  "candidate": {
+    "tool": "Codex CLI",
+    "executable": "C:/Users/10160/AppData/Local/OpenAI/Codex/bin/37f54d68e5533a51/codex.exe",
+    "observed_version": "codex-cli 0.163.0-alpha.11.2",
+    "observed_help": ["exec", "--oss", "--local-provider ollama", "--model", "--json", "--ignore-user-config", "--sandbox"],
+    "existing_repository_driver": "scripts/run_benchmark_arm.py::codex_argv",
+    "old_driver_limit": "Historical driver fixes a cloud model/effort; cannot reuse it unchanged to claim same-model comparison.",
+    "preferred_question": "If protocol compatibility and common conditions can be established, compare RepoForge and Codex CLI using the same local qwen3-coder:30b model content. This compares complete harness/product configurations, not one isolated mechanism.",
+    "model_name": "qwen3-coder:30b",
+    "model_digest": "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca",
+    "same_local_model_compatibility": "not_yet_executed_or_proven"
+  },
+  "official_source": {
+    "search_query": "Codex CLI oss local-provider exec",
+    "fetched_url": "https://learn.chatgpt.com/docs/config-file/config-advanced#oss-mode-local-providers",
+    "established": "OSS mode supports local providers; noninteractive exec needs an explicitly selected provider or configured default.",
+    "not_established": "Specific qwen model protocol compatibility, equal effective context/output limits, actual tool behavior, account-independent local operation and comparable task performance still require real evidence."
+  },
+  "this_readiness_check": {"model_calls": 0, "task_runs": 0, "builds": 0, "downloads": 0, "global_config_changes": 0, "current_real_B_modified": false, "activities": "local command discovery, --version, exec --help, existing driver inspection and official documentation only"},
+  "minimum_next_action": "After the current real B and its outstanding local model request are terminal, preregister one bounded protocol/tool-accounting check for this exact local model and provider. Do not send a task or load another model concurrently on the current shared Ollama server. Then freeze a fresh paired task batch before either arm starts.",
+  "pair_contract": ["same initial source and public requirements", "same public feedback and independent acceptance", "explicit actual permission and delivery policies", "model content and effective context/output settings verified", "same wall/resource policy without transferring ended allowances", "all preregistered tasks, failures, recoveries and assistance retained", "task, independent evaluation and platform-development costs separate"],
+  "current_Spectre_B": "Absolute preregistered run only. Do not retrospectively turn it into a product comparison or an internal causal result.",
+  "scope_decision": "If this model/provider is unsupported, preserve the finite qualification result and select an actually available product configuration with differences disclosed; do not build a new provider or learning platform merely to complete comparison columns.",
+  "five_data_status": "Product-comparison correct delivery, human/waiting efficiency, unit success cost, conditional repair and experience effects are 本批未覆盖. Historical runs do not fill this batch's denominators.",
+  "why": "为什么要有它：尽早明确一个可执行的产品基线及最小补证动作，但文档支持和工具已安装不等于性能已测，也不能干扰当前真实任务。"
+}
