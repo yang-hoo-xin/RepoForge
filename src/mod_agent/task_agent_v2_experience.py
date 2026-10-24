@@ -300,19 +300,24 @@ class TaskAgentV2Experience:
     def _episode(self, session):
         sources, selections, gains, counterexamples = [], [], [], []
         execution = read_bound_json(self.owner.execution_receipt().execution_ref)
-        completed = {row["call_id"] for row in execution["completed_tool_records"]}
+        completed_records = {row["call_id"]: row for row in execution["completed_tool_records"]}
+        _learning_require(len(completed_records) == len(execution["completed_tool_records"]), "DUPLICATE_COMPLETED_ACTION")
+        completed_order = {call_id: index for index, call_id in enumerate(completed_records)}
+        completed = set(completed_records)
         failures = []
         for index, checked in enumerate(session.public_checks):
             report = checked["report"]
-            ref = report["report_ref"]
+            ref = _public_reference(report["report_ref"])
             original = read_bound_json(ref)
             if any(original.get(key) != report.get(key) for key in ("status", "observations", "verification_summary", "candidate_source_id")):
                 raise ValueError("TASK_V2_LEARNING_REPORT_CHANGED")
             evidence_id = "public_check_" + str(index)
             sources.append({"kind": "json_file", "evidence_id": evidence_id, **ref,
                 "visibility": "public", "allowed_uses": ["strategy_learning"]})
-            for field in ("status", "observations", "verification_summary"):
-                selections.append({"evidence_id": evidence_id, "locator": [field]})
+            for field in ("status", "observations", "verification_summary", "candidate_ref", "candidate_source_id"):
+                if field not in original:
+                    continue
+                selections.append({"evidence_id": evidence_id, "locator": [field], "role": "public_check"})
             kind = public_counterexample_kind(report)
             if kind is not None:
                 failures.append(original)
@@ -327,7 +332,7 @@ class TaskAgentV2Experience:
             reference = _public_reference({"path": str(path.resolve()), "sha256": path.stem})
             sources.append({"kind": "json_file", "evidence_id": evidence_id, **reference,
                 "visibility": "public", "allowed_uses": ["strategy_learning"]})
-            selections.extend({"evidence_id": evidence_id, "locator": [field]} for field in (
+            selections.extend({"evidence_id": evidence_id, "locator": [field], "role": "public_experiment"} for field in (
                 "observations", "verification_scope", "grants_acceptance"))
             if experiment["counterexample_kind"] is not None:
                 gains.append("public_counterexample")
@@ -335,26 +340,59 @@ class TaskAgentV2Experience:
                     "source_identity": experiment["source_identity"], "scope": "exploration_only"})
         if not gains:
             return None
-        for index, call in enumerate(session.actual_calls):
+        _learning_require(completed <= {call["call_id"] for call in session.actual_calls}, "COMPLETED_ACTION_MISSING")
+        for call in session.actual_calls:
             if call["call_id"] not in completed:
                 continue
+            index = completed_order[call["call_id"]]
+            _learning_require(all(completed_records[call["call_id"]].get(key) == value
+                for key, value in call.items()), "COMPLETED_ACTION_CHANGED")
             ref = call["response_ref"]
             _response, index_in_response, action_receipt = _validated_action(call, session)
             evidence_id = "public_action_" + str(index)
             sources.append({"kind": "json_file", "evidence_id": evidence_id, **ref,
                 "visibility": "public", "allowed_uses": ["strategy_learning"]})
-            selections.extend({"evidence_id": evidence_id, "locator": ["tool_calls", index_in_response, field]}
+            selections.extend({"evidence_id": evidence_id, "locator": ["tool_calls", index_in_response, field],
+                "role": "action_request", "action_index": index}
                 for field in ("name", "arguments"))
+            selections.append({"evidence_id": evidence_id, "locator": ["content"],
+                "role": "model_statement", "action_index": index})
             result_id = evidence_id + "_result"
             sources.append({"kind": "json_file", "evidence_id": result_id, **call["execution_receipt_ref"],
                 "visibility": "public", "allowed_uses": ["strategy_learning"]})
             # 为什么要有它：请求过某工具不等于实验已执行；只投影实际返回字段，不补写模型未表达的技术判断。
             for field in ("status", "executed", "grants_acceptance", "reason", "path", "text", "matches",
-                    "candidate_ref", "candidate_source_id", "source_view_ref", "technical_plan_ref", "plan_ref"):
+                    "candidate_ref", "candidate_source_id", "source_view_ref", "technical_plan_ref", "plan_ref",
+                    "parent_revision_ref", "source_revision_ref", "file_sha256", "root_id", "check_ref",
+                    "error", "error_code", "code", "message", "argument_errors", "correctable", "execution_origin",
+                    "observations", "verification_summary", "failed_checks", "feedback_ref", "truncated",
+                    "offset", "next_offset", "total_chars"):
                 if field in action_receipt["output"]:
-                    selections.append({"evidence_id": result_id, "locator": ["output", field]})
+                    selections.append({"evidence_id": result_id, "locator": ["output", field],
+                        "role": "action_return", "action_index": index})
+            for field in ("current_revision_ref", "binding_registry_ref", "technical_plan_ref"):
+                if field in action_receipt.get("task_head", {}):
+                    selections.append({"evidence_id": result_id, "locator": ["task_head", field],
+                        "role": "source_state", "action_index": index})
+        # 为什么要有它：候选就绪、未知副作用和任务交付是不同事实；仅选原生技术终态，不引入隐藏评分或开发者结论。
+        sources.append({"kind": "json_file", "evidence_id": "technical_outcome",
+            **_public_reference(self.owner.execution_receipt().execution_ref),
+            "visibility": "public", "allowed_uses": ["strategy_learning"]})
+        selections.extend({"evidence_id": "technical_outcome", "locator": [field], "role": "technical_outcome"}
+            for field in ("status", "candidate_ref", "check_ref", "unknown_effects") if field in execution)
+        if execution.get("loop_result_ref"):
+            loop_ref = _public_reference(execution["loop_result_ref"])
+            loop = read_bound_json(loop_ref)
+            sources.append({"kind": "json_file", "evidence_id": "public_loop", **loop_ref,
+                "visibility": "public", "allowed_uses": ["strategy_learning"]})
+            # 为什么要有它：未派发的参数错误也是实际试错经历，但必须独立列出，不能混成执行过的修改或实验。
+            for call_id, record in loop.get("call_records", {}).items():
+                if record.get("status") == "not_dispatched":
+                    selections.extend({"evidence_id": "public_loop", "locator": ["call_records", call_id, field],
+                        "role": "nonexecuted_attempt"} for field in ("name", "status", "result"))
         return self.owner._save("public-learning-episode-" + uuid4().hex + ".json", {
             "schema_version": "public_strategy_episode_v1", "visibility": "public", "data_use": "strategy_learning",
+            "projection_version": "ordered_public_actions_v1",
             "information_gain": sorted(set(gains)), "evidence_refs": sources, "selections": selections,
             "public_counterexamples": counterexamples,
             "applicability": self.context(session), "task_contract_ref": session.state.contract_ref,

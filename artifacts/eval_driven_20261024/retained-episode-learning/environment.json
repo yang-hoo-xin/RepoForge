@@ -1,0 +1,41 @@
+{
+  "schema": "retained_extraction_environment_restore.v1",
+  "generation_attempt_before_restore": {
+    "process_ref": {"path": "C:/tmp/rf-retained-b3-learning-2/process/process.json", "sha256": "cfb1c4ffcc7b6c2e094cc22730a9aca3abd4a0767880738933362c5da13754ed"},
+    "result_ref": {"path": "C:/tmp/rf-retained-b3-learning-2/operation/result.json", "sha256": "6c4c6492bff83f9f7a730097bacdbba4245a440463127dce4bce15442713a412"},
+    "status": "failed_before_model_reservation",
+    "reason": "OLLAMA_MODEL_CATALOG_UNAVAILABLE:ConnectError",
+    "reserved_calls": 0,
+    "model_generations": 0,
+    "original_refs_unchanged": true
+  },
+  "direct_dependency_cause": "The installed service inherited model root D:/OllamaModels. D: is currently an unready CD-ROM volume and serve exits with mkdir/device-not-ready before listening.",
+  "failed_service_starts": [
+    {"pid": 40860, "logs": "C:/tmp/rf-ollama-service-20261024-a", "terminal": true},
+    {"pid": 37412, "logs": "C:/tmp/rf-ollama-service-20261024-b", "terminal": true}
+  ],
+  "restored_service": {
+    "pid": 40276,
+    "started_at": "2026-10-24T12:55:54.1117525+08:00",
+    "tool_session_id": 70669,
+    "host": "127.0.0.1:11434",
+    "model_root": "C:/Users/10160/.ollama/models",
+    "logs": "C:/tmp/rf-ollama-service-20261024-c",
+    "server_version_observed": "0.40.9",
+    "lifecycle": "current_goal_owned_dependency; parent command waits; no global environment or installed configuration changed"
+  },
+  "fixed_model_verification": {
+    "manifest_sha256": "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca",
+    "all_four_referenced_blob_sha256_verified": true,
+    "weights_sha256": "1194192cf2a187eb02722edcc3f77b11d21f537048ce04b67ccf8ba78863006a",
+    "weights_bytes": 18556688736,
+    "config_blob_sha256": "24a94682582c6045f4950846fc7711479dcecb478b86759f0306a2ef8484d318",
+    "config_size_note": "Manifest declares539 bytes but actual542 bytes match its content digest exactly; no cache bytes were changed.",
+    "downloads": 0,
+    "weight_copies": 0,
+    "original_cache_changes": 0
+  },
+  "comparison_limit": "Same public episode, declared profile and exact model content. Baseline API attempt did not retain a complete server/hardware freeze; recovery environment differs. Treat follow-up quality as an absolute observation, not isolated causal improvement from prompt wording or a timing speedup.",
+  "cost_scope": "environment_repair_and_verification_not_solver_or_learning_tokens",
+  "next": "One registered extraction generation in a new output directory after actual catalog and listener verification; no business-task replay or automatic retries."
+}

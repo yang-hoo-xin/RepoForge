@@ -77,7 +77,7 @@ def test_trial_arm_cannot_relabel_a_consuming_configuration_as_baseline(tmp_path
     "discovery_extract", "discovery_tamper_extract", "discovery_environment_extract", "recheck_extract",
     "trial_consume", "trial_off"])
 def test_experience_through_normal_cli_actual_requests_and_terminal(repository_workspace, monkeypatch, capsys, mode,
-                                                                expire_learning_send=False):
+                                                                expire_learning_send=False, capture_projection=None):
     root = repository_workspace
     profile, source = _profile(root)
     extract_mode = mode.endswith("extract")
@@ -162,7 +162,8 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
             assert not views
         context = next(json.loads(row["content"]) for row in payload["messages"]
             if row["role"] == "user" and '"task_agent_v2"' in row["content"])
-        observations = [json.loads(row["content"])["value"] for row in payload["messages"] if row["role"] == "tool"]
+        tool_contents = [json.loads(row["content"]) for row in payload["messages"] if row["role"] == "tool"]
+        observations = [value.get("value", value) for value in tool_contents]
         last = observations[-1] if observations else None
         turn = len(requests)
         if mode.startswith("discovery_"):
@@ -191,6 +192,23 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
             name, args = "binding_add", {"expected_registry_ref": context["binding_registry_ref"],
                 "source_view_ref": saved["view"], "target_selector": "Library/Arithmetic.cs",
                 "rationale": "Read public implementation", "expected_validation": "Double test"}
+        elif mode == "argument_extract" and turn >= 5:
+            if turn in {5, 6}:
+                assert last["status"] == ("behavior_failed" if turn == 5 else "rejected_not_executed")
+                name, args = "candidate_read", {"parent_revision_ref": saved["parent"]}
+                if turn == 6:
+                    args["path"] = "Library/Arithmetic.cs"
+            elif turn == 7:
+                saved["view"] = last["source_view_ref"]
+                name, args = "candidate_submit", {"parent_revision_ref": saved["parent"], "edits": [{
+                    "binding_id": saved["binding"], "source_view_ref": saved["view"],
+                    "before_text": "=> value + 1;", "after_text": "=> value * 2;"}]}
+            elif turn == 8:
+                saved["parent"] = last["candidate_ref"]
+                name, args = "candidate_check", {"candidate_ref": saved["parent"]}
+            else:
+                assert turn == 9 and last["status"] == "passed"
+                name, args = "finish", {"candidate_ref": saved["parent"], "check_ref": last["check_ref"]}
         elif mode == "recheck_extract" and turn in {5, 6}:
             if turn == 5:
                 assert last["status"] == "behavior_failed"
@@ -204,7 +222,7 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
             else:
                 saved["view"] = last["source_view_ref"]
             before = "=> value;" if turn == 3 else "=> value + 1;"
-            after = "=> value + 1;" if turn == 3 and mode in {"extract", "recheck_extract"} else "=> value * 2;"
+            after = "=> value + 1;" if turn == 3 and mode in {"extract", "recheck_extract", "argument_extract"} else "=> value * 2;"
             if mode == "compile_extract":
                 after = "=> missingSymbol;"
             name, args = "candidate_submit", {"parent_revision_ref": saved["parent"], "edits": [{
@@ -249,7 +267,9 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
         assert result.get("status") != "awaiting_delivery"
         return
     if mode not in {"compile_extract", "rejected_extract"} and not mode.startswith("discovery_"):
-        assert code == 0 and result["status"] == "awaiting_delivery", result
+        assert code == 0 and result["status"] == "awaiting_delivery", json.dumps({
+            "root": str(root), "code": code, "product_status": result.get("status"),
+            "termination": json.loads(original).get("termination")})
     receipt = owner.complete_terminal_learning()
     assert Path(execution_ref["path"]).read_bytes() == original
     if expire_learning_send:
@@ -260,7 +280,7 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
         assert json.loads(raw.read_bytes())["purpose"] == "strategy_learning"
         assert json.loads(raw.read_bytes())["transport_attempted"] is False
         return
-    if mode in {"extract", "compile_extract", "discovery_extract", "recheck_extract"}:
+    if mode in {"extract", "compile_extract", "discovery_extract", "recheck_extract", "argument_extract"}:
         assert receipt["status"] == "completed", receipt
         assert len(learning) == 1
         assert receipt["budget_after"]["consumed"] == owner.execution_receipt().budget_after["consumed"] + 1
@@ -268,6 +288,43 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
         assert memory.read(receipt["strategy_ref"])["origin"]["kind"] == "model"
         assert memory.read(receipt["strategy_ref"])["state"] == "proposed"
         assert owner.complete_terminal_learning() == receipt and len(learning) == 1
+        learning_payload = json.loads(learning[0]["messages"][-1]["content"])
+        experience = learning_payload["experience"]
+        assert "observations" not in learning_payload  # No duplicate flat code payload.
+        assert experience["projection_version"] == "ordered_public_actions_v1"
+        actions = experience["actions"]
+        native = json.loads(original)
+        assert [a["action_index"] for a in actions] == list(range(len(native["completed_tool_records"])))
+        assert [a["action_request"][0]["value"] for a in actions] == [
+            row["name"] for row in native["completed_tool_records"]]
+        assert all(a["model_statement_status"] == "not_explicitly_expressed" for a in actions)
+        assert all(not a["model_statement"][0]["value"] for a in actions)
+        assert {row["locator"][0]: row["value"] for row in experience["technical_outcome"]} == {
+            key: native[key] for key in ("status", "candidate_ref", "check_ref", "unknown_effects")}
+        assert "not delivered" in experience["fact_scope"]["technical_outcome"]
+        assert "subsequent request" in experience["fact_scope"]["action_return"]
+        episode = json.loads(Path(receipt["episode_ref"]["path"]).read_text(encoding="utf-8"))
+        # Verify every projected value against its immutable original locator, not an expected narrative.
+        from src.mod_agent.model_qualification import read_bound_json
+        from src.mod_agent.planning.task_memory import _select
+        documents = {row["evidence_id"]: read_bound_json({key: row[key] for key in ("path", "sha256")})
+            for row in episode["evidence_refs"]}
+        projected = [value for action in actions for key in (
+            "action_request", "action_return", "model_statement", "source_state") for value in action[key]]
+        projected += [value for key in ("public_check", "public_experiment", "technical_outcome", "nonexecuted_attempt")
+            for value in experience[key]]
+        assert len(projected) == len(episode["selections"])
+        for value in projected:
+            assert value["value"] == _select(documents[value["evidence_id"]], value["locator"])
+        if capture_projection is not None:
+            capture_projection({"episode_ref": receipt["episode_ref"], "execution_ref": execution_ref,
+                "extraction_ref": receipt["extraction_ref"], "strategy_ref": receipt["strategy_ref"],
+                "controlled_wire_ref": _save(root / "controlled-learning-wire.json", learning[0]),
+                "scope": "controlled_HTTP_not_real_model_or_business_success"})
+        if mode == "argument_extract":
+            assert any(value["value"] == "not_dispatched" for value in experience["nonexecuted_attempt"])
+            assert any("argument_errors" in value["value"].get("output", {})
+                for value in experience["nonexecuted_attempt"] if isinstance(value["value"], dict))
         expected_kind = "public_compilation_counterexample" if mode == "compile_extract" else "public_business_counterexample"
         learned_strategy = memory.read(receipt["strategy_ref"])["strategy"]
         assert learned_strategy["applicability"]["counterexample_kind"] == expected_kind
@@ -290,17 +347,16 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
             episode = json.loads(Path(receipt["episode_ref"]["path"]).read_text(encoding="utf-8"))
             assert episode["information_gain"] == ["public_counterexample"]
             assert episode["public_counterexamples"][0]["scope"] == "exploration_only"
-            learning_payload = json.loads(learning[0]["messages"][-1]["content"])
-            observed = learning_payload["observations"]
+            observed = projected
             assert any(row["value"] == "test_catalog" for row in observed)
             assert any(isinstance(row["value"], dict) and row["value"].get("execute_discovery") is True for row in observed)
             assert any(isinstance(row["value"], dict) and "plan" in row["value"] for row in observed)
             assert any(row["value"] == "exploration_only" for row in observed)
             assert any(row["locator"] == ["grants_acceptance"] and row["value"] is False for row in observed)
             assert all(source["visibility"] == "public" for source in episode["evidence_refs"])
-        if mode in {"extract", "recheck_extract"}:
+        if mode in {"extract", "recheck_extract", "argument_extract"}:
             episode = json.loads(Path(receipt["episode_ref"]["path"]).read_text(encoding="utf-8"))
-            assert ("effective_revision" in episode["information_gain"]) is (mode == "extract")
+            assert ("effective_revision" in episode["information_gain"]) is (mode != "recheck_extract")
             if mode == "recheck_extract":
                 assert owner._v2_session.public_checks[0]["report"]["candidate_source_id"] == owner._v2_session.public_checks[1]["report"]["candidate_source_id"]
     elif mode == "rejected_extract":
@@ -335,3 +391,10 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
 def test_learning_preparation_expiry_preserves_reservation_without_model_send(repository_workspace, monkeypatch, capsys):
     test_experience_through_normal_cli_actual_requests_and_terminal(
         repository_workspace, monkeypatch, capsys, "extract", expire_learning_send=True)
+
+
+def test_ordered_episode_keeps_parameter_correction_and_original_receipts(
+        repository_workspace, monkeypatch, capsys, record_property):
+    test_experience_through_normal_cli_actual_requests_and_terminal(
+        repository_workspace, monkeypatch, capsys, "argument_extract",
+        capture_projection=lambda refs: record_property("projection_receipts", json.dumps(refs)))

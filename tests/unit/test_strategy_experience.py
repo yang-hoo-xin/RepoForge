@@ -147,6 +147,42 @@ def test_unadmitted_provider_cannot_extract(tmp_path, setup):
     assert not client.requests
 
 
+def test_ordered_projection_keeps_source_values_and_unknown_reasoning(tmp_path, setup):
+    from src.mod_agent.planning.strategy_experience import _episode_observations
+
+    source = {"tool_calls": [{"name": "candidate_submit", "arguments": {"parent_revision_ref": "current"}}],
+        "content": "", "output": {"status": "rejected_not_executed", "argument_errors": ["stale parent"]},
+        "status": "candidate_ready"}
+    selectors = [
+        {"evidence_id": "one", "locator": ["tool_calls", 0, "name"], "role": "action_request", "action_index": 2},
+        {"evidence_id": "one", "locator": ["tool_calls", 0, "arguments"], "role": "action_request", "action_index": 2},
+        {"evidence_id": "one", "locator": ["content"], "role": "model_statement", "action_index": 2},
+        {"evidence_id": "one", "locator": ["output"], "role": "action_return", "action_index": 2},
+        {"evidence_id": "one", "locator": ["status"], "role": "technical_outcome"}]
+    episode = {"projection_version": "ordered_public_actions_v1", "selections": selectors}
+    experience = _episode_observations(episode, {"one": source})["experience"]
+    action = experience["actions"][0]
+    assert action["action_index"] == 2 and action["model_statement_status"] == "not_explicitly_expressed"
+    assert action["action_return"][0]["value"] == source["output"]
+    assert experience["technical_outcome"][0]["value"] == "candidate_ready"
+    assert "not delivered" in experience["fact_scope"]["technical_outcome"]
+    assert "understanding" in experience["fact_scope"]["order"]
+    source["content"] = "I will compare the old and new readers."
+    observed = _episode_observations(episode, {"one": source})["experience"]["actions"][0]
+    assert observed["model_statement_status"] == "explicit_text_unassessed"
+    assert observed["model_statement"][0]["value"] == source["content"]
+
+
+@pytest.mark.parametrize("change", [{"role": "independent_acceptance"}, {"action_index": True}, {"action_index": -1}])
+def test_projection_metadata_cannot_add_outcome_or_fake_order(change):
+    from src.mod_agent.planning.strategy_experience import _episode_observations
+
+    episode = {"projection_version": "ordered_public_actions_v1", "selections": [
+        {"evidence_id": "one", "locator": ["value"], "role": "action_return", "action_index": 0, **change}]}
+    with pytest.raises(ValueError, match="STRATEGY_(OBSERVATION_ROLE|ACTION_INDEX)_INVALID"):
+        _episode_observations(episode, {"one": {"value": "ungraded"}})
+
+
 def test_unknown_provider_execution_is_recorded_and_never_replayed(tmp_path, setup):
     memory, _, strategy, _ = setup
     episode, admission = extraction_inputs(tmp_path, setup)

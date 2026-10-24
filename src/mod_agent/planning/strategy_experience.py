@@ -46,6 +46,46 @@ def _strategy(value):
     _json(value)
 
 
+def _episode_observations(episode, documents):
+    """Resolve only admitted source locators; labels organize facts, never evaluate them.
+
+    为什么要有它：旧经历保持原样，新经历区分请求、实际返回和技术结果；空白回答不能由外层补成技术推理。
+    """
+    selected = [{"evidence_id": s["evidence_id"], "locator": s["locator"],
+        "value": _select(documents[s["evidence_id"]], s["locator"])} for s in episode["selections"]]
+    _require(bool(selected), "PUBLIC_SELECTION_REQUIRED")
+    if "projection_version" not in episode:
+        return {"observations": selected}
+    _require(episode["projection_version"] == "ordered_public_actions_v1", "PROJECTION_VERSION_INVALID")
+    actions, groups = {}, {key: [] for key in (
+        "public_check", "public_experiment", "technical_outcome", "nonexecuted_attempt")}
+    for selector, value in zip(episode["selections"], selected, strict=True):
+        role = selector.get("role")
+        if role in {"action_request", "action_return", "source_state", "model_statement"}:
+            index = selector.get("action_index")
+            _require(type(index) is int and index >= 0, "ACTION_INDEX_INVALID")
+            action = actions.setdefault(index, {"action_index": index, "action_request": [], "action_return": [],
+                "source_state": [], "model_statement": []})
+            action[role].append(value)
+        else:
+            _require(role in groups and "action_index" not in selector, "OBSERVATION_ROLE_INVALID")
+            groups[role].append(value)
+    ordered = [actions[index] for index in sorted(actions)]
+    for action in ordered:
+        action["model_statement_status"] = ("explicit_text_unassessed" if any(
+            row["value"] for row in action["model_statement"]) else "not_explicitly_expressed")
+    return {"experience": {"projection_version": episode["projection_version"], "actions": ordered, **groups,
+        "fact_scope": {
+            "order": "completed tool receipt order, not evidence of causal understanding",
+            "action_request": "requested arguments, not proof of execution or correctness",
+            "action_return": "actual returned fields, not proof they reached a subsequent request or were adopted",
+            "model_statement": "verbatim visible response only; no inferred hypothesis or private reasoning",
+            "nonexecuted_attempt": "loop retained not-dispatched records only; no code edit, test or side effect established",
+            "public_check": "verified generated public reports, not independent hidden acceptance",
+            "technical_outcome": "native technical execution status; candidate_ready is not delivered",
+            "business_success_and_transfer": "not established by this projection"}}}
+
+
 class StrategyExperience(TaskMemory):
     """Versioned strategies; provenance reads reuse TaskMemory's source owner.
 
@@ -150,9 +190,7 @@ class StrategyExperience(TaskMemory):
         if not _GAIN.intersection(episode.get("information_gain", [])):
             return {"status": "no_information_gain", "strategy_ref": None}
         documents = self._public_sources(episode["evidence_refs"])
-        selected = [{"evidence_id": s["evidence_id"], "locator": s["locator"],
-            "value": _select(documents[s["evidence_id"]], s["locator"])} for s in episode["selections"]]
-        _require(bool(selected), "PUBLIC_SELECTION_REQUIRED")
+        observations = _episode_observations(episode, documents)
         admission = read_bound_json(admission_ref)
         _require(admission.get("status") == "admitted" and admission.get("purpose") == "strategy_learning"
             and admission.get("provider") == admitted_client.provider and admission.get("model") == admitted_client.model,
@@ -182,7 +220,7 @@ class StrategyExperience(TaskMemory):
                     "Do not copy task-specific patches, identifiers, paths, line numbers or answers. "
                     "The strategy will be considered on different tasks, so such copies are not evidence of transfer. "
                     "This is an unvalidated hypothesis, not authority or a proven repair."),
-                AgentMessage("user", {"observations": selected, "applicability": episode["applicability"]})),
+                AgentMessage("user", {**observations, "applicability": episode["applicability"]})),
                 tool_choice="none", response_format=AgentResponseFormat("strategy", "Conditional strategy hypothesis", schema))
             request_ref = self._write(feature + "_request", "request", {"request": asdict(request),
                 "episode_ref": dict(public_episode_ref), "admission_ref": dict(admission_ref)})

@@ -1,0 +1,65 @@
+{
+  "schema_version": "retained_episode_learning_comparison_result_v1",
+  "status": "completed_negative_not_selected_for_trial",
+  "scope": "one_field_semantics_followup_not_business_repair_or_product_terminal_learning",
+  "source_commit": "43b75e6",
+  "intent": "artifacts/eval_driven_20261024/retained-episode-learning/intent.json",
+  "environment": "artifacts/eval_driven_20261024/retained-episode-learning/environment.json",
+  "process_ref": {"path": "C:/tmp/rf-retained-b3-learning-3/process/process.json", "sha256": "471467c59fc60cb74f0622ee80717175a795fcd3b4bea04c815d24ca32fe3490"},
+  "result_ref": {"path": "C:/tmp/rf-retained-b3-learning-3/operation/result.json", "sha256": "452b901b2822d762dfd9d5dd2541b79afe730386c23ec4eab9e58789cc249015"},
+  "run_id": "retained_extraction_53bf8595e7be46b593c2bac2e1669f8f",
+  "execution": {"exit_code": 0, "process_seconds": 168.984, "nested_operation_seconds": 166.219, "reserved_calls": 1, "response_count": 1, "input_tokens": 16928, "output_tokens": 168, "total_tokens": 17096, "cached_input_tokens": 0, "original_refs_unchanged": true, "original_ref_count": 31},
+  "wire_request_ref": {"path": "C:/tmp/rf-retained-b3-learning-3/operation/model_trace_bodies/8bf8420549c14a0d.provider_request.json", "sha256": "dcde036ce83741eee5a5f3c2a46c2e81373f94cd393501d493c93eea3e213713"},
+  "strategy_ref": {"path": "C:/tmp/rf-retained-b3-learning-3/operation/strategy-memory/features/sx_885ffab85503273711fbbdcc/r/strategy_experience/f4c8bbac26ee275402cdf03321e47917.json", "artifact_hash": "f4c8bbac26ee275402cdf03321e47917341dd17d9f01e3224eecbe40b2e450d4"},
+  "content_review": {
+    "reviewer": "outer_developer_not_independent_transfer_evaluation",
+    "action": "Concrete inspect action, but names RetryHelper.cs and the original attempt threshold.",
+    "expectation": "Still predicts task-specific maxDelay repair rather than a discriminating investigation observation.",
+    "counterevidence": "Repeats observed CS0103 and target-framework failures; not hypothetical falsifying conditions.",
+    "decision": "Keep original proposed; do not rewrite, admit_trial or activate. No transferable strategy established."
+  },
+  "comparison": {"baseline_tokens": 17022, "followup_tokens": 17096, "known_combined_tokens": 34118, "baseline_original_integrity_failure_preserved": true, "old_B3_dispatch_usage": "unknown_not_included", "earlier_environment_failure": "root2_admission_failure_zero_reservations_preserved", "causal_claim": false, "reason": "Episode and model content match; complete baseline server/hardware conditions were not frozen. Both absolute content outcomes remain unsuitable."},
+  "next_design_hypothesis": {
+    "expected_effect": "Organizing existing public selections as ordered requested actions, actual returns, explicit model statements and technical outcome may reduce unsupported generalization from isolated code/failures.",
+    "baseline": "Current _episode sends flat selections with check reports before action evidence, omits technical outcome and some actual rejection/source-version fields. Two retained API outputs copied old-task repair details. This does not prove input layout caused either output.",
+    "change": "Extend existing public episode projection and its normal extraction consumer; preserve source hashes and legacy episodes. No new learning platform, strategy written by developer, solver gate or permission.",
+    "verification": "Focused faithful-projection counterexamples plus actual controlled HTTP through normal CLI terminal extraction. Verify requested versus returned versus independently unproven facts, exact parent/code identity and source locators. Register a distinct real validation before spending new model resources; no automatic third extraction or Serilog/Polly/RestSharp rerun.",
+    "return_point": "After normal-entry verification, resume strategy trial preparation on a different task and remaining U1-U5 integration. Unsuitable strategies are not forced into B+ to manufacture progress.",
+    "why": "为什么要有它：经历需要包含真实行动与结果的区别，但输入重排能否改善策略仍须验证，不能把开发者解释写成模型经验。"
+  },
+  "projection_verification": {
+    "status": "normal_entry_controlled_path_verified_not_real_learning_benefit",
+    "implementation": {
+      "episode_producer_sha256": "66df7a7283ae7bf64a6aaf16275738c1f87a6ba80449736bf58eccd15143f4a0",
+      "extraction_consumer_sha256": "72500633f06490a823ab546a99aee614087250b712341a26530999eed86e3ffa",
+      "mechanism": "Resolve exact existing public source locators into native-completion-order requests, actual returns, source state, verbatim visible response, public reports, retained not-dispatched attempts and technical outcome. No duplicate flat payload for new episodes; old episodes retain old input shape."
+    },
+    "actual_controlled_path": "normal CLI: public failure -> missing read parameter -> rejected_not_executed -> corrected read -> changed candidate -> passing public check -> deferred product handoff -> terminal extraction request",
+    "observed": {"completed_actions": 8, "retained_not_dispatched_attempts": 1, "public_check_reports": 2, "technical_status": "candidate_ready", "product_status": "awaiting_delivery", "formal_delivery": false, "model_response_content": "null preserved, no inferred reasoning", "strategy_state": "proposed"},
+    "episode_ref": {"path": "C:/Users/10160/AppData/Local/Temp/rfcscli-md4w7k2s/runs/9f70c5a6/a/task-agent-execution/public-learning-episode-f05770958e194e46b4f6d6b743947b3b.json", "sha256": "80a52bfe1eb2ebe7a0ac6fea8909ab8870ab625c36a78f8570e2d90da1bb6d8f"},
+    "execution_ref": {"path": "C:/Users/10160/AppData/Local/Temp/rfcscli-md4w7k2s/runs/9f70c5a6/a/task-agent-execution/execution.json", "sha256": "c89ef31b065e42e482e72b281f4567736ec63c2e257a75d0891f1ab737f886fd"},
+    "controlled_wire_ref": {"path": "C:/Users/10160/AppData/Local/Temp/rfcscli-md4w7k2s/controlled-learning-wire.json", "sha256": "410c117cb523a7ef150145d011706460ee37553927c68f2485d071fa11b32a3b"},
+    "saved_request_ref": {"path": "C:/Users/10160/AppData/Local/Temp/rfcscli-md4w7k2s/experience/features/sx_937bb78bd6d8592e4e2a5d8e/r/strategy_experience/2d89c47a8d21d83090f74457a014f7c7.json", "artifact_hash": "2d89c47a8d21d83090f74457a014f7c774cd76f01af7b5b20da1873a768ac656"},
+    "focused_checks": [
+      {"selection": "strategy experience, extraction receipts and retained extraction controller", "result": "23 passed", "junit_ref": {"path": "C:/tmp/rf-episode-core-final.xml", "sha256": "05c5041f4c447e1abca1b3d00a06478eda9039c1ac60b82eec90a7bab6bd1d8f"}},
+      {"selection": "normal CLI extract, discovery_extract and recheck_extract", "result": "three relevant cases passed; compile assertion failure retained", "junit_ref": {"path": "C:/tmp/rf-episode-projection-check3.xml", "sha256": "69ae3cada0af5dcdc8a578309c89dc69cd61416cc74b1166704fd83626074f39"}},
+      {"selection": "normal CLI compile_extract", "result": "passed; new argument fixture failure retained", "junit_ref": {"path": "C:/tmp/rf-episode-projection-check4.xml", "sha256": "8cdd0bd3bb957956ea86bdbf7284c849f2d5469692a12b3b01fda9b079a5cf17"}},
+      {"selection": "normal CLI parameter correction, repair and terminal extraction", "result": "passed", "junit_ref": {"path": "C:/tmp/rf-episode-projection-check6.xml", "sha256": "64741d08ed089b146a027c3bb3249c981a36a6c607bdaaecad52689e75a842b1"}},
+      {"selection": "changed Python files", "result": "Ruff clean; git diff --check clean"}
+    ],
+    "first_failures_preserved": [
+      {"attempt": "check1", "result": "four assertions failed: empty HTTP content becomes native null, not empty string; corrected assertion, product output unchanged"},
+      {"attempt": "check2", "result": "four assertions failed: new source comparison passed expanded evidence descriptor to exact-reference reader; corrected test to select path and sha256"},
+      {"attempt": "check3", "result": "one assertion failed: stale-parent fixture did not establish retained not-dispatched record; removed unsupported expectation and added explicit parameter-error scenario"},
+      {"attempt": "check4/check5", "result": "new fixture provider failed with KeyError: correction tool output is direct, unlike ordinary wrapped result; corrected fixture parser to retain both actual adapter forms", "diagnostic_ref": {"path": "C:/tmp/rf-episode-projection-check5.xml", "sha256": "6bd6cf0c6e56b9f20830b24b6f86094db5218aba510f2f5d9728c9d924910b10"}}
+    ],
+    "independent_readonly_review": "review_episode_projection: no blocking visibility, origin, outcome or permission issue found; no model or Build invoked",
+    "real_model_calls": 0,
+    "real_B_behavior": "not_tested_by_controlled_regression",
+    "independent_business_acceptance": "not_run",
+    "next": "Prepare a different real task with public feedback and qualified independent acceptance before new model execution. No currently prepared different-repository candidate was established by limited source inventory; metadata-only candidates are not ready. U1-U5 remain active."
+  },
+  "human_active_seconds": null,
+  "business_results": "not_run",
+  "transfer_benefit": "unproven"
+}
