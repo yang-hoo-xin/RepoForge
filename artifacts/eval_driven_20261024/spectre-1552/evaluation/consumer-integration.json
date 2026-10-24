@@ -1,0 +1,15 @@
+{
+  "schema_version": "single_repository_consumer_integration_v1",
+  "status": "ready_readonly_until_terminal_and_complete_candidate",
+  "owner": "artifacts/eval_driven_20261023/serilog-v2-pair/evaluation/evaluate_learning.py",
+  "scope": "configuration adaptation of existing candidate-origin/transport validation and independent evaluation; no solver or learning mechanism change",
+  "intent_path": "C:/tmp/rfext-spectre-1552-evaluation/consumer-configuration.intent.json",
+  "configuration_ref": {"path": "C:/tmp/rfext-spectre-1552-evaluation/consumer-configuration.json", "sha256": "737fe45c1dc913c09d16817d904ba29a421beacff84b5d3576edc0921bc5664d"},
+  "verification_ref": {"path": "C:/tmp/rfext-spectre-1552-evaluation/single-consumer-verification.json", "sha256": "38765d332be2db47e52dc7c9db3bbe8720e9a6e6d52cbdd08e9b16bd0faf753f"},
+  "main_review": {"changed_behavior": "explicit hash-bound configuration, fixed run identity, cache from qualified control directory, legacy default retained", "focused_result": "26 passed", "junit_ref": {"path": "C:/tmp/rf-spectre-consumer-main-check.xml", "sha256": "de369e14c156650a834d9c29d61bb6282b8610ab63a937ad0ea4e5f63c68ae74"}, "normal_entry": "waiting_for_terminal_process", "real_model_calls": 0, "build_calls": 0, "source_diff_reviewed": true},
+  "execution": "python -m artifacts.eval_driven_20261023.serilog-v2-pair.evaluation.evaluate_learning --configuration <configuration_ref.path> --configuration-sha256 <configuration_ref.sha256>",
+  "after_terminal": "Only after native complete candidate origin validates, add --execute --output C:/tmp/rf-spectre-1552-B1-independent-final-1 under a separate owned<=600s process window. No candidate means evaluation not executed, not failed tests.",
+  "delivery": "Read existing read_completed_v2_delivery receipt; compare candidate_ref/source_id to independent candidate, retain actual delivered_artifact_refs. Different-path DLL byte equality is not used as source-version proof.",
+  "limits": ["current real B and all frozen inputs unchanged", "host execution is not an OS sandbox", "qualification is not business task success", "independent profile is qualified for CLI edits; if candidate also changes Console, report qualification scope mismatch and preserve complete candidate rather than dropping edits or calling it business failure"],
+  "why": "为什么要有它：真实任务等待期间只接好已存在的独立消费路径，最终仍按实际候选、交付和验收判断，不能把参数适配或测试通过当自主成绩。"
+}

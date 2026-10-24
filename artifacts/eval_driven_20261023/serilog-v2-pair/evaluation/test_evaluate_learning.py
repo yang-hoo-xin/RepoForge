@@ -103,3 +103,105 @@ def test_wrong_wire_hash_for_final_response_is_rejected(transport):
     measurement['model']['calls'][0]['local_evidence']['provider_request']['sha256'] = 'other-wire'
     with pytest.raises(ValueError, match='not bound to one retained live'):
         owner.verify_live_transport(Path('/run'), native, candidate, measurement)
+
+
+@pytest.fixture
+def configured(tmp_path):
+    main = tmp_path / 'main'
+    plan_ref = owner._save(main / 'frozen-plan.json', {'run_id': 'r',
+        'platform_ref': {'path': 'frozen-platform', 'sha256': 'frozen-hash'}})
+    value = {'schema_version': 'single_repository_candidate_consumer_v1',
+        'plan_ref': plan_ref, 'evaluator_ref': {'path': 'private-evaluator', 'sha256': 'evaluator-hash'},
+        'run_root': str(main / 'runs/r'),
+        'public': {'profile_ref': {'path': 'public-profile', 'sha256': 'profile-hash'},
+                   'source_root': str(tmp_path / 'public-source')}}
+    return main, value, owner._save(tmp_path / 'consumer.json', value)
+
+
+def test_configuration_is_explicit_and_does_not_mutate_legacy_plan(configured):
+    main, value, reference = configured
+    result = owner.consumer_configuration(reference)
+    assert result['main'] == main.resolve()
+    assert result['plan']['run_root'] == str(main / 'runs/r')
+    assert result['plan']['environment'] == {}
+    assert owner.read_bound_json(value['plan_ref']).get('run_root') is None
+    assert result['public'] == value['public']
+
+
+@pytest.mark.parametrize('field', ['plan_ref', 'evaluator_ref', 'public', 'run_root'])
+def test_configuration_missing_required_field_rejected(configured, field):
+    _, value, reference = configured
+    value.pop(field)
+    reference = owner._save(Path(reference['path']).with_name('missing-field.json'), value)
+    with pytest.raises(ValueError, match='CONSUMER_CONFIGURATION_INVALID'):
+        owner.consumer_configuration(reference)
+
+
+def test_modified_configuration_cannot_use_old_hash(configured):
+    _, value, reference = configured
+    value['public']['source_root'] = 'different-source'
+    Path(reference['path']).write_text(json.dumps(value), encoding='utf-8')
+    with pytest.raises(ValueError):
+        owner.consumer_configuration(reference)
+
+
+@pytest.mark.parametrize('kind', ['other_id', 'other_main'])
+def test_configuration_cannot_select_another_run(configured, kind):
+    main, value, reference = configured
+    value['run_root'] = str(main / ('runs/other' if kind == 'other_id' else 'other-root/r'))
+    reference = owner._save(Path(reference['path']).with_name('different-run.json'), value)
+    with pytest.raises(ValueError, match='CONSUMER_RUN_IDENTITY_CHANGED'):
+        owner.consumer_configuration(reference)
+
+
+def test_bound_plan_hash_is_revalidated(configured):
+    _, value, reference = configured
+    Path(value['plan_ref']['path']).write_text(json.dumps({'run_id': 'different'}), encoding='utf-8')
+    with pytest.raises(ValueError):
+        owner.consumer_configuration(reference)
+
+
+def test_configured_nonterminal_entry_does_not_load_judge_or_build(configured, monkeypatch):
+    _, _, reference = configured
+    monkeypatch.setattr(owner, '_configuration', lambda *args: pytest.fail('judge must not load'))
+    monkeypatch.setattr(owner, 'execute', lambda *args: pytest.fail('must not Build'))
+    assert owner.inspect(reference) == {'status': 'waiting_for_terminal_process'}
+
+
+def test_legacy_configuration_keeps_old_reference_selection(monkeypatch):
+    plan = {'public_preparation_ref': {'path': 'old-public', 'sha256': 'old-public-hash'}}
+    monkeypatch.setattr(owner, 'read_bound_json', lambda ref: plan if ref == owner.PLAN_REF else {'legacy': True})
+    result = owner.consumer_configuration()
+    assert result['main'] == owner.MAIN
+    assert result['plan_ref'] == owner.PLAN_REF
+    assert result['evaluator_ref'] == owner.EVALUATOR_REF
+    assert result['plan'] is plan
+    assert result['public'] == {'legacy': True}
+
+
+@pytest.mark.parametrize('native,status', [
+    ({'status': 'blocked', 'candidate_ref': None}, 'no_candidate'),
+    ({'status': 'unknown', 'candidate_ref': None}, 'native_unknown'),
+])
+def test_terminal_without_usable_candidate_never_starts_judge(configured, monkeypatch, native, status):
+    main, value, reference = configured
+    owner._save(main / 'execution/process.json', {'status': 'exited', 'finished_at': 'done',
+        'argv': ['frozen-platform', 'frozen-hash']})
+    owner._save(main / 'started.json', {'plan_ref': value['plan_ref'], 'run_id': 'r'})
+    owner._save(main / 'runs/r/a/task-agent-execution/execution.json', native)
+    monkeypatch.setattr(owner, '_configuration', lambda *args: pytest.fail('no usable candidate'))
+    result = owner.inspect(reference)
+    assert result['status'] == status
+    assert result['delivered'] is False
+
+
+def test_execute_flag_cannot_bypass_nonterminal_gate(configured, monkeypatch, capsys):
+    _, _, reference = configured
+    monkeypatch.setattr(owner, 'execute', lambda *args: pytest.fail('must not Build'))
+    monkeypatch.setattr('sys.argv', ['consumer', '--configuration', reference['path'],
+        '--configuration-sha256', reference['sha256'], '--execute', '--output', 'unused'])
+    owner.main()
+    result = json.loads(capsys.readouterr().out)
+    assert result['status'] == 'waiting_for_terminal_process'
+    assert result['build_calls'] == 0
+    assert result['task_success'] is None

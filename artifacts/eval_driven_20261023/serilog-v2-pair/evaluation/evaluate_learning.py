@@ -95,17 +95,38 @@ def verify_live_transport(run_root, native, candidate, measurement):
             'trace_id': live['trace_id'], 'verification': 'same_submit_bound_to_live_provider_transport'}
 
 
-def inspect():
-    plan = read_bound_json(PLAN_REF)
-    public = read_bound_json(plan['public_preparation_ref'])
-    process_path = MAIN / 'execution/process.json'
+def consumer_configuration(reference=None):
+    if reference is None:
+        plan = read_bound_json(PLAN_REF)
+        return {'main': MAIN, 'plan_ref': PLAN_REF, 'evaluator_ref': EVALUATOR_REF,
+                'plan': plan, 'public': read_bound_json(plan['public_preparation_ref'])}
+    value = read_bound_json(reference)
+    require(set(value) == {'schema_version', 'plan_ref', 'evaluator_ref', 'public', 'run_root'}
+            and value['schema_version'] == 'single_repository_candidate_consumer_v1', 'CONSUMER_CONFIGURATION_INVALID')
+    require(set(value['public']) == {'profile_ref', 'source_root'}, 'CONSUMER_PUBLIC_CONFIGURATION_INVALID')
+    plan = read_bound_json(value['plan_ref'])
+    main = Path(value['plan_ref']['path']).resolve().parent
+    root = Path(value['run_root']).resolve()
+    require(root == main / 'runs' / plan['run_id'], 'CONSUMER_RUN_IDENTITY_CHANGED')
+    if 'run_root' in plan:
+        require(root == Path(plan['run_root']).resolve(), 'PLAN_RUN_IDENTITY_CHANGED')
+    return {**value, 'main': main, 'configuration_ref': reference,
+            'plan': {**plan, 'run_root': str(root), 'environment': plan.get('environment', {})}}
+
+
+def inspect(configuration_ref=None):
+    consumer = consumer_configuration(configuration_ref)
+    plan, public = consumer['plan'], consumer['public']
+    main, plan_ref = consumer['main'], consumer['plan_ref']
+    process_path = main / 'execution/process.json'
     if not process_path.is_file():
         return {'status': 'waiting_for_terminal_process'}
     process_ref = _ref(process_path)
     process = read_bound_json(process_ref)
-    terminal_gate(process, read_bound_json(_ref(MAIN / 'started.json')), plan, PLAN_REF)
+    terminal_gate(process, read_bound_json(_ref(main / 'started.json')), plan, plan_ref)
     native_path = Path(plan['run_root']) / 'a/task-agent-execution/execution.json'
     facts = {'process_ref': process_ref, 'original_process_status': process['status'], 'delivered': False,
+             'consumer_configuration_ref': configuration_ref,
              'scope': 'single_candidate_business_evaluation_not_U2_adoption_or_normal_task_completion'}
     if not native_path.is_file():
         return {**facts, 'status': 'native_missing'}
@@ -138,7 +159,8 @@ def inspect():
     facts.update(candidate_ref=native['candidate_ref'], candidate_source_id=candidate['candidate_source_id'])
     return {'status': 'ready', 'facts': facts, 'plan': plan, 'public': public, 'state': state,
             'candidate': candidate, 'fixed_inputs': selected['kwargs']['expected_fixed_inputs'],
-            'config': _configuration(EVALUATOR_REF)}
+            'main': main, 'plan_ref': plan_ref, 'evaluator_ref': consumer['evaluator_ref'],
+            'config': _configuration(consumer['evaluator_ref'])}
 
 
 def production_bytes(relative, materialized, fixed, public_root):
@@ -183,14 +205,15 @@ def execute(context, output):
     os.environ.update(context['plan']['environment'])
     cache = profile.task_work_root(output)
     cache.mkdir(parents=True)
-    origin = profile.task_work_root(Path('C:/tmp/rf-serilog-v2-pair-eval/correct'))
+    origin = profile.task_work_root(Path(control['source_root']).parent)
     for name in ('p', 'h'):
-        shutil.copytree(origin / name, cache / name)
+        if (origin / name).is_dir():
+            shutil.copytree(origin / name, cache / name)
     executor = backend.CSharpRepositoryBackend(profile_ref=profile.reference, source_root=source,
         workspace_root=output, output_root=output / 'checks', expected_fixed_inputs=config['fixed_inputs'])
     refs = {}
     try:
-        result = executor.run_build_test(source, 'serilog-learning-independent', 'independent_evaluation')
+        result = executor.run_build_test(source, 'single-candidate-independent', 'independent_evaluation')
         refs['report_ref'] = result['report_ref']
         report = read_bound_json(result['report_ref'])
         refs.update(raw_test_result_ref=report['test_execution'].get('report_ref'),
@@ -211,9 +234,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--execute', action='store_true')
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--configuration', type=Path)
+    parser.add_argument('--configuration-sha256')
     args = parser.parse_args()
     try:
-        context = inspect()
+        require(bool(args.configuration) == bool(args.configuration_sha256), 'CONFIGURATION_REFERENCE_REQUIRED')
+        configuration_ref = ({'path': str(args.configuration.resolve()), 'sha256': args.configuration_sha256}
+                             if args.configuration is not None else None)
+        context = inspect(configuration_ref)
     except Exception as error:
         print(json.dumps({'status': 'unknown', 'task_success': None, 'preservation_passed': None,
             'model_calls': 0, 'build_calls': 0, 'error_type': type(error).__name__, 'error': str(error)}))
@@ -224,7 +252,8 @@ def main():
         return
     require(args.output is not None, 'OUTPUT_REQUIRED')
     output = args.output.resolve()
-    for protected in (MAIN, Path(context['public']['source_root']), Path(EVALUATOR_REF['path']).parents[1]):
+    for protected in (context['main'], Path(context['public']['source_root']),
+                      Path(context['evaluator_ref']['path']).parents[1]):
         require(not output.is_relative_to(protected.resolve()) and not protected.resolve().is_relative_to(output),
                 'OUTPUT_OVERLAPS_ORIGINAL_INPUT')
     clock = time.monotonic()
@@ -236,7 +265,7 @@ def main():
             'model_calls': 0, 'error_type': type(error).__name__, 'error': str(error)}))
         return
     record = {'task_success': None, 'preservation_passed': None, **result, **context['facts'],
-        'plan_ref': PLAN_REF, 'evaluator_ref': EVALUATOR_REF, 'model_calls': 0,
+        'plan_ref': context['plan_ref'], 'evaluator_ref': context['evaluator_ref'], 'model_calls': 0,
         'evaluation_seconds': time.monotonic() - clock, 'cost_scope': 'independent_evaluation_only',
         'training_or_model_input_written': False, 'paired_comparison': False}
     reference = _save(output / 'result.json', record)
