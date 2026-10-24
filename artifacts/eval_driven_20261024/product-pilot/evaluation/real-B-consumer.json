@@ -1,0 +1,19 @@
+{
+  "schema_version": "single_repository_candidate_consumer_v1",
+  "plan_ref": {
+    "path": "C:\\tmp\\rf1531\\RepoForge_B\\frozen-plan.json",
+    "sha256": "3fb0f7836a2785e9bf9b4d2ff0c69463668a8b3099a33865de54a67c8e7e6e77"
+  },
+  "evaluator_ref": {
+    "path": "C:\\tmp\\rfqual-final-1531\\qualification\\evaluator.json",
+    "sha256": "e8a27f64d4cbb361f1646edf592a5c4d7f9b71821a9623f75d9984e10d4cc319"
+  },
+  "public": {
+    "profile_ref": {
+      "path": "C:\\tmp\\rfqual-final-1531\\profile.json",
+      "sha256": "0b84cccbaac2ad1cbbd92d1b44f08a5a775a87f9164cd96a1645511c34a86b6f"
+    },
+    "source_root": "C:\\tmp\\rf1531\\RepoForge_B\\runs\\dsh_ba30f8ea75a84cec9793155935786037\\generated_mods\\source"
+  },
+  "run_root": "C:\\tmp\\rf1531\\RepoForge_B\\runs\\dsh_ba30f8ea75a84cec9793155935786037"
+}
