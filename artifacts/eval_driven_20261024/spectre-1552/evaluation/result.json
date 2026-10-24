@@ -1,0 +1,234 @@
+{
+  "additional_preservation_scope": "other actual tests, not official preservation labels",
+  "autonomous_success": false,
+  "base_commit": "0e2ed511a5cfa303ba99c97ebb3f36c50cfa526f",
+  "controls": {
+    "correct": {
+      "actual_tests": 390,
+      "elapsed_seconds": 113.875,
+      "error": null,
+      "error_type": null,
+      "failures": 0,
+      "official_labels_found": 2,
+      "official_target_instances": 2,
+      "official_target_labels": 2,
+      "official_target_passed": 2,
+      "original_other_failures": 0,
+      "original_other_tests": 380,
+      "public_passed": 8,
+      "public_tests": 8,
+      "report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\controls-v2\\correct\\checks\\9e5107019d684edc9bd26d5859e16fd0\\report.json",
+        "sha256": "03d85d7fc702ca3d7c800f948a8c35acd35720f969a99af9e4c1020950930f11"
+      },
+      "result_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\controls-v2\\correct-result.json",
+        "sha256": "0c072416a9c4f9c13795578df18b875def45a7b76f3e9813202d091609320500"
+      },
+      "status": "passed",
+      "trx_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\controls-v2\\correct\\checks\\9e5107019d684edc9bd26d5859e16fd0\\test-output\\tests.trx",
+        "sha256": "309e94abb6e8dae174431f414e2ded20d27d3940a20671157421858c26197c9d"
+      }
+    },
+    "equivalent": {
+      "actual_tests": 390,
+      "elapsed_seconds": 96.28200000000015,
+      "error": null,
+      "error_type": null,
+      "failures": 0,
+      "official_labels_found": 2,
+      "official_target_instances": 2,
+      "official_target_labels": 2,
+      "official_target_passed": 2,
+      "original_other_failures": 0,
+      "original_other_tests": 380,
+      "public_passed": 8,
+      "public_tests": 8,
+      "report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\controls-v2\\equivalent\\checks\\f3ec982d6a7d4ede9b22004142d7bd54\\report.json",
+        "sha256": "832c554552be9f6e685deada05548266c234c1d959955fc193718e1883f0774e"
+      },
+      "result_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\controls-v2\\equivalent-result.json",
+        "sha256": "2889274a1acda4a42057fdd8979f1c4ab9a01781a208f4bfce91358d069f3a21"
+      },
+      "status": "passed",
+      "trx_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\controls-v2\\equivalent\\checks\\f3ec982d6a7d4ede9b22004142d7bd54\\test-output\\tests.trx",
+        "sha256": "c05da0008f1ff87e8668d2b517cbd82980759a4c9a08ea43f5473118fd20e342"
+      }
+    },
+    "initial_baseline": {
+      "actual_tests": 390,
+      "elapsed_seconds": 96.07800000000043,
+      "error": "CSHARP_REPOSITORY_FIXED_INPUTS_CHANGED",
+      "error_type": "ValueError",
+      "failures": 4,
+      "official_labels_found": 2,
+      "official_target_instances": 2,
+      "official_target_labels": 2,
+      "official_target_passed": 0,
+      "original_other_failures": 0,
+      "original_other_tests": 380,
+      "public_passed": 6,
+      "public_tests": 8,
+      "report_ref": null,
+      "result_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\baseline-result.json",
+        "sha256": "aff03a44bca51b81b117b00e804a951ea0b21ae34cba48679edcc6eb3991566f"
+      },
+      "status": "incomplete",
+      "trx_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\baseline\\checks\\511b6af575184752bb3509b4f97d2fed\\test-output\\tests.trx",
+        "sha256": "233c6642fdc72226d076dcd201dd272946e8857fbcbe35d6ebe7b868242a2e8b"
+      }
+    },
+    "initial_correct": {
+      "actual_tests": 390,
+      "elapsed_seconds": 142.53099999999995,
+      "error": null,
+      "error_type": null,
+      "failures": 0,
+      "official_labels_found": 2,
+      "official_target_instances": 2,
+      "official_target_labels": 2,
+      "official_target_passed": 2,
+      "original_other_failures": 0,
+      "original_other_tests": 380,
+      "public_passed": 8,
+      "public_tests": 8,
+      "report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\correct\\checks\\4e8dd1d658444852be357f1c41694231\\report.json",
+        "sha256": "76ecd7b5648b10b519d93499494180ea4da7258e869c03992e047b3eb6223f29"
+      },
+      "result_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\correct-result.json",
+        "sha256": "dcb2c0d73d8a204c3cfd9ba34761049da7cf879ee99832719036c191c88582b6"
+      },
+      "status": "passed",
+      "trx_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\correct\\checks\\4e8dd1d658444852be357f1c41694231\\test-output\\tests.trx",
+        "sha256": "ff1715729e38f7329baa138336ead58ddf161de46cd2deb815ebcaddbaca3d0c"
+      }
+    },
+    "public_correct": {
+      "actual_tests": 388,
+      "elapsed_seconds": 99.21900000000005,
+      "error": null,
+      "error_type": null,
+      "failures": 0,
+      "official_labels_found": 0,
+      "official_target_instances": 0,
+      "official_target_labels": 2,
+      "official_target_passed": 0,
+      "original_other_failures": 0,
+      "original_other_tests": 380,
+      "public_passed": 8,
+      "public_tests": 8,
+      "report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\public-correct\\checks\\3715db5616e345b49aefe78529a4dcec\\report.json",
+        "sha256": "0e747ee3366bc8bfec29e9d13a16c6639db930e5181431ef01d0a4f6a5cd00bf"
+      },
+      "result_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\public-correct-result.json",
+        "sha256": "50f824f9e8d09e0c759b7fd13164b037e0b1f513c83b29ed5f4d95ab3edd08b9"
+      },
+      "status": "passed",
+      "trx_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\public-correct\\checks\\3715db5616e345b49aefe78529a4dcec\\test-output\\tests.trx",
+        "sha256": "78c1ad0a28d6dc3ea90042f32475a49cc1151820ae3fa931d6b52bbf69d2f77b"
+      }
+    },
+    "wrong": {
+      "actual_tests": 390,
+      "elapsed_seconds": 95.53200000000015,
+      "error": null,
+      "error_type": null,
+      "failures": 7,
+      "official_labels_found": 2,
+      "official_target_instances": 2,
+      "official_target_labels": 2,
+      "official_target_passed": 0,
+      "original_other_failures": 3,
+      "original_other_tests": 380,
+      "public_passed": 6,
+      "public_tests": 8,
+      "report_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\controls-v2\\wrong\\checks\\378b128b2a844080850adab537d7fbfd\\report.json",
+        "sha256": "d343e103783f1189ed8cf1be3ce66707706b6f46c3d175b5c15a66ac93d22ca8"
+      },
+      "result_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\controls-v2\\wrong-result.json",
+        "sha256": "bbb7b2a3713c3d609e06cb77a94f0f9913d6ac60a9a67159c06a9e18888a0e35"
+      },
+      "status": "behavior_failed",
+      "trx_ref": {
+        "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\controls-v2\\wrong\\checks\\378b128b2a844080850adab537d7fbfd\\test-output\\tests.trx",
+        "sha256": "6a48777afb288ceef59e23e8d12e013449e39369127aa025bf736db8f088c7e8"
+      }
+    }
+  },
+  "environment_adaptation_ref": {
+    "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\controls-v2\\snapshot-output-environment.json",
+    "sha256": "2548e5aa6cef7f6eef7144be05e71d0a1b28f82235f814b0c7a08962b5f6f333"
+  },
+  "limitations": [
+    "qualification controls only, not a product-model result",
+    "not official Linux or multi-runtime test execution",
+    "host process execution, not operating-system sandbox",
+    "initial baseline integrity failure retained, not converted into trusted feedback"
+  ],
+  "model_calls": 0,
+  "official_preservation_labels_count": 0,
+  "original_source_unchanged": true,
+  "private_controls_ref": {
+    "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\controls-v2\\control-inputs.json",
+    "sha256": "31a3879ab7806ec3814bf84a90f900a9689f53988312d02fa89c2858f98c6b42"
+  },
+  "process_refs": [
+    {
+      "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\correct-process\\process.json",
+      "sha256": "366a7e3874b6a3f2ee3d7bfb64ec48426e641799df1633a6fd6bbf604b346cfc"
+    },
+    {
+      "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\baseline-process\\process.json",
+      "sha256": "2ca0378edc84e39b98dbf9957842dcbb5a3f11a96fe12db8506d9abc45a2e678"
+    },
+    {
+      "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\public-correct-process\\process.json",
+      "sha256": "acbd269919a1833a171f1249f270fdd9b65f8b0411a726b7d71038a8ed051cca"
+    },
+    {
+      "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\controls-v2\\correct-process\\process.json",
+      "sha256": "611ef6a3a1e18d066a073a26ed56df06986bdb7bc9ea41d317ca1cf903f740ba"
+    },
+    {
+      "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\controls-v2\\equivalent-process\\process.json",
+      "sha256": "8a931d605ea9c0159b6f9b104f98100a6d99bd515b65dad374e653ec728c0660"
+    },
+    {
+      "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\controls-v2\\wrong-process\\process.json",
+      "sha256": "8579e6d94048c99838f7fc584e30a122039e4614f6c8d78c76cd7cd09ea2ebe4"
+    }
+  ],
+  "process_time_scope": "serial owned execution windows; excludes artifact preparation, cache copy and parent investigation",
+  "profile_ref": {
+    "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\profile.json",
+    "sha256": "f90efe70379fab7a49ccac353b1fb910cf9303ad37047967f040e40dfd146f7e"
+  },
+  "qualification_runner_ref": {
+    "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261024\\spectre-1552\\evaluation\\qualify.py",
+    "sha256": "57f8f178439d712aefe740ff6382518b624614ed626f9b22653ec120f9978ee3"
+  },
+  "qualified_result_ref": {
+    "path": "C:\\tmp\\rfext-spectre-1552-evaluation\\qualification-result.json",
+    "sha256": "73333b873dd4231f82cb3f4ae10611385cc8d1f19e4c7bb65570ca22af37d63b"
+  },
+  "recorded_process_wall_seconds": 656.9540000000006,
+  "schema_version": "repository_control_qualification_summary_v1",
+  "scope": "original framework build; only net8.0 execution; host workspace not OS sandbox",
+  "source_files": 1470,
+  "status": "qualified",
+  "task_id": "spectreconsole__spectre-console-1552"
+}
