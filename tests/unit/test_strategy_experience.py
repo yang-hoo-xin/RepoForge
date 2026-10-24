@@ -104,6 +104,15 @@ def test_real_request_response_and_cost_receipt_are_saved_once(tmp_path, setup):
     assert len(client.requests) == 1 and receipts[0]["usage"]["total_tokens"] == 40
     request = memory.read(result["request_ref"])
     assert request["request"] == json.loads(json.dumps(asdict(client.requests[0])))
+    prepared = client.requests[0]
+    assert prepared.tool_choice == "none" and not prepared.tools
+    assert set(prepared.response_format.schema["properties"]) == {
+        "suggested_action", "expected_observation", "counterevidence"}
+    descriptions = prepared.response_format.schema["properties"]
+    assert "not a category label" in descriptions["suggested_action"]["description"]
+    assert "inapplicable" in descriptions["counterevidence"]["description"]
+    assert "different tasks" in prepared.messages[0].content
+    assert "unvalidated hypothesis" in prepared.messages[0].content
     assert memory.read(result["response_ref"])["response"]["content"]
     assert memory.read(result["strategy_ref"])["state"] == "proposed"
     again = memory.propose_from_episode(client, episode, admission_ref=admission,

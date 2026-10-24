@@ -50,8 +50,8 @@ INTENT = Path(__file__).with_name("intent.json")
 EPISODE_HASH = "dcd7dd926299d46bbf03b087563e58986ca344c6c7d6fc5ff53a23aaf9ad298c"
 
 
-def preflight():
-    intent = read_bound_json(file_ref(INTENT))
+def preflight(intent_path=None):
+    intent = read_bound_json(file_ref(Path(intent_path) if intent_path is not None else INTENT))
     if intent["episode_ref"]["sha256"] != EPISODE_HASH:
         raise ValueError("EXACT_RETAINED_EPISODE_REQUIRED")
     episode = read_bound_json(intent["episode_ref"])
@@ -89,8 +89,25 @@ def output_path(value, intent):
     return path
 
 
-def execute(output_root, deadline_utc, base_url):
-    intent, original_refs = preflight()
+def verify_original_refs(original_refs):
+    integrity = []
+    for reference in original_refs:
+        try:
+            _no_links(Path(reference["path"]).absolute())
+            actual = file_ref(reference["path"])
+            same = (actual["sha256"] == reference["sha256"]
+                and Path(actual["path"]).resolve() == Path(reference["path"]).resolve())
+            integrity.append({"reference": reference, "actual": actual, "status": "matched" if same else "changed"})
+        except (OSError, ValueError) as error:
+            integrity.append({"reference": reference, "status": "unreadable", "error_type": type(error).__name__})
+    unchanged = (False if any(row["status"] == "changed" for row in integrity)
+        else None if any(row["status"] == "unreadable" for row in integrity) else True)
+    return unchanged, integrity
+
+
+def execute(output_root, deadline_utc, base_url, intent_path=None):
+    selected_intent = Path(intent_path) if intent_path is not None else INTENT
+    intent, original_refs = preflight(selected_intent)
     root = output_path(output_root, intent)
     deadline = datetime.fromisoformat(deadline_utc.replace("Z", "+00:00"))
     if deadline.tzinfo is None:
@@ -102,10 +119,12 @@ def execute(output_root, deadline_utc, base_url):
         raise ValueError("PARENT_UTC_DEADLINE_WITHIN_600_SECONDS_REQUIRED")
     monotonic_deadline = time.monotonic() + remaining
     profile = LocalOllamaInitialPatchProfileV1("local_ollama_initial_patch_profile_v1", base_url,
-        intent["model"], 65536, 4096, 600)
+        intent["model"], intent["context_window"], intent["output_budget"], intent["request_timeout_seconds"])
     root.mkdir(parents=True, exist_ok=False)
     run_id, start = "retained_extraction_" + uuid4().hex, time.monotonic()
-    write_once(root / "started.json", {"run_id": run_id, "intent_ref": file_ref(INTENT),
+    producer_ref = file_ref(sys.modules[StrategyExperience.__module__].__file__)
+    write_once(root / "started.json", {"run_id": run_id, "intent_ref": file_ref(selected_intent),
+        "producer_ref": producer_ref,
         "script_ref": file_ref(__file__), "original_refs": original_refs,
         "requested_deadline_utc": deadline_utc, "deadline_utc": deadline.isoformat(),
         "scope": intent["scope"], "profile": profile.to_dict(), "parent_process_enforcement_required": True})
@@ -115,7 +134,8 @@ def execute(output_root, deadline_utc, base_url):
     receipts, events = [], []
     trace = ExecutionTrace(run_id, run_id, "retained_episode_strategy_extraction",
         recorder=lambda row: write_once(root / "trace" / (uuid4().hex + ".json"), row))
-    result = {"run_id": run_id, "scope": intent["scope"], "status": "not_dispatched", "strategy_ref": None,
+    result = {"run_id": run_id, "scope": intent["scope"], "producer_ref": producer_ref,
+        "status": "not_dispatched", "strategy_ref": None,
         "original_B3_extraction_cost": "unknown_preserved_not_included", "human_active_seconds": None,
         "platform_development_cost": "separate_not_measured_by_this_attempt"}
 
@@ -194,16 +214,7 @@ def execute(output_root, deadline_utc, base_url):
         write_once(root / "identity-after.json", after)
     except Exception as error:
         result.update(status="failed", error_type=type(error).__name__, message=str(error))
-    integrity = []
-    for reference in original_refs:
-        try:
-            actual = file_ref(reference["path"])
-            integrity.append({"reference": reference, "actual": actual,
-                "status": "matched" if actual == reference else "changed"})
-        except (OSError, ValueError) as error:
-            integrity.append({"reference": reference, "status": "unreadable", "error_type": type(error).__name__})
-    unchanged = (False if any(row["status"] == "changed" for row in integrity)
-        else None if any(row["status"] == "unreadable" for row in integrity) else True)
+    unchanged, integrity = verify_original_refs(original_refs)
     result["extraction_status"] = result["status"]
     if unchanged is not True:
         result["status"] = "integrity_unconfirmed"
@@ -219,15 +230,16 @@ def main(argv=None):
     parser.add_argument("--output-root")
     parser.add_argument("--deadline-utc")
     parser.add_argument("--base-url", default="http://127.0.0.1:11434")
+    parser.add_argument("--intent", help="Explicit registered intent; default retains the original experiment.")
     args = parser.parse_args(argv)
     if not args.execute:
-        intent, refs = preflight()
+        intent, refs = preflight(args.intent)
         print(json.dumps({"status": "preflight_only", "scope": intent["scope"], "verified_original_files": len(refs),
             "model_calls": 0, "network_calls": 0, "writes": 0}))
         return 0
     if not args.output_root or not args.deadline_utc:
         parser.error("--execute requires --output-root and parent --deadline-utc")
-    reference = execute(args.output_root, args.deadline_utc, args.base_url)
+    reference = execute(args.output_root, args.deadline_utc, args.base_url, args.intent)
     print(json.dumps(reference))
     return 0 if read_bound_json(reference)["status"] == "completed" else 2
 

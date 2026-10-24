@@ -100,7 +100,8 @@ def test_one_controlled_call_and_preserved_originals(runner, monkeypatch, tmp_pa
     assert result["status"] == ("integrity_unconfirmed" if unreadable_postcheck
         else "failed" if fail or expire_before_send else "completed")
     assert result["original_refs_unchanged"] is (None if unreadable_postcheck else True)
-    assert all(file_ref(r["path"]) == r for r in original)
+    assert all(file_ref(r["path"])["sha256"] == r["sha256"] for r in original)
+    assert all(Path(file_ref(r["path"])["path"]).resolve() == Path(r["path"]).resolve() for r in original)
     if expire_before_send:
         assert "provider_request_ref" not in result["provider_events"][0]
     else:
@@ -135,3 +136,11 @@ def test_inherited_deadline_cannot_be_extended_by_arguments(runner, monkeypatch,
     with pytest.raises(ValueError, match="PARENT_UTC_DEADLINE"):
         runner.execute(str(tmp_path / "not-created"), deadline, "http://127.0.0.1:11434")
     assert not (tmp_path / "not-created").exists()
+
+
+def test_forward_slash_reference_is_not_a_source_byte_change(runner, monkeypatch, tmp_path):
+    intent = json.loads(runner.INTENT.read_text(encoding="utf-8"))
+    intent["episode_ref"]["path"] = Path(intent["episode_ref"]["path"]).as_posix()
+    selected = write_once(tmp_path / "forward-slash-intent.json", intent)
+    monkeypatch.setattr(runner, "INTENT", Path(selected["path"]))
+    test_one_controlled_call_and_preserved_originals(runner, monkeypatch, tmp_path, False)

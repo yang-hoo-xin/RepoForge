@@ -1,0 +1,43 @@
+{
+  "schema": "retained_episode_extraction_observed.v1",
+  "operation_id": "retained_extraction_36781e1db1e54f039dd2df4fd3714120",
+  "scope": "outer_triggered_single_api_extraction_not_product_terminal_completion",
+  "executed_controller_commit": "3afcb84",
+  "executed_controller_sha256": "3f3dee35969bc694ddc955e3d2f385c30edda2ca174e62d01aed7393eb33922c",
+  "process_ref": {"path": "C:/tmp/rf-retained-b3-learning-1/process/process.json", "sha256": "4ba08a1bb1efbb6985b52f837706330cdfc763ba84036d88aec6d47fcad838ea"},
+  "original_result_ref": {"path": "C:/tmp/rf-retained-b3-learning-1/operation/result.json", "sha256": "ba99b5d0c55dc1b29d2cf932fff5d5012323e46295fcfc25fd619625e4bc3dd6"},
+  "zero_model_revalidation_ref": {"path": "C:/tmp/rf-retained-b3-learning-1/revalidation/result.json", "sha256": "ff490e1984eaadd52babd566d892b699a21f84f1ae94f596a9a3ef4870a6baa3"},
+  "original_status": "integrity_unconfirmed",
+  "original_exit_code": 2,
+  "actual_extraction_status": "completed",
+  "postcheck_diagnosis": "A forward-slash episode reference and its canonical Windows path were compared as different dictionaries despite identical file identity and SHA256. Preserve the failed original; revalidation verifies all31 original files without another model call.",
+  "verified_original_files": 31,
+  "original_refs_unchanged": true,
+  "response_received": true,
+  "strategy_state": "proposed",
+  "strategy_origin": "model",
+  "strategy_ref": {"artifact_hash": "a4658a1b7e36e186239d8b148b505a28951d95a70a18654280a4608850e02bc0", "artifact_type": "strategy_experience", "feature_id": "sx_885ffab85503273711fbbdcc", "path": "C:/tmp/rf-retained-b3-learning-1/operation/strategy-memory/features/sx_885ffab85503273711fbbdcc/r/strategy_experience/a4658a1b7e36e186239d8b148b505a28.json"},
+  "known_cost": {"reserved_calls": 1, "observed_responses": 1, "input_tokens": 16845, "output_tokens": 177, "total_tokens": 17022, "cached_input_tokens_included": 3, "operation_elapsed_seconds": 82.75, "process_wall_seconds": 87.70300000000134, "time_scope": "operation is nested in process; do not add the two", "money": null, "human_active_seconds": null},
+  "old_B3_unknown_call": "unchanged and not included in this new attempt's cost",
+  "content_review": {
+    "selection": "not_selected_for_cross_task_trial",
+    "basis": [
+      "suggested_action is only conditional_investigation, a label rather than a concrete investigation or experiment.",
+      "expected_observation proposes a repair to one named method/file/parameter from the old task rather than a reusable conditional strategy.",
+      "counterevidence repeats observations supporting the same diagnosis instead of describing observations that would refute the strategy."
+    ],
+    "scope": "explicit output-contract/transfer-readiness review, not independent task-effectiveness grading",
+    "outer_rewrite": false,
+    "trial_created": false,
+    "activation_granted": false,
+    "migration_benefit": null
+  },
+  "verification": {"pure_cases": "6 passed plus the corrected path-alias regression passed; selections overlap and are not business samples", "first_failure": "path-alias counterexample failed before canonical identity comparison; an equivalent test assertion was also corrected", "revalidation_model_calls": 0},
+  "next_registered_hypothesis": {
+    "change": "Clarify the existing extractor's three field descriptions and system instruction: concrete action rather than label, generalize mechanism rather than copy a task repair, and distinguish falsifying observations from supporting evidence.",
+    "baseline": "This captured actual response, same pinned public episode and same fixed local model/profile. Keep original outputs and costs.",
+    "expected_effect": "Improve conformity to the already intended strategy contract, not prove task-repair or migration benefit.",
+    "verification": "Check the common normal-terminal/API owner request in focused regressions, then one separately costed API extraction with a new store under the same600s scope; no automatic retries or B+ activation.",
+    "why": "为什么要有它：真实来源和结构合法不代表策略可用，应针对已观察到的字段歧义修正生产请求，而非由外层代写答案或扩大整套架构。"
+  }
+}
