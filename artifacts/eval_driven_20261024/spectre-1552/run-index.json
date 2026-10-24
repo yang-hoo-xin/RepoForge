@@ -1,0 +1,280 @@
+{
+  "schema_version": "real_repository_run_index_v1",
+  "status": "running_not_final",
+  "task_id": "spectreconsole__spectre-console-1552",
+  "run_id": "dsh_fb2b072fba7a4264aafcf806b79ebace",
+  "frozen_git_head": "0143b78bd08813116e5c90c47b8079b8fa50ad70",
+  "github_synced_head": "0143b78bd08813116e5c90c47b8079b8fa50ad70",
+  "process_tool_session": 54933,
+  "deadline_utc": 1792824184.9184346,
+  "plan_ref": {
+    "path": "C:/tmp/rf-spectre-1552-B1/frozen-plan.json",
+    "sha256": "5ef581caef7e4872e3a7b7a24aaa7b60c6c4c2a761d641637c416b48de2f5ccd"
+  },
+  "started_ref": {
+    "path": "C:/tmp/rf-spectre-1552-B1/started.json",
+    "sha256": "a15f72da4f787fd99a569428aa939f69d38c5a08e65e67505712b68c4ac4b85a"
+  },
+  "platform_ref": {
+    "path": "C:/tmp/rfexec-spectre-1552-B1/execution_snapshot.json",
+    "sha256": "41440532e1cff29aa43ef6bcebb769b9d5b3cd8696ac65ea51386db7f72f4228"
+  },
+  "inspection": {
+    "execution_config": "C:/tmp/rf-spectre-1552-B1/runs/.dsh-inputs/dsh_fb2b072fba7a4264aafcf806b79ebace/execution.json",
+    "argv": "python -m scripts.dsh_run_request --execution-config <above> --inspect-run dsh_fb2b072fba7a4264aafcf806b79ebace --view evidence --format json",
+    "scope": "read-only developer view; native terminal absent while running; missing/unbound results are not failure or zero whole-task usage"
+  },
+  "observation": {
+    "observed_at_utc": "2026-10-24T06:22:22.7090476Z",
+    "request_count": 13,
+    "events": [
+      {
+        "turn": 1,
+        "status": "responded",
+        "response_ref": {
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\response-001.json",
+          "sha256": "7e53d08344901ee24ab1a560ee35908174c949108fec8f341b7aeffe6b72c0d3"
+        },
+        "usage": {
+          "cached_input_tokens": 0,
+          "input_tokens": 11539,
+          "output_tokens": 259,
+          "reasoning_tokens": 0,
+          "total_tokens": 11798
+        },
+        "outcome_ref": {
+          "sha256": "5761f2ab03f45f310a8f1edb932ce685728cffe1a58d09e49e3ea619ff0e26da",
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\provider-outcome-04b24502bb7c41f09cf1e21d0ead8180.json"
+        }
+      },
+      {
+        "turn": 2,
+        "status": "responded",
+        "response_ref": {
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\response-002.json",
+          "sha256": "3a39ffd9bda8e2ba6aac04175b3c81b5ebd3703f1f6bc52effc3bfb3e22933a8"
+        },
+        "usage": {
+          "cached_input_tokens": 10830,
+          "input_tokens": 20037,
+          "output_tokens": 128,
+          "reasoning_tokens": 0,
+          "total_tokens": 20165
+        },
+        "outcome_ref": {
+          "sha256": "24526fd7d200e64c5b4fc6922789c12de9dcba49ae90092f1b1aa174fe8df17f",
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\provider-outcome-d7ada583260548178ac108775cbd9cc8.json"
+        }
+      },
+      {
+        "turn": 3,
+        "status": "responded",
+        "response_ref": {
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\response-003.json",
+          "sha256": "159c1baea66be7b83287c6a2e3141c7fb59ab9750012fd622fd665a73d3c96c1"
+        },
+        "usage": {
+          "cached_input_tokens": 10832,
+          "input_tokens": 12087,
+          "output_tokens": 133,
+          "reasoning_tokens": 0,
+          "total_tokens": 12220
+        },
+        "outcome_ref": {
+          "sha256": "b3151d1596613de91652c9c93b3ac605dd0db58eb57879f582af62253bf8c02f",
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\provider-outcome-f54b45f268fb429b97d595808492827a.json"
+        }
+      },
+      {
+        "turn": 4,
+        "status": "responded",
+        "response_ref": {
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\response-004.json",
+          "sha256": "d942c7ac0aaa38fcda2d41fb1f90784c8dffe0217ea8138aba2344a3e6271736"
+        },
+        "usage": {
+          "cached_input_tokens": 11045,
+          "input_tokens": 12307,
+          "output_tokens": 128,
+          "reasoning_tokens": 0,
+          "total_tokens": 12435
+        },
+        "outcome_ref": {
+          "sha256": "375472a91bdbe289a015ef82fd670d8d189005477928afea3c0deea8aa34c935",
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\provider-outcome-1131df763a42424dae6f47e3c4a123db.json"
+        }
+      },
+      {
+        "turn": 5,
+        "status": "responded",
+        "response_ref": {
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\response-005.json",
+          "sha256": "35e2004ce7c53448da6d5ff2452983c567c9e33750aec0f394ea814abb7d78b1"
+        },
+        "usage": {
+          "cached_input_tokens": 10839,
+          "input_tokens": 20343,
+          "output_tokens": 126,
+          "reasoning_tokens": 0,
+          "total_tokens": 20469
+        },
+        "outcome_ref": {
+          "sha256": "5d2532a5243540364f8fcf5808e6024c5fca3d5054b06e2afcc4b850b9dd44a1",
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\provider-outcome-cedaf405b2e54199927cba26f5fabde4.json"
+        }
+      },
+      {
+        "turn": 6,
+        "status": "responded",
+        "response_ref": {
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\response-006.json",
+          "sha256": "c61efdfd97fe350b9a2bb3a8f24bfd8d693998270e84671ea5630f22a73e4591"
+        },
+        "usage": {
+          "cached_input_tokens": 10836,
+          "input_tokens": 12306,
+          "output_tokens": 128,
+          "reasoning_tokens": 0,
+          "total_tokens": 12434
+        },
+        "outcome_ref": {
+          "sha256": "345d656bb902e34cea32f954306455ff22528133797a9f97b991d31fab511f72",
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\provider-outcome-2e57d1e2dad54a3cbfbe064c1584d38a.json"
+        }
+      },
+      {
+        "turn": 7,
+        "status": "responded",
+        "response_ref": {
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\response-007.json",
+          "sha256": "035ed3ff9e1aef72000d396dad85d11b2b1f74a5e90f15ee02a2ff77e19548e4"
+        },
+        "usage": {
+          "cached_input_tokens": 11043,
+          "input_tokens": 12521,
+          "output_tokens": 135,
+          "reasoning_tokens": 0,
+          "total_tokens": 12656
+        },
+        "outcome_ref": {
+          "sha256": "299bc6e194487cf24506267334e184e7905e5aeb9dd58bbdadb91646339764ef",
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\provider-outcome-f365338e5ea546029557c30117c545da.json"
+        }
+      },
+      {
+        "turn": 8,
+        "status": "responded",
+        "response_ref": {
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\response-008.json",
+          "sha256": "2950b9d219a68f862da207174233dbc36c0fbbe742b0af9d1b59f2816866bbd9"
+        },
+        "usage": {
+          "cached_input_tokens": 11258,
+          "input_tokens": 13544,
+          "output_tokens": 140,
+          "reasoning_tokens": 0,
+          "total_tokens": 13684
+        },
+        "outcome_ref": {
+          "sha256": "bb094f718843d6e105182568c454d160c8dc83f808252afa700d7de3c0a21ffa",
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\provider-outcome-10ccdddcd8074ca7acf62aa6122978c5.json"
+        }
+      },
+      {
+        "turn": 9,
+        "status": "responded",
+        "response_ref": {
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\response-009.json",
+          "sha256": "d98e5372e9f08b598f21cc6a675560c11e3005767bccd721c16980ab1fbce346"
+        },
+        "usage": {
+          "cached_input_tokens": 12277,
+          "input_tokens": 14597,
+          "output_tokens": 135,
+          "reasoning_tokens": 0,
+          "total_tokens": 14732
+        },
+        "outcome_ref": {
+          "sha256": "e1e9eac84bcbbedb36aaa20867e17de4be42dcd18c588326025a545e0b390cd5",
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\provider-outcome-3286896cc8d84da98450aca44c84a3ea.json"
+        }
+      },
+      {
+        "turn": 10,
+        "status": "responded",
+        "response_ref": {
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\response-010.json",
+          "sha256": "0c255ff878af25236f658b2a6cc926a1424f48969e1e5871ea59c9a34a892c00"
+        },
+        "usage": {
+          "cached_input_tokens": 13330,
+          "input_tokens": 15593,
+          "output_tokens": 160,
+          "reasoning_tokens": 0,
+          "total_tokens": 15753
+        },
+        "outcome_ref": {
+          "sha256": "6c52d7d301aa705cfa3f1f5986ae0a314265d631baa773339a8ff39693160f51",
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\provider-outcome-3931af2fa72545c8aded70edc5cbc06d.json"
+        }
+      },
+      {
+        "turn": 11,
+        "status": "responded",
+        "response_ref": {
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\response-011.json",
+          "sha256": "a4991831e6abf6e96d55cb7c4a313d43f7cbf14c13d25d41dff582ae0191d299"
+        },
+        "usage": {
+          "cached_input_tokens": 10834,
+          "input_tokens": 15368,
+          "output_tokens": 133,
+          "reasoning_tokens": 0,
+          "total_tokens": 15501
+        },
+        "outcome_ref": {
+          "sha256": "9a9a3d47dde8b573410edba14ace5f90140aab3c287b9d06e417456c6b1cd71b",
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\provider-outcome-8a0915e1e45f4294a1827a21b94e6a40.json"
+        }
+      },
+      {
+        "turn": 12,
+        "status": "responded",
+        "response_ref": {
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\response-012.json",
+          "sha256": "fcbf639982c0bf66fcd214961ed92b162fa7f9cffc51afb694b14bc5bc8b2c2e"
+        },
+        "usage": {
+          "cached_input_tokens": 10837,
+          "input_tokens": 15410,
+          "output_tokens": 135,
+          "reasoning_tokens": 0,
+          "total_tokens": 15545
+        },
+        "outcome_ref": {
+          "sha256": "00d99bc763266e514371c28559fb3d56e198e52e249452872c261403f9a0b948",
+          "path": "C:\\tmp\\rf-spectre-1552-B1\\runs\\dsh_fb2b072fba7a4264aafcf806b79ebace\\a\\task-agent-execution\\provider-outcome-2974d557f6a0425b9a21882adbe9a901.json"
+        }
+      }
+    ],
+    "known_task_usage_subtotal": {
+      "input_tokens": 175652,
+      "output_tokens": 1740,
+      "cached_input_tokens": 123961,
+      "total_tokens": 177392
+    },
+    "whole_task_usage_complete": false,
+    "unknown_inflight_usage": true,
+    "cached_input_is_subset_of_input": true
+  },
+  "capability_boundaries": {
+    "platform": "v2 investigation, authorized target choice, current-version edits, experiments, public checks and exact handoff are available; no new learning construction in this batch",
+    "model": "actual choices must be read from actual responses; no external repair hint or patch sent",
+    "independent_business_result": "pending complete candidate and actual delivery; control qualification is not model success",
+    "product_comparison": "本批未覆盖",
+    "internal_improvement_causal_result": "本批未覆盖",
+    "correct_deliveries": null,
+    "human_active_minutes": null
+  },
+  "continuation": "Poll existing process session and exact run; do not restart on observation timeout. After terminal, retain all outcomes; only grade if a complete actual candidate exists, and continue authorized same-version delivery within original task window."
+}
