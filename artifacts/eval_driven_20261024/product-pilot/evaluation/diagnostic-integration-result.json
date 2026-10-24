@@ -1,0 +1,145 @@
+{
+  "actual_failures": 34,
+  "actual_process_environment": {
+    "REPOFORGE_DIAGNOSTIC_ROOT": "C:\\tmp\\rfdiag-real-1531\\checks\\eae34f82976e4efead1a17973d5b72d2\\diagnostics",
+    "REPOFORGE_EXPECTATION_ROOT": "C:\\tmp\\rfdiag-real-1531\\source\\test\\Spectre.Console.Cli.Tests\\Expectations"
+  },
+  "actual_tests": 385,
+  "all_source_test_expectation_bytes_unchanged_during_execution": true,
+  "built_artifact_refs": [
+    {
+      "path": "C:\\tmp\\rfdiag-real-1531\\source\\src\\Spectre.Console.Cli\\bin\\Release\\net8.0\\Spectre.Console.Cli.dll",
+      "sha256": "7aa49d8fd8da79c4a61e3e603189d1597d3c9f5f19b90d0c0d69cea3425c0d81"
+    },
+    {
+      "path": "C:\\tmp\\rfdiag-real-1531\\source\\src\\Spectre.Console\\bin\\Release\\net8.0\\Spectre.Console.dll",
+      "sha256": "3d6be4ec638730aa0153550901f63a0da5374d2df0bbe0fb4f46eeb59fd338be"
+    }
+  ],
+  "claim_boundary": [
+    "same34 business failures remain; no repair or autonomous success",
+    "real Verify diagnostic relocation and shared integrity consumer passed",
+    "not full1531 common-environment qualification or product comparison readiness",
+    "no acceptance of retained implementation, no reopening ended windows"
+  ],
+  "configuration_ref": {
+    "path": "C:\\tmp\\rfdiag-real-1531\\configuration.json",
+    "sha256": "542b27eec1336cb74b026cf37c27fec58d1b932d0eadc25dc2674b80cff81408"
+  },
+  "controller_ref": {
+    "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261024\\product-pilot\\evaluation\\diagnostic-integration-run.py",
+    "sha256": "c4c7d84160fd52ec2b3edddd7d5a20e5754136d6f2a31e98817d5d1d97dc22b5"
+  },
+  "delivery_performed": false,
+  "diagnostic_root": "C:\\tmp\\rfdiag-real-1531\\checks\\eae34f82976e4efead1a17973d5b72d2\\diagnostics",
+  "diagnostics_ref": {
+    "path": "C:\\tmp\\rfdiag-real-1531\\checks\\eae34f82976e4efead1a17973d5b72d2\\diagnostic-validation.json",
+    "sha256": "4b851b0cfd41344f4e6245f7a7697725b64ebb03052f9a64d5417c7e1e38265d"
+  },
+  "execution_ref": {
+    "path": "C:\\tmp\\rfdiag-real-1531\\result.json",
+    "sha256": "72409d86d3654c69fe0d863b0ecba1b849e7d3f7fc05103995e539c0a4851d6d"
+  },
+  "expected_copies": 89,
+  "frozen_execution_check_ref": {
+    "path": "C:\\tmp\\rfdiag-real-1531\\frozen-execution-check.json",
+    "sha256": "25ae8a0ed1936a57ed4b9f62b12a3bb5aa48eae7155cd687ee43f7c721d7536f"
+  },
+  "frozen_execution_status": "verified",
+  "initializer_change": {
+    "after_ref": {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261024\\product-pilot\\evaluation\\diagnostic-integration-VerifyConfiguration.cs",
+      "sha256": "0d441092a800aa77c1944572f7341fdd4ed5233c8fbb8668d03ee7d995145e48"
+    },
+    "before_sha256": "732b5cdfe8c1b7de26d9b6b27d4319f0ba7513b86c25755bd7c11c1046d76071",
+    "path": "test/Spectre.Console.Cli.Tests/VerifyConfiguration.cs"
+  },
+  "integrity_checks": {
+    "built_artifacts": {
+      "status": "verified"
+    },
+    "diagnostic_files": {
+      "status": "verified"
+    },
+    "fixed_inputs": {
+      "status": "verified"
+    },
+    "source_snapshot": {
+      "status": "verified"
+    },
+    "verifier_identity": {
+      "status": "verified"
+    }
+  },
+  "integrity_ref": {
+    "path": "C:\\tmp\\rfdiag-real-1531\\checks\\eae34f82976e4efead1a17973d5b72d2\\integrity.json",
+    "sha256": "86515038efc8492c383f3e5d5136bf47d9004914b7e389d1be015f07f18a5109"
+  },
+  "integrity_status": "validated",
+  "model_calls": 0,
+  "no_automatic_rerun": true,
+  "omitted_known_original_received": 28,
+  "original_result_ref": {
+    "path": "C:\\tmp\\rfext-spectre-1531-evaluation\\v2\\public-correct-result.json",
+    "sha256": "424663640506936d86023e903d24d594b559d33718874f01e2ba31e68e611552"
+  },
+  "original_status_preserved": "incomplete",
+  "process_ref": {
+    "path": "C:\\tmp\\rfdiag-real-1531\\process\\process.json",
+    "sha256": "c1ec0d4e96ca3f9a2a3acb50772ad006cdaea71fd112185f9f3e9fc6eb54126b"
+  },
+  "received_files": 28,
+  "report_ref": {
+    "path": "C:\\tmp\\rfdiag-real-1531\\checks\\eae34f82976e4efead1a17973d5b72d2\\report.json",
+    "sha256": "6d837db9d8bafaab42daf0e7a699fd021592848158034595eb2891d7aa933ec9"
+  },
+  "resource": {
+    "backend_seconds": 122.42199999999866,
+    "cache_copy_seconds": 48.68700000000172,
+    "deadline_utc": 1792833125.0860958,
+    "owned_total_seconds": 212.68700000000172,
+    "preparation_seconds": 31.32800000000134,
+    "scope": "nested durations; do not add to owned_total; platform verification not model-task cost",
+    "sdk_stages_ms": {
+      "production_restore_build": 45396,
+      "test_execution": 4752,
+      "test_restore_build": 37431
+    },
+    "timeout": false
+  },
+  "run_attempts": 1,
+  "same_test_names_and_outcomes_as_original": true,
+  "schema_version": "real_verify_diagnostic_integration_result_v1",
+  "snapshot_ref": {
+    "path": "C:\\tmp\\rfdiag-real-1531\\platform\\execution_snapshot.json",
+    "sha256": "f0f39c46dc3ade97b37d50fe5db638ccbc98dc2a05b5a8df98bfb24f1e90cd40"
+  },
+  "source_scope": "fresh retained public-only source copy; production bytes unchanged; only fixed Verify path initializer replaced",
+  "stage_receipts": {
+    "build": {
+      "path": "C:\\tmp\\rfdiag-real-1531\\checks\\eae34f82976e4efead1a17973d5b72d2\\build-fact.json",
+      "sha256": "36e8f5bd7b98bd6b638921f1edc0da86237c64d59c05cb4ba4dda141dace2dd9"
+    },
+    "raw_test_result": {
+      "path": "C:\\tmp\\rfdiag-real-1531\\checks\\eae34f82976e4efead1a17973d5b72d2\\raw_test_result-fact.json",
+      "sha256": "ae35354085bd74843a56b1ed42a96d4702f716b5544a1b8f86a132969702a552"
+    },
+    "test_build": {
+      "path": "C:\\tmp\\rfdiag-real-1531\\checks\\eae34f82976e4efead1a17973d5b72d2\\test_build-fact.json",
+      "sha256": "ded1b89974816508bd4f7ccc50323a90f17a3915bcfeb352681063874d596e00"
+    },
+    "test_build_outputs": {
+      "path": "C:\\tmp\\rfdiag-real-1531\\checks\\eae34f82976e4efead1a17973d5b72d2\\test_build_outputs-fact.json",
+      "sha256": "77adb12cbc9d576d6814371d151dcb7d772a4b14e20c6c69ca60dab633be3e06"
+    },
+    "test_execution": {
+      "path": "C:\\tmp\\rfdiag-real-1531\\checks\\eae34f82976e4efead1a17973d5b72d2\\test_execution-fact.json",
+      "sha256": "e1530f1b3443645bb9c52029bb9b61ffca0a9d7049b006be6b36b1ec0c927ee5"
+    }
+  },
+  "status": "mechanism_verified",
+  "trx_ref": {
+    "path": "C:\\tmp\\rfdiag-real-1531\\checks\\eae34f82976e4efead1a17973d5b72d2\\test-output\\tests.trx",
+    "sha256": "1c3cf9706d44795abd64a9b00daaf547a0bab443ad98ae5269c8d8ef3b3b5615"
+  }
+}

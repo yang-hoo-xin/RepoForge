@@ -1,0 +1,19 @@
+{
+  "status": "registered_before_shared_implementation",
+  "problem": "The bounded1531 preparation ended without a shared executable diagnostic boundary. Pure file checks alone did not qualify runtime relocation.",
+  "change": "Add an optional frozen repository-profile diagnostic policy. Each existing backend execution creates an explicit fresh diagnostic directory outside source, copies expected snapshots with provenance, passes exact paths through the owned process environment, and validates originals/copies/declared received files before accepting results. Candidate, delivery and independent evaluator consume the same integrity receipt.",
+  "expected_effect": "Legitimate snapshot diagnostics preserve a usable failure report; unexpected new source files or changed original/copied expectations prevent acceptance while already executed stage facts remain available.",
+  "baseline": "Current backend ignores conventional generated directories and has no bound diagnostic receipt. Existing no-policy behavior remains explicit legacy scope; configured diagnostic runs must satisfy the stronger receipt contract.",
+  "verification": "Focused source/copy/new-file/link counterexamples, normal CLI controlled request/check path, and a small real-SDK fixture for process environment/output binding if available. No new model generation or reopening of ended1531 qualification windows.",
+  "real_verify_reproduction": {
+    "source": "retained public-only v2/public-correct/source with the previously observed34 original snapshot failures; not the later public-contract-correct implementation",
+    "source_root": "C:/tmp/rfext-spectre-1531-evaluation/v2/public-correct/source",
+    "original_result": "incomplete after385 executed tests,34 failures and received files written into source; original files/reports remain unchanged",
+    "change": "fresh isolated copy, omit only known generated received diagnostics from the copied source; bind unchanged original expected snapshots; replace only the fixed Verify initializer with an environment-driven output-path adapter shared by the configured test run",
+    "execution": "one new implementation-verification invocation through the shared CSharpRepositoryBackend, complete public test project, existing SDK8.0.302 and cached dependencies, owned300-second cumulative wall deadline, zero model calls, no automatic rerun",
+    "question": "Can the same snapshot failures produce explicit external diagnostics and a validated business-failure report without source or expected-copy mutation?",
+    "claim": "actual diagnostic mechanism verification only. It does not accept the retained implementation, qualify the1531 evaluator, restart a product task or complete the common correct/equivalent/wrong matrix."
+  },
+  "adoption_scope": "Opt-in frozen diagnostic profile; implementation verification is distinct from completing1531 common-environment qualification or product comparison readiness.",
+  "why": "为什么要有它：把已知纯验证规则接入真实共享入口，才能区分合法诊断和改写评分依据；旧阶段与模型成绩仍保持原结论。"
+}

@@ -16,7 +16,7 @@ import tempfile
 import time
 from collections import Counter, defaultdict
 from copy import deepcopy
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from uuid import uuid4
 from xml.etree import ElementTree
@@ -33,7 +33,10 @@ _VERSION = "csharp_repository_profile_v1"
 _RESERVED_BUILD_PROPERTIES = {"BuildProjectReferences", "RepositoryCompileInputs", "UseSharedCompilation"}
 
 
+@dataclass(frozen=True)
 class _RepositoryNuGetProfile(nuget.NuGetIsolatedBuildProfile):
+    diagnostic_environment: tuple[tuple[str, str], ...] = ()
+
     @property
     def environment(self):
         # 为什么要有它：显式portable SDK只在本次子进程内使用本地CLI目录，不能污染用户设置或回退到另一安装。
@@ -45,7 +48,7 @@ class _RepositoryNuGetProfile(nuget.NuGetIsolatedBuildProfile):
                 "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
                 # 为什么要有它：本次构建不保留可复用后台节点，不影响用户已有的全局编译服务。
                 "MSBUILDDISABLENODEREUSE": "1",
-                "DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER": "1"}
+                "DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER": "1", **dict(self.diagnostic_environment)}
 
 
 def _require(condition, code):
@@ -97,8 +100,11 @@ class CSharpRepositoryProfile:
         required = {"profile_version", "dotnet_ref", "project_path", "test_project_path",
                     "nuget_config_path", "configuration", "allowed_edit_paths",
                     "expected_artifacts", "test_command", "test_report", "timeout_seconds"}
-        _require(required <= set(data) <= required | {"build_properties", "probe_runner"},
+        _require(required <= set(data) <= required | {"build_properties", "probe_runner", "diagnostics"},
                  "PROFILE_FIELDS_INVALID")
+        if "diagnostics" in data:
+            from src.mod_agent.domain.repository_diagnostics import validate_policy
+            validate_policy(data["diagnostics"])
         if "probe_runner" in data:
             from src.mod_agent.domain.repository_probe_runner import validate_probe_runner_config
             validate_probe_runner_config(data["probe_runner"])
@@ -175,6 +181,12 @@ class CSharpRepositoryProfile:
         for name in [data[key] for key in ("project_path", "test_project_path", "nuget_config_path")] + data["allowed_edit_paths"]:
             _require(_within(root, name).is_file(), "DECLARED_INPUT_MISSING")
         rows = _snapshot(root)
+        if "diagnostics" in data:
+            from src.mod_agent.domain.repository_diagnostics import bind_policy
+            bind_policy(root, data["diagnostics"], rows)
+            expectation_root = PurePosixPath(data["diagnostics"]["expectation_root"])
+            _require(not any(PurePosixPath(path).is_relative_to(expectation_root)
+                for path in data["allowed_edit_paths"]), "EXPECTED_FILES_MUST_NOT_BE_EDITABLE")
         allowed = set(data["allowed_edit_paths"])
         return {"binding_version": "csharp_repository_fixed_inputs_v1",
                 "profile_sha256": self._reference["sha256"],
@@ -363,6 +375,46 @@ def _run_build(profile):
             duration_ms=int((time.perf_counter() - started) * 1000))
 
 
+def verification_owner_hashes(data):
+    from src.mod_agent import public_failure_feedback
+    hashes = {"owner_sha256": _ref(__file__)["sha256"],
+        "build_owner_sha256": _ref(nuget.__file__)["sha256"],
+        "feedback_owner_sha256": _ref(public_failure_feedback.__file__)["sha256"]}
+    if "diagnostics" in data:
+        from src.mod_agent.domain import repository_diagnostics
+        hashes["diagnostic_owner_sha256"] = _ref(repository_diagnostics.__file__)["sha256"]
+    return hashes
+
+
+def integrity_check_names(profile_ref):
+    names = ["fixed_inputs", "source_snapshot", "verifier_identity", "built_artifacts"]
+    if "diagnostics" in read_bound_json(profile_ref):
+        names.append("diagnostic_files")
+    return names
+
+
+def validate_diagnostic_integrity(report, *, profile_ref=None):
+    """Shared receipt consumer for candidate, delivery, recovery and evaluation.
+
+    为什么要有它：交付后读取也要拒绝已被篡改的预期副本，不能只在首次测试结束时核验。
+    """
+    selected = profile_ref or report["profile_ref"]
+    _require(report.get("profile_ref") == selected, "DIAGNOSTIC_PROFILE_CHANGED")
+    if "diagnostics" not in read_bound_json(selected):
+        return
+    from src.mod_agent.domain.repository_diagnostics import validate_receipt
+    integrity = read_bound_json(report["integrity_ref"])
+    _require(integrity.get("status") == "validated"
+        and integrity.get("checks", {}).get("diagnostic_files") == {"status": "verified"}
+        and all(report.get(key) == value for key, value in integrity["context"].items())
+        and report.get("diagnostics_ref") == integrity.get("diagnostics_ref"), "DIAGNOSTIC_RECEIPT_CHANGED")
+    _require(Path(report["diagnostics_ref"]["path"]).resolve()
+        == Path(report["integrity_ref"]["path"]).resolve().parent / "diagnostic-validation.json",
+        "DIAGNOSTIC_RECEIPT_CHANGED")
+    return validate_receipt(report["diagnostics_ref"], integrity["context"],
+        environment=report["isolated_build_profile"]["environment"])
+
+
 class CSharpRepositoryBackend:
     """Compile the declared repository and execute its immutable public tests."""
 
@@ -377,14 +429,8 @@ class CSharpRepositoryBackend:
         self.profile.verify_fixed_inputs(self.source_root, self.fixed_inputs)
 
     def verification_identity(self):
-        from src.mod_agent import public_failure_feedback
-
         self.profile.verify_fixed_inputs(self.source_root, self.fixed_inputs)
-        return {"validator_sha256": canonical_hash({
-                    "owner_sha256": _ref(__file__)["sha256"],
-                    "build_owner_sha256": _ref(nuget.__file__)["sha256"],
-                    "feedback_owner_sha256": _ref(public_failure_feedback.__file__)["sha256"],
-                }),
+        return {"validator_sha256": canonical_hash(verification_owner_hashes(self.profile.data)),
                 "inputs_sha256": canonical_hash({"profile": self.profile.reference, "fixed_inputs": self.fixed_inputs}),
                 "environment_sha256": canonical_hash(self.profile.data["dotnet_ref"]),
                 "deterministic_reuse_allowed": False}
@@ -436,6 +482,12 @@ class CSharpRepositoryBackend:
                 "commands": commands, "raw_report_ref": raw_report_ref, "logs": logs})
         profile = self.profile.create_nuget_profile(self.workspace_root, source)
         data = self.profile.data
+        diagnostic_preparation = None
+        if "diagnostics" in data:
+            from src.mod_agent.domain import repository_diagnostics
+            diagnostic_preparation, diagnostic_environment = repository_diagnostics.prepare(
+                source, run, data["diagnostics"], context)
+            profile = replace(profile, diagnostic_environment=tuple(sorted(diagnostic_environment.items())))
         targets = run / "compile-inputs.targets"
         targets.write_bytes(_capture_targets())
         capture = run / "compile-inputs.txt"
@@ -574,9 +626,16 @@ class CSharpRepositoryBackend:
                 test_execution.get("test_build_outputs", {}).get("capture_ref"),
                 test_execution.get("test_build_outputs", {}).get("targets_ref")) if ref),
             "BUILT_ARTIFACT_CHANGED_DURING_TEST"))
+        diagnostic_validation = {}
+        if diagnostic_preparation is not None:
+            def check_diagnostics():
+                diagnostic_validation.update(repository_diagnostics.validate(diagnostic_preparation, context))
+            verify_integrity_part("diagnostic_files", check_diagnostics)
+        diagnostic_refs = ({"diagnostics_ref": _save(run / "diagnostic-validation.json", diagnostic_validation)}
+            if diagnostic_preparation is not None else {})
         integrity_ref = _save(run / "integrity.json", {
             "schema_version": "csharp_repository_integrity_v1", "status": "validated",
-            "context": context, "stage_receipts": ledger["stages"], "checks": ledger["integrity_checks"]})
+            "context": context, "stage_receipts": ledger["stages"], "checks": ledger["integrity_checks"], **diagnostic_refs})
         if status != "passed" and build.claims_real_build_success:
             # 为什么要有它：正式入口沿用BuildResult，不能把编译成功交接为未经测试的交付成功。
             build = replace(build, status="failed", claims_real_build_success=False, build_status="verification_failed",
@@ -609,7 +668,7 @@ class CSharpRepositoryBackend:
         }
         compilation_ref = _save(run / "compilation.json", compilation_record)
         report = {**v2_binding, "status": status, "failure_owner": owner, "execution_origin": "executed",
-                  "stage_receipts": deepcopy(ledger["stages"]), "integrity_ref": integrity_ref,
+                  "stage_receipts": deepcopy(ledger["stages"]), "integrity_ref": integrity_ref, **diagnostic_refs,
                   "profile_ref": self.profile.reference, "fixed_inputs": self.fixed_inputs,
                   "source_inputs": before, "source_root": str(source), "verification_identity": identity,
                   "materialized_code_identity": code_identity,
@@ -855,8 +914,10 @@ def validate_candidate_report_v2(report_ref, *, context=None, require_pass=None,
     _require(integrity.get("schema_version") == "csharp_repository_integrity_v1"
              and integrity.get("status") == "validated" and integrity.get("context") == integrity_context
              and integrity.get("stage_receipts") == stages, "EXECUTION_INTEGRITY_UNCONFIRMED")
-    _require(integrity.get("checks") == {key: {"status": "verified"} for key in (
-        "fixed_inputs", "source_snapshot", "verifier_identity", "built_artifacts")}, "EXECUTION_INTEGRITY_CHECKS_UNCONFIRMED")
+    _require(integrity.get("checks") == {key: {"status": "verified"} for key in integrity_check_names(report["profile_ref"])},
+        "EXECUTION_INTEGRITY_CHECKS_UNCONFIRMED")
+    if "diagnostic_files" in integrity["checks"]:
+        validate_diagnostic_integrity(verification)
     _require("build" in stages, "BUILD_STAGE_MISSING")
     for stage, reference in stages.items():
         fact = read_bound_json(reference)

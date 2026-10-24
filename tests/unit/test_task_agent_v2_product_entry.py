@@ -29,7 +29,7 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                                                                  exercise_feedback=False, expect_postcheck_failure=False,
                                                                  exercise_paging=False, exercise_history=False,
                                                                  exercise_deadline=False, expect_unsent_deadline=False,
-                                                                 exercise_repeat=False):
+                                                                 exercise_repeat=False, exercise_diagnostics=False):
     short_workspace = repository_workspace
     if real_sdk and os.environ.get("REPOFORGE_REAL_REPOSITORY_CLI_INTEGRATION") != "1":
         pytest.skip("Explicit SDK integration; decisions remain scripted.")
@@ -42,6 +42,13 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
     profile_path = Path(profile.reference["path"])
     data = json.loads(profile_path.read_text())
     data["allowed_edit_paths"] = ["Library/Arithmetic.cs", "Library/Factor.cs", "Library/Unused.cs"]
+    if exercise_diagnostics:
+        expected = source / "tests/Expectations/Example.verified.txt"
+        expected.parent.mkdir()
+        expected.write_bytes(b"expected\n")
+        data["diagnostics"] = {"kind": "verify_snapshots_v1", "expectation_root": "tests/Expectations",
+            "compiler_output_roots": ["Library/bin", "Library/obj", "tests/bin", "tests/obj"],
+            "received_markers": [".received.", ".DotNet8_0.received."]}
     profile_path.write_text(json.dumps(data))
     baseline = {p.name: p.read_bytes() for p in (source / "Library").glob("*.cs")}
     builds = []
@@ -63,6 +70,12 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
             factor = (root / "Library/Factor.cs").read_text()
             passed = "value * Factor.Multiplier" in arithmetic and "Multiplier = 2" in factor
             test = {"name": "double", "passed": passed, "expected": 6, "actual": 6 if passed else 3}
+            if exercise_diagnostics:
+                diagnostic = Path(selected.environment["REPOFORGE_DIAGNOSTIC_ROOT"])
+                assert not diagnostic.is_relative_to(root)
+                assert (diagnostic / "Example.verified.txt").read_bytes() == b"expected\n"
+                (diagnostic / "Example.DotNet8_0.received.txt").write_text(str(test["actual"]), encoding="utf-8")
+                memory.setdefault("diagnostic_roots", []).append(str(diagnostic))
             if exercise_feedback and not passed:
                 test["details"] = ("Expected Double(3) to equal 6, but found 3.\n"
                     f"   at PublicExample in {root / 'Library/Arithmetic.cs'}:line 1\n"
@@ -397,6 +410,8 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
     if exercise_repeat:
         assert memory["repeat_observed_in_actual_request"] is True
         assert pending["model_call_budget"]["consumed"] == 14
+    if exercise_diagnostics:
+        assert len(set(memory["diagnostic_roots"])) == 2
     if exercise_correction:
         assert pending["model_call_budget"]["consumed"] == 14
     if exercise_stale_view:
@@ -520,6 +535,11 @@ def test_normal_cli_source_pages_preserve_read_edit_recheck_and_handoff(reposito
 def test_normal_cli_repeated_read_facts_reach_actual_next_request_and_handoff(repository_workspace, monkeypatch, capsys):
     test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
         repository_workspace, monkeypatch, capsys, False, exercise_repeat=True)
+
+
+def test_normal_cli_diagnostic_outputs_preserve_failure_revision_and_handoff(repository_workspace, monkeypatch, capsys):
+    test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
+        repository_workspace, monkeypatch, capsys, False, exercise_diagnostics=True)
 
 
 def test_normal_cli_archived_history_read_keeps_candidate_revision_and_handoff(repository_workspace, monkeypatch, capsys):

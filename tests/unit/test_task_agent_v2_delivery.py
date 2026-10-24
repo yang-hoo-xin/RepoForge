@@ -29,8 +29,9 @@ from tests.unit.test_task_agent_v2_product_entry import (
 
 
 @pytest.fixture
-def delivery_case(short_workspace, monkeypatch, capsys):
-    run_controlled_entry(short_workspace, monkeypatch, capsys, False)
+def delivery_case(short_workspace, monkeypatch, capsys, request):
+    run_controlled_entry(short_workspace, monkeypatch, capsys, False,
+        exercise_diagnostics=getattr(request, "param", False))
     pending = json.loads((short_workspace / "v2-entry-result.json").read_text())
     store = Path(pending["run_root"]) / "a"
     refs = list((store / "v2/delivery-checkpoint").glob("*.json"))
@@ -45,6 +46,30 @@ def delivery_case(short_workspace, monkeypatch, capsys):
 
 def approve(prepared):
     return {**prepared["human_semantic_decision_binding"], "decision": "approve", "reviewer_identity": "CONTROLLED TEST HUMAN"}
+
+
+@pytest.mark.parametrize("delivery_case", [True], indirect=True)
+def test_completed_delivery_and_replay_reject_changed_diagnostic_expectation(delivery_case):
+    store, checkpoint_ref, _isolated, prepared = delivery_case
+    applied = apply_v2_delivery(artifact_store_root=store, displayed_binding=prepared["displayed_binding"],
+        human_semantic_decision=approve(prepared))
+    built = build_v2_delivery(artifact_store_root=store, apply_ref=applied["receipt_ref"],
+        operation_id="diagnostic-build", allow_build=True)
+    assert built["status"] == "built"
+    checkpoint = load_v2_artifact(store, checkpoint_ref)
+    native_ref = checkpoint["handoff"]["execution_ref"]
+    assert delivery_module.read_completed_v2_delivery(artifact_store_root=store,
+        receipt_ref=built["receipt_ref"], native_execution_ref=native_ref)["status"] == "delivered"
+    report = json.loads(Path(built["verification_ref"]["path"]).read_bytes())
+    diagnostic = json.loads(Path(report["diagnostics_ref"]["path"]).read_bytes())
+    copied = next(iter(diagnostic["expected_copies"].values()))["copy_ref"]["path"]
+    Path(copied).write_bytes(b"changed after delivery")
+    with pytest.raises(ValueError, match="EXPECTED_COPY_CHANGED"):
+        delivery_module.read_completed_v2_delivery(artifact_store_root=store,
+            receipt_ref=built["receipt_ref"], native_execution_ref=native_ref)
+    with pytest.raises(ValueError, match="EXPECTED_COPY_CHANGED"):
+        build_v2_delivery(artifact_store_root=store, apply_ref=applied["receipt_ref"],
+            operation_id="diagnostic-build", allow_build=True)
 
 
 def test_exact_approval_apply_build_and_replay_preserve_original(delivery_case, capsys):

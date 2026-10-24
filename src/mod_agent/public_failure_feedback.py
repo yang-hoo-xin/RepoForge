@@ -66,6 +66,7 @@ def validated_public_checks(reference):
         CSharpRepositoryProfile,
         _read_tests,
         _snapshot,
+        validate_diagnostic_integrity,
     )
     from src.mod_agent.domain.full_project_compilation import _ref
 
@@ -102,6 +103,7 @@ def validated_public_checks(reference):
         integrity = read_bound_json(report["integrity_ref"])
         if integrity.get("status") != "validated":
             raise ValueError("PUBLIC_FEEDBACK_INTEGRITY_UNCONFIRMED")
+    validate_diagnostic_integrity(report, profile_ref=profile.reference)
     return report, checks
 
 

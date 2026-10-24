@@ -7,7 +7,6 @@ from __future__ import annotations
 import re
 from pathlib import Path, PurePosixPath
 
-from src.mod_agent import public_failure_feedback
 from src.mod_agent.domain import csharp_repository_backend as backend
 from src.mod_agent.domain.full_project_compilation import _ref, _save
 from src.mod_agent.model_qualification import canonical_hash, read_bound_json
@@ -85,11 +84,13 @@ def _stage_facts(report, root):
     integrity = read_bound_json(ref)
     stages = report.get("stage_receipts", {})
     _require(integrity.get("status") == "validated" and integrity.get("stage_receipts") == stages
-        and integrity.get("checks") == {key: {"status": "verified"} for key in (
-            "fixed_inputs", "source_snapshot", "verifier_identity", "built_artifacts")}, "INTEGRITY_UNCONFIRMED")
+        and integrity.get("checks") == {key: {"status": "verified"} for key in backend.integrity_check_names(report["profile_ref"])},
+        "INTEGRITY_UNCONFIRMED")
     context = integrity["context"]
     _require(all(context.get(key) == report.get(key) for key in (
         "source_root", "source_inputs", "profile_ref", "verification_identity")), "STAGE_SOURCE_CHANGED")
+    if "diagnostic_files" in integrity["checks"]:
+        backend.validate_diagnostic_integrity(report)
     _require({"build", "test_build", "test_build_outputs", "test_execution", "raw_test_result"} <= set(stages), "STAGE_MISSING")
     facts = {}
     for name, reference in stages.items():
@@ -120,9 +121,7 @@ def _report(configuration, reference):
     profile.verify_fixed_inputs(source, configuration["fixed_inputs"])
     _require(report["fixed_inputs"] == configuration["fixed_inputs"]
              and backend._snapshot(source) == report["source_inputs"], "SOURCE_CHANGED")
-    identity = {"validator_sha256": canonical_hash({"owner_sha256": _ref(backend.__file__)["sha256"],
-                "build_owner_sha256": _ref(backend.nuget.__file__)["sha256"],
-                "feedback_owner_sha256": _ref(public_failure_feedback.__file__)["sha256"]}),
+    identity = {"validator_sha256": canonical_hash(backend.verification_owner_hashes(data)),
                 "inputs_sha256": canonical_hash({"profile": profile.reference,
                     "fixed_inputs": configuration["fixed_inputs"]}),
                 "environment_sha256": canonical_hash(data["dotnet_ref"]), "deterministic_reuse_allowed": False}

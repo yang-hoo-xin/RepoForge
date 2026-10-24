@@ -1,0 +1,14 @@
+{
+  "schema_version": "fixed_common_environment_qualification_intent_v1",
+  "status": "registered_after_shared_diagnostic_implementation_and_real_reproduction_before_remaining_controls",
+  "task_id": "spectreconsole__spectre-console-1531",
+  "public_contract": "public-task-contract.txt, unchanged: custom version-option help conflict is repaired; nonconflicting original behavior and all377 original expected tests remain",
+  "material_change_since_closed_preparation": "Shared candidate/delivery/backend/independent/public-feedback consumers now bind external diagnostic output, original expected bytes and copied bytes. The unique real Verify reproduction preserved exactly34 failures among385 tests while accepting legitimate external diagnostics and validating source integrity.",
+  "fixed_runtime": "Reuse the successfully verified frozen platform C:/tmp/rfdiag-real-1531/platform/execution_snapshot.json, sha256 f0f39c46dc3ade97b37d50fe5db638ccbc98dc2a05b5a8df98bfb24f1e90cd40; its backend/diagnostic/feedback/delivery owner bytes match the current implementation.",
+  "inputs": "Existing preregistered public-contract baseline, correct, equivalent and representative wrong sources plus already-authored independent tests. Apply the same fixed environment-driven Verify initializer and same diagnostics policy to each copy. No new behavioral assertions, expectation rewrites, private-test disclosure or production repair edits after observing results.",
+  "necessary_invocations": ["public-baseline", "public-correct", "public-equivalent", "independent-correct", "independent-equivalent", "independent-wrong"],
+  "resource": {"model_calls": 0, "total_owned_seconds": 900, "per_backend_command_max_seconds": 300, "cache_policy": "seed existing local dependencies once and reuse the same explicit profile cache; preparation and actual execution cost retained separately", "automatic_extension_or_retry": false},
+  "adoption": "If original public code exposes the registered problem, correct/equivalent pass, representative wrong fails and all declared diagnostics/source/expected-copy integrity checks validate in this common environment, emit the qualified evaluator and common public input references. Otherwise stop this fixed selection and preserve preparation blocked with exact missing/conflicting evidence.",
+  "return": "A qualified common environment releases the already registered standalone real B trial on the frozen public contract. Codex native tool readiness remains independently blocked, so no paired product score is claimed. Previous900/1200 windows, failures and partial controls remain closed and are not reset or overwritten.",
+  "why": "为什么要有它：已发生的共享实现修复需要完成原先明确缺少的有限验收，决定应由固定条件下的结果产生，不能持续加题、调期望或把旧环境通过算成新资格。"
+}
