@@ -62,6 +62,8 @@ jobs:
           tests/unit/test_task_agent_v2_experiments.py
           tests/unit/test_task_agent_v2_experience.py
           tests/unit/test_strategy_experience.py
+          tests/unit/test_strategy_learning_request.py
+          tests/unit/test_learning_calibration.py
           tests/unit/test_strategy_process_context.py
           tests/unit/test_continuous_repair_product_entry.py
           tests/unit/test_continuous_repair_controller.py

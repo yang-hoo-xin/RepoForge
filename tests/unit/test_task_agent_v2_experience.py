@@ -78,7 +78,9 @@ def test_trial_arm_cannot_relabel_a_consuming_configuration_as_baseline(tmp_path
     "trial_consume", "trial_off", "multi_extract", "context_trial_consume", "context_trial_off"])
 def test_experience_through_normal_cli_actual_requests_and_terminal(repository_workspace, monkeypatch, capsys, mode,
                                                                 expire_learning_send=False, capture_projection=None,
-                                                                capture_owner=None):
+                                                                capture_owner=None, learning_question=False,
+                                                                learning_outcome="completed"):
+
     root = repository_workspace
     profile, source = _profile(root)
     extract_mode = mode.endswith("extract")
@@ -87,6 +89,14 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
     conditions = {"has_candidate": False, "task_phase": "investigation", "stagnation_triggered": True} if contextual else None
     memory, config = _configuration(root, consume=consume, extract=extract_mode,
         trial=mode.startswith("trial_") or contextual, strategy_conditions=conditions)
+    learning_ref = None
+    if learning_question:
+        from tests.unit.test_strategy_learning_request import question
+        learning_ref = question(root)
+        configuration = json.loads(Path(config["path"]).read_text(encoding="utf-8"))
+        config = _save(root / "experience-learning-question.json", {**configuration,
+            "learning_request_ref": learning_ref,
+            "requested_strategy_scope": {"runtime": "dotnet", "task_phase": "investigation", "has_candidate": False}})
     if mode == "multi_extract":
         episodes = []
         for run_id in ("retained-one", "retained-two"):
@@ -167,9 +177,24 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
         payload = json.loads(request.content)
         if not payload.get("tools"):
             learning.append(payload)
-            content = json.dumps({"suggested_action": "Reproduce the public behavior before changing the expression.",
+            proposed = {"suggested_action": "Reproduce the public behavior before changing the expression.",
                 "expected_observation": "The expression predicts the observed wrong value.",
-                "counterevidence": ["The public reproduction passes before modification."]})
+                "counterevidence": ["The public reproduction passes before modification."]}
+            if learning_question:
+                sent = json.loads(payload["messages"][-1]["content"])
+                row = sent["episodes"][0]
+                assert sent["learning_question"]["reference"] == learning_ref
+                assert sent["requested_strategy_scope"]["task_phase"] == "investigation"
+                assert row["source_applicability"]["has_candidate"] is True
+                assert row["source_task_context"]["fields"]["original_request"] == "Double the integer input, preserving the public signature."
+                assessment = {"episode_id": row["episode_id"], "relation": "insufficient",
+                    "reason": "A source task outcome does not establish transfer.",
+                    "evidence": [row["source_task_context"]["field_sources"]["original_request"]]}
+                if learning_outcome == "insufficient_information":
+                    proposed = {"status": "insufficient_information", "reason": "No independent transfer comparison was observed."}
+                proposed.update(source_assessments=[assessment], evidence_gaps=[{
+                    "status": "not_observed", "description": "Independent transfer evidence is missing.", "evidence": []}])
+            content = json.dumps(proposed)
             return httpx.Response(200, request=request, json={"model": model, "message": {"role": "assistant", "content": content},
                 "done": True, "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
         requests.append(payload)
@@ -347,6 +372,24 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
         raw = next(owner.output_root.glob("model-not-sent-*.json"))
         assert json.loads(raw.read_bytes())["purpose"] == "strategy_learning"
         assert json.loads(raw.read_bytes())["transport_attempted"] is False
+        return
+    if learning_question:
+        assert receipt["status"] == learning_outcome, receipt
+        assert len(learning) == 1 and receipt["model_calls"] == 1
+        assert receipt["known_usage"][0]["total_tokens"] == 30
+        assert receipt["learning_request_ref"] == learning_ref
+        assert receipt["assessment_kind"] == "model_interpretation_not_verified_fact"
+        assert receipt["evidence_gaps"][0]["status"] == "not_observed"
+        assert owner.complete_terminal_learning() == receipt and len(learning) == 1
+        sent = json.loads(learning[0]["messages"][-1]["content"])
+        assert sent["episodes"][0]["source_task_context"]["fields"] == owner._v2_state.contract["task_requirements"]
+        if learning_outcome == "completed":
+            assert memory.read(receipt["strategy_ref"])["state"] == "proposed"
+        else:
+            assert receipt["strategy_ref"] is None
+        if capture_projection is not None:
+            capture_projection({"episode_ref": receipt["episode_ref"], "extraction_ref": receipt["extraction_ref"],
+                "controlled_wire_ref": _save(root / "controlled-learning-contract-wire.json", learning[0])})
         return
     if mode == "multi_extract":
         assert receipt["status"] == "completed" and len(learning) == 1
@@ -570,3 +613,9 @@ def test_stopped_pending_prefix_seals_without_resume_or_model_and_binds_stop_sou
     memory = StrategyExperience(ArtifactStore(repository_workspace / "sealed-learning"))
     with pytest.raises(ValueError):
         memory.freeze_episode_set([sealed], applicability={"runtime": "dotnet"})
+
+
+@pytest.mark.parametrize("outcome", ["completed", "insufficient_information"])
+def test_explicit_learning_contract_through_normal_terminal_actual_http(repository_workspace, monkeypatch, capsys, outcome):
+    test_experience_through_normal_cli_actual_requests_and_terminal(repository_workspace, monkeypatch, capsys,
+        "extract", learning_question=True, learning_outcome=outcome)

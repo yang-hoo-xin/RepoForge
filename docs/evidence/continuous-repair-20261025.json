@@ -61,8 +61,36 @@
     "Automatic historical episode discovery/selection is not yet delivered as a general default.",
     "Raw original requests, checkpoints and machine-specific evidence remain local; this file does not claim they were uploaded."
   ],
-  "technical_assistance": "Codex implemented platform and diagnostic/evaluation adapters; source selection and generic tool-description variation are developer assistance, not model-origin learning. No business repair patch or hidden acceptance answer was supplied to the solver.",
+  "technical_assistance": "Codex implemented platform and diagnostic/evaluation adapters; source selection and generic tool-description variation are developer assistance, not model-origin learning. No business repair patch or hidden acceptance answer was supplied to the solver. The new learning-question authorship and source-task-context/calibration bridge are also outer Codex assistance, recorded separately.",
   "human_active_time": "not measured",
   "money": "not measured",
-  "why": "为什么要有它：公开版本说明需要与原始结果一致，区分工程能力、真实模型行为、独立验收和未完成目标。"
+  "why": "为什么要有它：公开版本说明需要与原始结果一致，区分工程能力、真实模型行为、独立验收和未完成目标。",
+  "real_learning_question": {
+    "run_id": "strategy_extraction_f968553d83ef48f0a69e63fb0da3d0bc",
+    "sources": 5,
+    "selected_actions": 165,
+    "selected_task_contexts": 4,
+    "unselected_task_contexts": 1,
+    "actual_request_bytes": 92135,
+    "actual_payload_matches_preview": true,
+    "model_calls": 1,
+    "known_tokens": 24338,
+    "unknown_usage_calls": 0,
+    "native_elapsed_seconds": 124.82900000000154,
+    "process_seconds": 134.03099999999904,
+    "timing": "nested intervals; not additive or human active time",
+    "status": "insufficient_information",
+    "source_assessments": 0,
+    "evidence_gaps": 0,
+    "unassessed_sources": 5,
+    "strategy_created": false,
+    "strategy_trial_started": false,
+    "strategy_adopted": false,
+    "comparison": "Full-question/task-fact/calibration bundle, not isolated causal effect or U5",
+    "originals_ref": {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261025\\continuous-repair\\learning-contract\\result.json",
+      "sha256": "2eb568ec92f9d387edf724bc0ff7cf5631bdf9189f7e2ad0230b1cae57733edc"
+    },
+    "technical_decision": "Close this source-set extraction; retain verified input and calibration capabilities, do not force a proposal by retrying. Next build original U1 semantic work-state and action/feedback comparison evidence."
+  }
 }

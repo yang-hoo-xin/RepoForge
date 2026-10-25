@@ -124,7 +124,9 @@ def registered_prefix(tmp_path, monkeypatch):
     store = run / "a"
     authority = save_v2_artifact(store, "authority", {"scope": "file", "operation": "modify_existing",
         "allowed_edit_paths": ["A.cs"], "read_roots": {"target": str(project)}})
-    state = TaskAgentV2State.create(store, "request-test", project, allowed_edit_paths=["A.cs"], authority_ref=authority)
+    state = TaskAgentV2State.create(store, "request-test", project, allowed_edit_paths=["A.cs"], authority_ref=authority,
+        task_requirements={"original_request": "Correct the public task without changing interfaces.",
+            "acceptance_criteria": ["The declared public behavior passes."], "non_goals": ["No API rename."]})
     host_ref = state.save("host-recovery-config", {"graph_state": {"run_id": "run-test", "request_id": "request-test"},
         "owner_refs": [projection.file_ref(tmp_path / "frozen/src/owner.py")]})
     checkpoint = {"schema": "task-agent-session-checkpoint.v2", "task_contract_ref": state.contract_ref,
@@ -248,6 +250,7 @@ def test_existing_public_episode_consumes_only_original_selectors_without_checkp
     assert "source_episode_sha256" in view and "checkpoint_sha256" not in view
     derived = projection.read_public(projection.prepare_trajectory(source, tmp_path / "derived"))
     assert derived["applicability"] == {"runtime": "dotnet"}
+    assert derived["task_context_selections"] == []
     with pytest.raises(ValueError, match="DOES_NOT_READ_CHECKPOINTS"):
         projection.verify_source({**source, "checkpoint_ref": {"path": "forbidden"}})
 
@@ -295,3 +298,19 @@ def test_episode_batches_count_responses_once_and_never_read_unselected_checkpoi
         assert view["statements"] == [["One response, two requested reads.", [0, 1], ["selected-response-1"]]]
         assert view["actual_model_turns"] == "not_selected_in_original_episode"
     assert excluded not in opened
+
+
+def test_new_process_episode_carries_verified_original_task_context(registered_prefix, tmp_path):
+    from src.mod_agent.artifacts import ArtifactStore
+    from src.mod_agent.planning.learning_request import resolve_task_context
+    from src.mod_agent.planning.strategy_experience import StrategyExperience
+    verified = projection.verify_source(registered_prefix)
+    view, _ = projection.project_verified(verified)
+    assert "source_task_context" not in view  # Sent once as a separate episode field, not duplicated in process facts.
+    episode_ref = projection.prepare_trajectory(registered_prefix, tmp_path / "with-task-context")
+    episode = projection.read_public(episode_ref)
+    memory = StrategyExperience(ArtifactStore(tmp_path / "memory"))
+    resolved = resolve_task_context(episode, memory._public_sources(episode["evidence_refs"]))
+    assert resolved["fields"]["original_request"] == "Correct the public task without changing interfaces."
+    assert resolved["fields"]["non_goals"] == ["No API rename."]
+    assert resolved["field_sources"]["original_request"]["locator"] == ["task_requirements", "original_request"]

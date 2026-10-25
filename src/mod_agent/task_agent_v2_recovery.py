@@ -95,6 +95,7 @@ class TaskAgentRecoveryJournal:
             task_agent_v2_tools,
             task_agent_v2_working_state,
         )
+        from src.mod_agent.planning import learning_request, strategy_experience
 
         self.owner, self.session, self.state, self.details = owner, session, session.state, details
         self.lock_key = "logical-task:" + graph_state["run_id"] + ":" + graph_state["request_id"]
@@ -119,7 +120,8 @@ class TaskAgentRecoveryJournal:
                 "owner_refs": [_ref(module.__file__) for module in (
                     task_agent_execution, task_agent_loop, task_agent_v2_execution, task_agent_v2_tools,
                     task_agent_v2_state, task_agent_v2_experience, task_agent_v2_experiments,
-                    task_agent_v2_experiment_tools, task_agent_v2_context, task_agent_v2_working_state, public_failure_feedback)] + [_ref(__file__)]}
+                    task_agent_v2_experiment_tools, task_agent_v2_context, task_agent_v2_working_state, public_failure_feedback,
+                    strategy_experience, learning_request)] + [_ref(__file__)]}
             self.host_config_ref = self.state.save("host-recovery-config", host)
             with self.state._transaction("host-recovery-config", {"kind": "host_recovery_config", "host_config_ref": self.host_config_ref}) as (_head, result, _replay):
                 result["host_config_ref"] = self.host_config_ref

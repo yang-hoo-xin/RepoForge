@@ -15,6 +15,7 @@ from src.libs.llm.agent_turn import AgentMessage, AgentTurnRequest
 from src.mod_agent.artifacts import ArtifactStore
 from src.mod_agent.model_call_budget import call_allowance, validate_budget
 from src.mod_agent.model_qualification import canonical_hash, read_bound_json
+from src.mod_agent.planning.learning_request import read_learning_request, task_context_selections
 from src.mod_agent.planning.strategy_experience import StrategyExperience
 
 
@@ -425,7 +426,7 @@ class TaskAgentV2Experience:
         self.configuration_ref = deepcopy(configuration_ref)
         self.config = read_bound_json(configuration_ref)
         required = {"schema_version", "store_root", "snapshot_ref", "extract_on_terminal"}
-        if (not required <= set(self.config) or set(self.config) - required - {"trial_binding_ref", "extraction_episode_set_ref"}
+        if (not required <= set(self.config) or set(self.config) - required - {"trial_binding_ref", "extraction_episode_set_ref", "learning_request_ref", "requested_strategy_scope"}
                 or self.config["schema_version"] != "task_agent_experience_config_v1"
                 or type(self.config["extract_on_terminal"]) is not bool):
             raise ValueError("TASK_V2_EXPERIENCE_CONFIG_INVALID")
@@ -435,6 +436,15 @@ class TaskAgentV2Experience:
         self.memory = StrategyExperience(ArtifactStore(root))
         self.snapshot = self.config["snapshot_ref"]
         self.extraction_episode_set_ref = deepcopy(self.config.get("extraction_episode_set_ref"))
+        self.learning_request_ref = deepcopy(self.config.get("learning_request_ref"))
+        self.learning_request = read_learning_request(self.learning_request_ref)
+        self.requested_strategy_scope = deepcopy(self.config.get("requested_strategy_scope"))
+        if self.requested_strategy_scope is not None:
+            from src.mod_agent.planning.strategy_experience import _strategy
+            _strategy({"applicability": self.requested_strategy_scope, "suggested_action": "pending",
+                "expected_observation": "unassessed", "counterevidence": ["unassessed"]})
+            _learning_require(self.learning_request is not None or self.extraction_episode_set_ref is not None,
+                "EXPLICIT_LEARNING_REQUEST_REQUIRED")
         self.trial_binding = self._read_trial_binding()
         self._terminal_receipt = None
         self.check_boundary()
@@ -467,6 +477,8 @@ class TaskAgentV2Experience:
     def check_boundary(self):
         if read_bound_json(self.configuration_ref) != self.config:
             raise ValueError("TASK_V2_EXPERIENCE_CONFIG_CHANGED")
+        if read_learning_request(self.learning_request_ref) != self.learning_request:
+            raise ValueError("TASK_V2_LEARNING_REQUEST_CHANGED")
         if self._read_trial_binding() != self.trial_binding:
             raise ValueError("TASK_V2_TRIAL_BINDING_CHANGED")
         if self.snapshot is not None:
@@ -476,6 +488,12 @@ class TaskAgentV2Experience:
             _learning_require(frozen.get("kind") == "episode_set" and frozen.get("frozen") is True
                 and frozen.get("visibility") == "public" and frozen.get("data_use") == "strategy_learning",
                 "FROZEN_EPISODE_SET_REQUIRED")
+            bound = frozen.get("learning_request_ref")
+            _learning_require(self.learning_request_ref is None or bound is None or self.learning_request_ref == bound,
+                "LEARNING_REQUEST_CONFLICT")
+            read_learning_request(bound)
+            _learning_require(self.requested_strategy_scope is None or self.requested_strategy_scope == frozen["applicability"],
+                "FROZEN_STRATEGY_SCOPE_CHANGED")
 
     @staticmethod
     def context_with_sources(session, current_task_state=None):
@@ -639,6 +657,7 @@ class TaskAgentV2Experience:
             "public_counterexamples": counterexamples,
             "applicability": applicability, "applicability_sources": applicability_sources,
             "task_contract_ref": session.state.contract_ref,
+            "task_context_selections": task_context_selections(session.state.contract, "context_task_contract_ref"),
             "run_id": execution.get("run_id"), "request_id": execution.get("request_id"),
             "execution_ref": deepcopy(self.owner.execution_receipt().execution_ref)}
         name = "public-learning-episode-" + canonical_hash(episode) + ".json"
@@ -720,9 +739,12 @@ class TaskAgentV2Experience:
                         result["episode_set_ref"] = deepcopy(extraction_source)
                     learned = extraction(
                         SimpleNamespace(provider=client.provider, model=client.model, complete_turn=complete), extraction_source,
-                        admission_ref=admission, before_call=reserve, after_call=account)
+                        admission_ref=admission, before_call=reserve, after_call=account,
+                        learning_request_ref=self.learning_request_ref, applicability=self.requested_strategy_scope)
                     result.update(status=learned["status"], strategy_ref=learned.get("strategy_ref"),
-                        extraction_ref=learned.get("extraction_ref"))
+                        extraction_ref=learned.get("extraction_ref"),
+                        **{key: deepcopy(learned[key]) for key in ("learning_request_ref", "source_assessments",
+                            "evidence_gaps", "assessment_kind", "unassessed_episode_ids", "gap_completeness") if key in learned})
         except Exception as error:
             result.update(status="failed", error_type=type(error).__name__, message=str(error))
             if result["model_calls"] > len(result["known_usage"]) + result["unknown_usage_calls"]:

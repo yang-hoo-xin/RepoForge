@@ -276,7 +276,7 @@ def test_recovery_trace_preserves_original_exception_and_unknown_response(tmp_pa
     assert current_trace() is None
 
 
-@pytest.mark.parametrize("drift", ["source", "worker", "deadline"])
+@pytest.mark.parametrize("drift", ["source", "worker", "deadline", "learning_helper"])
 def test_saved_checkpoint_rejects_source_drift_before_model_send(repository_workspace, monkeypatch, capsys, drift):
     from src.mod_agent import task_agent_v2_recovery as recovery
     from src.mod_agent.task_agent_v2_execution import TaskAgentExecutionV2
@@ -313,6 +313,17 @@ def test_saved_checkpoint_rejects_source_drift_before_model_send(repository_work
     elif drift == "worker":
         worker = Path(host["worker_configuration_ref"]["path"])
         worker.write_bytes(worker.read_bytes() + b"\n")
+    elif drift == "learning_helper":
+        from src.mod_agent.planning import learning_request
+        expected = Path(learning_request.__file__).resolve()
+        assert any(Path(row["path"]).resolve() == expected for row in host["owner_refs"])
+        original_ref = recovery._ref
+
+        def changed_helper(path):
+            value = original_ref(path)
+            return {**value, "sha256": "0" * 64} if Path(path).resolve() == expected else value
+
+        monkeypatch.setattr(recovery, "_ref", changed_helper)
     else:
         monkeypatch.setattr(recovery.time, "time", lambda: host["deadline_utc"] + 1)
     with pytest.raises(ValueError):

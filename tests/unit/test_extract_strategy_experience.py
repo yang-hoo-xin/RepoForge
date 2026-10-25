@@ -112,3 +112,45 @@ def test_generic_window_is_positive_finite_not_a_new_fixed_600_second_gate(prepa
     for value in (0, -1, float("inf"), float("nan")):
         with pytest.raises(ValueError, match="BOUNDED_EXTRACTION_WINDOW"):
             runner.profile_for({**record, "process_window_seconds": value})
+
+
+def test_explicit_learning_contract_prepare_preview_and_actual_http_negative(prepared, tmp_path, monkeypatch):
+    import httpx
+
+    from tests.unit.test_strategy_learning_request import question
+    original_record = runner.read_public(runner.read_public(prepared)["input_ref"])
+    learning_ref = question(tmp_path)
+    input_ref = runner.write_once(tmp_path / "question-input/input.json", {**original_record,
+        "learning_request_ref": learning_ref, "applicability": {"runtime": "dotnet", "has_candidate": False}})
+    selected = runner.prepare(input_ref, tmp_path / "question-prepared")
+    preview = runner.read_public(runner.preview(selected, tmp_path / "question-preview"))
+    expected = runner.read_public(preview["payload_ref"])
+    sent, calls = [], []
+
+    def transport(_transport, request):
+        payload = json.loads(request.content)
+        calls.append(payload)
+        assert payload == expected
+        data = json.loads(payload["messages"][-1]["content"])
+        sent.append(data)
+        assert data["learning_question"]["reference"] == learning_ref
+        assert data["requested_strategy_scope"] == {"runtime": "dotnet", "has_candidate": False}
+        episode = data["episodes"][0]
+        assert episode["source_task_context"]["availability"] == "not_selected"
+        output = {"status": "insufficient_information", "reason": "Only a public process observation is available.",
+            "source_assessments": [{"episode_id": episode["episode_id"], "relation": "insufficient",
+                "reason": "The stopped process does not establish a learning gain.",
+                "evidence": [{"evidence_id": "facts", "locator": ["facts", "status"]}]}],
+            "evidence_gaps": [{"status": "unknown", "description": "Original task requirements were not selected."}]}
+        return httpx.Response(200, request=request, json={"model": "local", "done": True, "done_reason": "stop",
+            "message": {"role": "assistant", "content": json.dumps(output)}, "prompt_eval_count": 8, "eval_count": 5})
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", transport)
+    result = runner.read_public(runner.execute(selected, tmp_path / "question-attempt",
+        (datetime.now(timezone.utc) + timedelta(seconds=60)).isoformat(), identity_reader=identity))
+    assert len(calls) == 1 and result["status"] == "insufficient_information", result
+    assert result["strategy_ref"] is None and result["learning_request_ref"] == learning_ref
+    assert result["evidence_gaps"][0]["status"] == "unknown"
+    actual = runner.read_public(result["provider_events"][0]["provider_request_ref"])
+    assert actual == expected
+    assert result["model_calls_reserved"] == 1 and result["unknown_usage_calls"] == 0

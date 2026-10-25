@@ -33,7 +33,17 @@ from src.mod_agent.model_admission import (
 from src.mod_agent.model_call_budget import METER_ONLY, validate_budget
 from src.mod_agent.model_qualification import canonical_hash
 from src.mod_agent.patch_transport_bodies import PatchTransportBodyRecorder
-from src.mod_agent.planning import process_trajectory, strategy_experience
+from src.mod_agent.planning import (
+    learning_calibration,
+    learning_request,
+    process_trajectory,
+    strategy_experience,
+)
+from src.mod_agent.planning.learning_calibration import (
+    inherit_calibration,
+    load_calibration_sources,
+)
+from src.mod_agent.planning.learning_request import read_learning_request
 from src.mod_agent.planning.process_trajectory import (
     file_ref,
     prepare_trajectory,
@@ -41,6 +51,7 @@ from src.mod_agent.planning.process_trajectory import (
     read_public,
     require,
     source_context,
+    task_context_evidence,
     verify_source,
     write_once,
 )
@@ -63,6 +74,7 @@ def profile_for(record):
     require(type(record["process_window_seconds"]) in {int, float} and math.isfinite(record["process_window_seconds"])
         and record["process_window_seconds"] > 0,
         "BOUNDED_EXTRACTION_WINDOW_REQUIRED")
+    read_learning_request(record.get("learning_request_ref"))
     return profile
 
 
@@ -99,7 +111,7 @@ def owners():
 
     paths = [__file__, sys.modules[ArtifactStore.__module__].__file__,
         _CONTEXT_OWNER_PATH, *[module.__file__ for module in (
-        process_trajectory, strategy_experience, task_memory, execution_trace, agent_turn, transport_observation,
+        process_trajectory, strategy_experience, learning_request, learning_calibration, task_memory, execution_trace, agent_turn, transport_observation,
         interrupted_patch_admission, local_entry, model_admission, model_call_budget, model_qualification,
         patch_transport_bodies, platform_execution_snapshot, task_agent_execution, task_agent_loop,
         task_agent_v2_execution, task_agent_v2_recovery, task_agent_v2_state, dsh_run_request)]]
@@ -123,8 +135,10 @@ def retain_owners(root):
 def prepare(input_ref, output_root):
     record = read_public(input_ref)
     profile = profile_for(record)
+    calibration = load_calibration_sources(record.get("context_calibration_sources"), profile, record["digest"])
     require(sum(key in record for key in ("sources", "episode_ref", "episode_set")) == 1, "EXACTLY_ONE_INPUT_MODE_REQUIRED")
     protected = [Path(input_ref["path"]).parent]
+    protected.extend(row["attempt_root"] for row in record.get("context_calibration_sources", []))
     for source in record.get("sources", []):
         if source["kind"] == "public_episode":
             protected.append(source["allowed_source_root"])
@@ -138,21 +152,24 @@ def prepare(input_ref, output_root):
     root = fresh_root(output_root, protected)
     memory = StrategyExperience(ArtifactStore(root / "strategy-memory"))
     episode_refs = []
+    learning_ref = deepcopy_json(record.get("learning_request_ref"))
     if "sources" in record:
         require(isinstance(record["sources"], list) and record["sources"], "SOURCES_REQUIRED")
         for index, source in enumerate(record["sources"]):
             episode_refs.append(prepare_trajectory(source, root / "projections" / str(index)))
         run_ids = [read_public(reference)["run_id"] for reference in episode_refs]
         require(len(set(run_ids)) == len(run_ids), "RUN_DUPLICATED")
-        selected = memory.freeze_episode_set(episode_refs, applicability=record["applicability"], source_roles=record.get("source_roles"))
+        selected = memory.freeze_episode_set(episode_refs, applicability=record["applicability"], source_roles=record.get("source_roles"),
+            learning_request_ref=learning_ref)
         selection = {"kind": "episode_set", "reference": asdict(selected)}
     elif "episode_set" in record:
         source = record["episode_set"]
         original = StrategyExperience(ArtifactStore(source["store_root"])).read(source["reference"])
         require(original.get("kind") == "episode_set" and original.get("frozen") is True, "FROZEN_SET_REQUIRED")
         episode_refs = [row["episode_ref"] for row in original["episodes"]]
+        learning_ref = learning_ref or original.get("learning_request_ref")
         selected = memory.freeze_episode_set(episode_refs, applicability=original["applicability"],
-            source_roles=[row["source_role"] for row in original["episodes"]])
+            source_roles=[row["source_role"] for row in original["episodes"]], learning_request_ref=learning_ref)
         selection = {"kind": "episode_set", "reference": asdict(selected)}
     else:
         episode = read_public(record["episode_ref"])
@@ -164,6 +181,9 @@ def prepare(input_ref, output_root):
     retained = retain_owners(root)
     return write_once(root / "prepared.json", {"schema_version": "prepared_strategy_extraction_v1", "input_ref": input_ref,
         "profile": profile.to_dict(), "selection": selection, "episode_refs": episode_refs,
+        **({"learning_request_ref": learning_ref, "requested_strategy_scope": deepcopy_json(record.get("applicability"))}
+            if learning_ref is not None else {}),
+        **({"context_calibration": calibration} if calibration is not None else {}),
         "memory_root": str(memory.store.root), "owner_refs": [row["original_ref"] for row in retained], "retained_owner_sources": retained,
         "protected_roots": [str(Path(p).resolve()) for p in protected],
         "model_calls": 0, "scope": "prepared public inputs; no live provider admission or model request"})
@@ -179,7 +199,18 @@ def verify_prepared(prepared_ref):
             and file_ref(row["retained_ref"]["path"]) == row["retained_ref"]
             and row["retained_ref"]["sha256"] == row["original_ref"]["sha256"], "RETAINED_OWNER_CHANGED")
     record = read_public(prepared["input_ref"])
-    require(profile_for(record).to_dict() == prepared["profile"], "PREPARED_PROFILE_CHANGED")
+    profile = profile_for(record)
+    require(profile.to_dict() == prepared["profile"], "PREPARED_PROFILE_CHANGED")
+    calibration = load_calibration_sources(record.get("context_calibration_sources"), profile, record["digest"])
+    require(prepared.get("context_calibration") == calibration, "PREPARED_CALIBRATION_CHANGED")
+    learning_ref = record.get("learning_request_ref")
+    if learning_ref is None and "episode_set" in record:
+        source_set = record["episode_set"]
+        learning_ref = StrategyExperience(ArtifactStore(source_set["store_root"])).read(source_set["reference"]).get("learning_request_ref")
+    require(prepared.get("learning_request_ref") == learning_ref, "PREPARED_LEARNING_REQUEST_CHANGED")
+    read_learning_request(learning_ref)
+    require(prepared.get("requested_strategy_scope") == (record.get("applicability") if learning_ref is not None else None),
+        "PREPARED_STRATEGY_SCOPE_CHANGED")
     require(len(record.get("sources", [])) in (0, len(prepared["episode_refs"])), "PREPARED_SOURCE_COUNT_CHANGED")
     for source, reference in zip(record.get("sources", []), prepared["episode_refs"], strict=False):
         verified = verify_source(source)
@@ -191,6 +222,10 @@ def verify_prepared(prepared_ref):
             and metadata["projection_owner_ref"] == file_ref(process_trajectory.__file__), "PROJECTION_SOURCE_CHANGED")
         trajectory["omission_manifest_ref"] = refs["projection"]
         contract_ref, applicability = source_context(verified)
+        task_refs, task_selectors, _task_documents = task_context_evidence(verified)
+        require(episode.get("task_context_selections", []) == task_selectors
+            and all(refs.get(row["evidence_id"]) == {key: row[key] for key in ("path", "sha256")} for row in task_refs),
+            "SOURCE_TASK_CONTEXT_CHANGED")
         require(read_public(refs["trajectory"]) == {"trajectory": trajectory}
             and episode["selections"] == [{"evidence_id": "trajectory", "locator": ["trajectory"]}]
             and episode["run_id"] == verified["run_id"]
@@ -200,6 +235,7 @@ def verify_prepared(prepared_ref):
     selection = prepared["selection"]
     if selection["kind"] == "episode_set":
         frozen = memory.read(selection["reference"])
+        require(frozen.get("learning_request_ref") == learning_ref, "PREPARED_LEARNING_SET_CHANGED")
         require([r["episode_ref"] for r in frozen["episodes"]] == prepared["episode_refs"], "PREPARED_SET_CHANGED")
         if "sources" in record:
             require(frozen["applicability"] == record["applicability"]
@@ -222,10 +258,21 @@ def request_payload(request, profile):
             "seed": 0, "num_ctx": profile.context_window}, "format": request.response_format.schema}
 
 
+def context_admission(prepared, profile, payload, *, model_identity=None):
+    calibration = prepared.get("context_calibration")
+    if calibration is None:
+        return build_ollama_context_admission(payload=payload, configured_num_ctx=profile.context_window,
+            num_predict=profile.output_budget)
+    client = LocalOllamaInitialPatchAdapter._default_agent_turn_client(profile)
+    inherit_calibration(client, calibration, profile, model_identity or calibration["model_identity"])
+    return client._context_admission(payload)
+
+
 def invoke(memory, prepared, client, admission_ref, before_call, after_call):
     selected = prepared["selection"]
     method = memory.propose_from_episodes if selected["kind"] == "episode_set" else memory.propose_from_episode
-    return method(client, selected["reference"], admission_ref=admission_ref, before_call=before_call, after_call=after_call)
+    return method(client, selected["reference"], admission_ref=admission_ref, before_call=before_call, after_call=after_call,
+        learning_request_ref=prepared.get("learning_request_ref"), applicability=prepared.get("requested_strategy_scope"))
 
 
 def _copy_selection(prepared, memory):
@@ -237,7 +284,8 @@ def _copy_selection(prepared, memory):
     if prepared["selection"]["kind"] == "episode_set":
         original = StrategyExperience(ArtifactStore(prepared["memory_root"])).read(prepared["selection"]["reference"])
         ref = memory.freeze_episode_set([r["episode_ref"] for r in original["episodes"]],
-            applicability=original["applicability"], source_roles=[r["source_role"] for r in original["episodes"]])
+            applicability=original["applicability"], source_roles=[r["source_role"] for r in original["episodes"]],
+            learning_request_ref=original.get("learning_request_ref"))
         result["selection"]["reference"] = asdict(ref)
     return result
 
@@ -262,7 +310,7 @@ def preview(prepared_ref, output_root):
         request = retained_request_from_document(memory.read(request_ref)["request"])
         payload = request_payload(request, profile)
         captured.update(request_ref=request_ref, payload_ref=write_once(root / "provider-request-preview.json", payload),
-            admission=build_ollama_context_admission(payload=payload, configured_num_ctx=profile.context_window, num_predict=profile.output_budget))
+            admission=context_admission(prepared, profile, payload))
         return False
 
     def never_send(_request):
@@ -298,7 +346,8 @@ def execute(prepared_ref, output_root, deadline_utc, *, client_factory=None, ide
     trace = ExecutionTrace(run_id, run_id, "public_process_strategy_extraction",
         recorder=lambda row: write_once(root / "trace" / (uuid4().hex + ".json"), row))
     result = {"status": "not_dispatched", "run_id": run_id, "prepared_ref": prepared_ref,
-        "human_active_seconds": None, "scope": "new separately accounted extraction; no source task resumed", "strategy_ref": None}
+        "human_active_seconds": None, "scope": "new separately accounted extraction; no source task resumed", "strategy_ref": None,
+        "context_calibration": deepcopy_json(prepared.get("context_calibration"))}
 
     def time_left():
         left = deadline - time.time()
@@ -317,9 +366,10 @@ def execute(prepared_ref, output_root, deadline_utc, *, client_factory=None, ide
     def reserve(request_ref):
         from src.mod_agent.interrupted_patch_admission import retained_request_from_document
         time_left()
+        read_learning_request(prepared.get("learning_request_ref"))
         request = retained_request_from_document(memory.read(request_ref)["request"])
         payload = request_payload(request, profile)
-        admission = build_ollama_context_admission(payload=payload, configured_num_ctx=profile.context_window, num_predict=profile.output_budget)
+        admission = context_admission(prepared, profile, payload, model_identity=observed)
         write_once(root / "context-preflight.json", {"request_ref": request_ref, "payload_ref": write_once(root / "preflight-provider-request.json", payload),
             "context_admission": admission, "model_calls": 0})
         require(admission["admitted"] is True, "REQUEST_CONTEXT_EXCEEDED")
@@ -346,14 +396,24 @@ def execute(prepared_ref, output_root, deadline_utc, *, client_factory=None, ide
             current = identity()
             assert_ollama_model_identity_stable(expected=observed, observed=current)
             client = (client_factory or LocalOllamaInitialPatchAdapter._default_agent_turn_client)(profile)
-            client.bind_context_identity(model_identity=current, owner_profile_sha256=canonical_hash(profile.to_dict()))
-            # The profile identity stays fixed; the transport timeout only shortens with the parent deadline.
-            # 为什么要有它：剩余墙钟不能被新客户端恢复为完整超时，配置身份也不能被随意替换。
-            if hasattr(client, "request_timeout_seconds"):
-                client.request_timeout_seconds = min(profile.timeout_seconds, time_left())
+            calibration = prepared.get("context_calibration")
+            if calibration is not None:
+                inherit_calibration(client, calibration, profile, current)
+            else:
+                client.bind_context_identity(model_identity=current, owner_profile_sha256=canonical_hash(profile.to_dict()))
+            transport_timeout = min(profile.timeout_seconds, time_left())
+            # 为什么要有它：实际传输服从剩余窗口；有校准时不能改adapter配置身份而清空已经核验的观测。
+            if calibration is not None:
+                require(hasattr(client._send, "timeout_seconds"), "CALIBRATED_TRANSPORT_TIMEOUT_REQUIRED")
+                client._send.timeout_seconds = transport_timeout
+            elif hasattr(client, "request_timeout_seconds"):
+                client.request_timeout_seconds = transport_timeout
                 if hasattr(client._send, "timeout_seconds"):
-                    client._send.timeout_seconds = client.request_timeout_seconds
-            event = {"request_ref": write_once(root / "application-request.json", asdict(request))}
+                    client._send.timeout_seconds = transport_timeout
+            event = {"request_ref": write_once(root / "application-request.json", asdict(request)),
+                "configured_request_timeout_seconds": profile.timeout_seconds,
+                "transport_timeout_seconds": transport_timeout,
+                "calibration_observation_count": len(calibration["observations"]) if calibration is not None else 0}
             events.append(event)
             try:
                 with trace.model_call({"provider": client.provider, "model": client.model}) as observation:
@@ -373,7 +433,9 @@ def execute(prepared_ref, output_root, deadline_utc, *, client_factory=None, ide
         with trace.activate():
             learned = invoke(memory, selected, SimpleNamespace(provider="ollama_chat_local", model=profile.model, complete_turn=complete),
                 admission, reserve, account)
-        result.update(status=learned["status"], strategy_ref=learned.get("strategy_ref"), extraction_ref=learned.get("extraction_ref"))
+        result.update(status=learned["status"], strategy_ref=learned.get("strategy_ref"), extraction_ref=learned.get("extraction_ref"),
+            **{key: deepcopy_json(learned[key]) for key in ("learning_request_ref", "source_assessments", "evidence_gaps",
+                "assessment_kind", "unassessed_episode_ids", "gap_completeness") if key in learned})
         if result["strategy_ref"]:
             strategy = memory.read(result["strategy_ref"])
             require(strategy["state"] == "proposed" and strategy["origin"]["kind"] == "model", "MODEL_PROPOSED_ONLY_REQUIRED")

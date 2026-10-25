@@ -11,12 +11,13 @@ from copy import deepcopy
 from pathlib import Path
 
 from src.mod_agent.model_qualification import canonical_hash, read_bound_json
+from src.mod_agent.planning.learning_request import resolve_task_context, task_context_selections
 from src.mod_agent.planning.task_memory import _select
 from src.mod_agent.platform_execution_snapshot import FrozenExecution
 from src.mod_agent.task_agent_v2_recovery import _validate_completed, _validate_host_binding
 from src.mod_agent.task_agent_v2_state import TaskAgentV2State, _no_links
 
-VERSION = "complete_public_process_trajectory_v1"
+VERSION = "complete_public_process_trajectory_v2"
 
 
 def require(value, code):
@@ -81,7 +82,8 @@ def verify_public_episode(source):
     require(isinstance(run_id, str) and run_id and run_id in Path(source["episode_ref"]["path"]).parts
         and episode.get("run_id", run_id) == run_id, "PUBLIC_EPISODE_RUN_CHANGED")
     documents, references = {}, {}
-    selected_ids = {selection["evidence_id"] for selection in episode["selections"]}
+    selected_ids = {selection["evidence_id"] for selection in [*episode["selections"],
+        *episode.get("task_context_selections", [])]}
     receipt_ids = {selection["evidence_id"] + "_result" for selection in episode["selections"]
         if len(selection["locator"]) == 3 and selection["locator"][0] == "tool_calls"
         and selection["locator"][2] in {"name", "arguments"}}
@@ -95,6 +97,7 @@ def verify_public_episode(source):
         if ref["evidence_id"] in needed_ids:
             require_public_selection_path(reference)
             documents[ref["evidence_id"]] = read_public(reference, root=root)
+    resolve_task_context(episode, documents)
     selected, actions, order, facts = {}, {}, [], []
     for selection in episode["selections"]:
         evidence_id, locator = selection["evidence_id"], selection["locator"]
@@ -145,6 +148,11 @@ def verify_public_episode(source):
         record["response"] = deepcopy(responses[seen_responses[identity]]["response"])
     return {"source": deepcopy(source), "episode": episode, "records": records, "pending": [], "responses": responses,
         "run_id": run_id, "request_id": episode.get("request_id"), "process": {"status": "not_selected_in_original_episode"},
+        "task_context_selections": deepcopy(episode.get("task_context_selections", [])),
+        "task_context_documents": {row["evidence_id"]: documents[row["evidence_id"]]
+            for row in episode.get("task_context_selections", [])},
+        "task_context_references": {row["evidence_id"]: references[row["evidence_id"]]
+            for row in episode.get("task_context_selections", [])},
         "public_selected_facts": facts, "coverage": "Only the original public episode selectors; no full checkpoint, unselected response content, private evaluation or inferred completion."}
 
 
@@ -254,7 +262,33 @@ def verify_source(source):
             _admitted_response(response, checkpoint["details"]["model_profile"])
             responses.append({"turn": turn["turn"], "response_ref": turn["response_ref"], "response": response})
     return {"source": deepcopy(source), "checkpoint": checkpoint, "host": host, "process": process,
-        "records": verified, "pending": pending, "responses": responses, "run_id": run_id, "request_id": request_id}
+        "records": verified, "pending": pending, "responses": responses, "run_id": run_id, "request_id": request_id,
+        "task_context_document": deepcopy(state.contract),
+        "task_context_reference": file_ref(store / checkpoint["task_contract_ref"])}
+
+
+def task_context_evidence(verified):
+    """Return only verified or originally selected task-contract fields.
+
+    为什么要有它：原任务需求有自己的来源；旧episode的身份引用不能变成补读权限。
+    """
+    refs, documents, selectors = [], {}, []
+    if "task_context_document" in verified:
+        key = "source_task_contract"
+        documents[key] = verified["task_context_document"]
+        selectors = task_context_selections(documents[key], key)
+        if selectors:
+            refs.append({"kind": "json_file", "evidence_id": key, **verified["task_context_reference"],
+                "visibility": "public", "allowed_uses": ["strategy_learning"]})
+    else:
+        for row in verified.get("task_context_selections", []):
+            original_id, key = row["evidence_id"], "original_task_" + row["evidence_id"]
+            if key not in documents:
+                documents[key] = verified["task_context_documents"][original_id]
+                refs.append({"kind": "json_file", "evidence_id": key, **verified["task_context_references"][original_id],
+                    "visibility": "public", "allowed_uses": ["strategy_learning"]})
+            selectors.append({**deepcopy(row), "evidence_id": key})
+    return refs, selectors, documents
 
 
 def project_verified(verified):
@@ -368,6 +402,7 @@ def project_verified(verified):
                 for row in verified["responses"]),
             unselected_statement_count=sum(row.get("content_selected") is not True for row in verified["responses"]),
             visible_statements_coverage="Only statements selected by the original episode; unselected content is not inspected or inferred.")
+    # 为什么要有它：原任务字段由episode的独立source_task_context选择器发送一次，过程轨迹不重复占用同一事实的上下文。
     return trajectory, omissions
 
 
@@ -412,10 +447,13 @@ def prepare_trajectory(source, output_root):
     if source.get("episode_ref"):
         evidence.append({"kind": "json_file", "evidence_id": "original_episode", **source["episode_ref"],
             "visibility": "public", "allowed_uses": ["strategy_learning"]})
+    task_refs, task_selectors, _task_documents = task_context_evidence(verified)
+    evidence.extend(task_refs)
     episode = {"schema_version": "public_strategy_episode_v1", "visibility": "public", "data_use": "strategy_learning",
         "information_gain": ["public_process_observation"], "run_id": verified["run_id"], "request_id": verified["request_id"],
         "task_contract_ref": contract_ref, "applicability": applicability, "evidence_refs": evidence,
         "selections": [{"evidence_id": "trajectory", "locator": ["trajectory"]}],
+        "task_context_selections": task_selectors,
         "projection_version_ref": {"version": VERSION, "owner_ref": file_ref(__file__)},
         "scope": "deterministic developer-prepared public process projection; no proposed strategy supplied"}
     return write_once(output / "episode.json", episode)
