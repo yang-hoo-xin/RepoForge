@@ -447,9 +447,13 @@ def _build_v2_delivery(*, artifact_store_root, apply_ref, operation_id, allow_bu
     if replay is not None:
         if replay.get("verification_ref") is not None:
             report = read_bound_json(replay["verification_ref"])
-            from src.mod_agent.domain.csharp_repository_backend import validate_declared_skips, validate_diagnostic_integrity
-            validate_diagnostic_integrity(report)
-            validate_declared_skips(report, profile_ref=handoff_profile.reference)
+            from src.mod_agent.domain.csharp_repository_backend import (
+                validate_declared_skips,
+                validate_diagnostic_integrity,
+            )
+            task_profile = TaskAgentV2State(store.root, handoff.task_contract_ref).contract["execution_profile_ref"]
+            validate_diagnostic_integrity(report, profile_ref=task_profile)
+            validate_declared_skips(report, profile_ref=task_profile)
             for artifact in report.get("built_artifact_refs", []):
                 _require(hashlib.sha256(Path(artifact["path"]).read_bytes()).hexdigest() == artifact["sha256"], "BUILT_ARTIFACT_CHANGED")
         return replay
@@ -476,7 +480,10 @@ def _build_v2_delivery(*, artifact_store_root, apply_ref, operation_id, allow_bu
         execution_started = True
         result = backend.run_build_test(source_root=destination, feature_id=checkpoint["feature_id"], input_execution_mode="isolated_apply")
         raw = read_bound_json(result["report_ref"])
-        from src.mod_agent.domain.csharp_repository_backend import validate_declared_skips, validate_diagnostic_integrity
+        from src.mod_agent.domain.csharp_repository_backend import (
+            validate_declared_skips,
+            validate_diagnostic_integrity,
+        )
         validate_diagnostic_integrity(raw, profile_ref=profile.reference)
         validate_declared_skips(raw, profile_ref=profile.reference)
         _require(raw["status"] == result["status"] and raw["execution_origin"] == "executed"
@@ -540,7 +547,10 @@ def delivery_recovery_context(*, artifact_store_root, receipt_ref):
         _require(receipt["resource_record"] == {**applied["resource_record"],
             "delivery_builds": applied["resource_record"].get("delivery_builds", 0) + 1}, "RECOVERY_RESOURCE_RECORD_CHANGED")
         report = read_bound_json(receipt["verification_ref"])
-        from src.mod_agent.domain.csharp_repository_backend import validate_declared_skips, validate_diagnostic_integrity
+        from src.mod_agent.domain.csharp_repository_backend import (
+            validate_declared_skips,
+            validate_diagnostic_integrity,
+        )
         task_profile = TaskAgentV2State(artifact_store_root, _handoff.task_contract_ref).contract["execution_profile_ref"]
         validate_diagnostic_integrity(report, profile_ref=task_profile)
         validate_declared_skips(report, profile_ref=task_profile)

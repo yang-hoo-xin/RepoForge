@@ -72,7 +72,7 @@ def test_completed_delivery_and_replay_reject_changed_diagnostic_expectation(del
             operation_id="diagnostic-build", allow_build=True)
 
 
-def test_exact_approval_apply_build_and_replay_preserve_original(delivery_case, capsys):
+def test_exact_approval_apply_build_and_replay_preserve_original(delivery_case, capsys, monkeypatch):
     store, checkpoint_ref, _isolated, prepared = delivery_case
     checkpoint = load_v2_artifact(store, checkpoint_ref)
     original = Path(checkpoint["source_root"]) / "Library/Arithmetic.cs"
@@ -121,6 +121,31 @@ def test_exact_approval_apply_build_and_replay_preserve_original(delivery_case, 
     assert built["delivery_scope"] == "approved_isolated_source_and_bound_public_build_tests"
     assert build_v2_delivery(artifact_store_root=store, apply_ref=applied["receipt_ref"],
         operation_id="build-1", allow_build=True)["replayed"]
+    from src.mod_agent.domain.full_project_compilation import _save
+    from src.mod_agent.model_qualification import read_bound_json
+
+    original_report = read_bound_json(built["verification_ref"])
+    alternate_profile = _save(store.parent / "same-bytes-other-profile.json", read_bound_json(original_report["profile_ref"]))
+    key = canonical_hash({"kind": "build", "operation_id": applied["receipt_ref"]})
+    pointer = store / "v2/delivery-operations" / (key + ".result.json")
+    pointer_bytes = pointer.read_bytes()
+    with monkeypatch.context() as guards:
+        guards.setattr(backend.CSharpRepositoryBackend, "run_build_test",
+            lambda *args, **kwargs: pytest.fail("A replay must not execute Build again."))
+        for name, change, error in (
+                ("other-profile", {"profile_ref": alternate_profile}, "PROFILE_CHANGED"),
+                ("undeclared-skip", {"test_execution_metadata": {"skipped": [{"name": "undeclared"}]}},
+                    "TEST_EXECUTION_METADATA_CHANGED")):
+            changed_report = _save(store.parent / (name + "-report.json"), {**original_report, **change})
+            forged = {**load_v2_artifact(store, built["receipt_ref"]), "verification_ref": changed_report}
+            forged_ref = save_v2_artifact(store, "delivery-receipt", forged)
+            pointer.write_text(json.dumps({"receipt_ref": forged_ref}))
+            try:
+                with pytest.raises(ValueError, match=error):
+                    build_v2_delivery(artifact_store_root=store, apply_ref=applied["receipt_ref"],
+                        operation_id="build-1", allow_build=True)
+            finally:
+                pointer.write_bytes(pointer_bytes)
     with pytest.raises(ValueError, match="OPERATION_ID_REUSED"):
         build_v2_delivery(artifact_store_root=store, apply_ref=applied["receipt_ref"], operation_id="build-2", allow_build=True)
     recovery = delivery_recovery_context(artifact_store_root=store, receipt_ref=built["receipt_ref"])

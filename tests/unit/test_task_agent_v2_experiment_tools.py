@@ -9,6 +9,7 @@ import pytest
 
 from src.mod_agent.task_agent_v2_experiment_tools import _discover_catalog
 from src.mod_agent.task_agent_v2_experiments import ExperimentRejectedError, TaskAgentExperiments
+from tests.unit.test_task_agent_v2_admission import session as session
 from tests.unit.test_task_agent_v2_state import edit
 from tests.unit.test_task_agent_v2_state import state as state
 
@@ -83,7 +84,7 @@ def test_normal_experiment_factory_connects_optional_sdk_runner_without_executin
 
 
 @pytest.mark.parametrize("configured", [False, True])
-def test_actual_decision_request_reports_probe_configuration_without_claiming_qualification(state, tmp_path, monkeypatch, configured):
+def test_actual_decision_request_reports_probe_configuration_without_claiming_qualification(session, tmp_path, monkeypatch, configured):
     from src.libs.llm.agent_turn import AgentMessage, AgentTurnRequest
     from src.mod_agent.domain.full_project_compilation import _save
     from src.mod_agent.domain.repository_probe_runner import RepositoryProbeRunner
@@ -96,16 +97,27 @@ def test_actual_decision_request_reports_probe_configuration_without_claiming_qu
     worker_ref = _save(tmp_path / "worker.json", {"behavior_evaluator": {
         "factory_name": "make_csharp_repository_evaluator", "kwargs": {"profile_ref": profile_ref}}})
     monkeypatch.setattr(RepositoryProbeRunner, "_environment", lambda *_args: pytest.fail("Input facts must not execute qualification"))
-    owner = SimpleNamespace(worker_configuration_ref=worker_ref)
-    session = SimpleNamespace(state=state, current_check=None)
+    owner, state = session.owner, session.state
+    owner._worker_configuration_ref = worker_ref
     original = AgentTurnRequest(messages=(AgentMessage("user", "Investigate the public issue"),))
-    before = set(state.root.rglob("*"))
+    before = {path: path.read_bytes() for path in state.root.rglob("*") if path.is_file()}
+    head_before, budget_before = state.head_path.read_bytes(), owner.budget_snapshot()
     actual = TaskAgentExecutionV2.prepare_decision_request(owner, original, session)
-    facts = actual.messages[-1].content["current_task_state"]["experiment_capabilities"]
+    current = actual.messages[-1].content["current_task_state"]
+    facts = current["experiment_capabilities"]
     assert actual.messages[0] == original.messages[0]
     assert facts["repository_profile_ref"] == profile_ref
     assert facts["registered_tests"]["status"] == "configured"
     assert facts["probe_submission"] == {"status": "available", "executes_code": False}
     assert facts["probe_execution"]["status"] == ("qualification_required" if configured else "unavailable")
     assert facts["probe_execution"]["runtime_qualification_verified"] is False
-    assert set(state.root.rglob("*")) == before
+    # 为什么要有它：决策准备会保存公开工作状态，但不能执行环境资格、修改原件或消耗模型资源。
+    assert state.head_path.read_bytes() == head_before and owner.budget_snapshot() == budget_before
+    assert all(path.read_bytes() == content for path, content in before.items())
+    state_ref = current["working_state_ref"]
+    archive_ref = current["working_state"]["model_statement_projection"]["archive_ref"]
+    assert Path(state_ref).parts[:2] == ("v2", "working-state")
+    assert Path(archive_ref).parts[:2] == ("v2", "context-archive")
+    expected = {state.store_root / state_ref, state.store_root / archive_ref}
+    after = {path for path in state.root.rglob("*") if path.is_file()}
+    assert after - set(before) == expected - set(before)

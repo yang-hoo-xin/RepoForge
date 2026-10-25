@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.libs.llm.agent_turn import AgentMessage, AgentToolCall, AgentTurnRequest, AgentTurnResponse
+from src.mod_agent.local_entry import LocalOllamaInitialPatchProfileV1
 from src.mod_agent.task_agent_loop import TaskActionInputError, TaskCandidateRevisionInputError
 from src.mod_agent.task_agent_v2_execution import TaskAgentExecutionV2
 from src.mod_agent.task_agent_v2_state import TaskAgentV2StateError
@@ -21,7 +22,9 @@ def session(state, tmp_path):
     owner._v2_state = state
     owner.output_root = tmp_path / "execution"
     owner.output_root.mkdir()
-    owner.profile = SimpleNamespace(model="local")
+    owner.profile = LocalOllamaInitialPatchProfileV1("local_ollama_initial_patch_profile_v1",
+        "http://127.0.0.1:11434", "local", 65536, 4096, 180)
+    owner._worker_configuration_ref = None
     owner.policy = SimpleNamespace(max_observation_bytes=1000000, max_tool_rounds=1000)
     owner.workspace_root = tmp_path
     owner.deadline = None
