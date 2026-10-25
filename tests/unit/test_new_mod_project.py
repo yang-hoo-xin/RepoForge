@@ -18,6 +18,16 @@ def _ref(path):
     return {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
+def _template_line_endings(tmp_path, monkeypatch, newline):
+    templates = tmp_path / "line-ending-templates"
+    shutil.copytree(owner.TEMPLATE_ROOT, templates)
+    template = templates / "Plugin.cs.template"
+    template_bytes = template.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", newline)
+    template.write_bytes(template_bytes)
+    monkeypatch.setattr(owner, "TEMPLATE_ROOT", templates)
+    return template_bytes
+
+
 @pytest.fixture
 def inputs(tmp_path):
     dependency = tmp_path / "dependencies"
@@ -57,15 +67,20 @@ def test_read_only_preparation_then_exclusive_initialization_and_restart(inputs)
     assert all(p.read_bytes() == raw for p, raw in before.items())
 
 
-def test_empty_plugin_contains_only_baseplugin_entry_and_unique_identities(inputs):
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n"], ids=["lf", "crlf"])
+def test_empty_plugin_contains_only_baseplugin_entry_and_unique_identities(inputs, tmp_path, monkeypatch, newline):
+    template_bytes = _template_line_endings(tmp_path, monkeypatch, newline)
     first = owner.prepare_new_mod_project(**inputs)
     second = owner.prepare_new_mod_project(**{**inputs, "project_id": "dsh_two"})
     for key in ("assembly_name", "root_namespace", "plugin_guid", "config_file_name"):
         assert first["identity"][key] != second["identity"][key]
     for plan in (first, second):
         plugin = next(x["content"] for x in plan["source_files"] if x["path"] == "Plugin.cs")
-        assert plugin[plugin.index("public override void Load()"):].split("}", 1)[0].strip() == (
-            "public override void Load()\n        {")
+        # 为什么要有它：空入口是语义要求；模板原始换行仍须保留，不能为了断言统一生成源码字节。
+        assert plugin[plugin.index("public override void Load()"):].split("}", 1)[0].strip().splitlines() == [
+            "public override void Load()", "        {"]
+        assert plugin.encode("utf-8").count(b"\r\n") == template_bytes.count(b"\r\n")
+        assert plugin.encode("utf-8").count(b"\n") == template_bytes.count(b"\n")
         assert plugin.count("(") == 2  # Plugin identity attribute and the empty entry method.
         assert len(plan["source_files"]) == 4
         assert not any(row["path"].endswith(".cfg") for row in plan["source_files"])
@@ -170,14 +185,16 @@ def test_forged_plan_cannot_inject_code_or_destination(inputs):
     assert not inputs["workspace_root"].exists()
 
 
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n"], ids=["lf", "crlf"])
 def test_initialized_project_enters_original_cli_graph_and_stops_at_diff_review(
-    inputs, tmp_path, monkeypatch, capsys,
+    inputs, tmp_path, monkeypatch, capsys, newline,
 ):
     import httpx
 
     from src.mod_agent import cli, local_entry
     from tests.unit.test_dsh_run_request import _install_execution_boundaries
 
+    _template_line_endings(tmp_path, monkeypatch, newline)
     # The existing-project fixture stays present and byte-identical throughout.
     existing, roles, _ = _install_execution_boundaries(tmp_path, monkeypatch)
     old_bytes = {p: p.read_bytes() for p in existing.iterdir()}
@@ -206,7 +223,13 @@ def test_initialized_project_enters_original_cli_graph_and_stops_at_diff_review(
                 generated = json.loads(body["message"]["content"])
                 for change in generated["changes"]:
                     before = context["edit_binding_contexts"][change["edit_binding_id"]]["source_excerpt"]
-                    change["after_text"] = before.replace("{\n        }", "{\n            // FIXTURE_ONLY\n        }", 1)
+                    # 为什么要有它：受控补丁必须实际改变当前前像，并保留它的换行，不能在CRLF工程返回无效原文。
+                    newline = "\r\n" if "\r\n" in before else "\n"
+                    empty_body = "{" + newline + "        }"
+                    assert empty_body in before
+                    change["after_text"] = before.replace(empty_body,
+                        "{" + newline + "            // FIXTURE_ONLY" + newline + "        }", 1)
+                    assert change["after_text"] != before
                 body["message"]["content"] = json.dumps(generated)
                 return httpx.Response(200, request=request, json=body)
         return response
