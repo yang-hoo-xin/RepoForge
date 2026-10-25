@@ -119,7 +119,9 @@ def classify_v2_technical_inputs(loop_request, prepared_request, initial_request
 class TaskAgentExecutionV2(TaskAgentExecution):
     protocol = "v2"
 
-    def __init__(self, *, experience_configuration_ref=None, deadline_utc=None, **kwargs):
+    def __init__(self, *, experience_configuration_ref=None, deadline_utc=None, semantic_state_enabled=True, **kwargs):
+        _require(type(semantic_state_enabled) is bool, "SEMANTIC_STATE_POLICY_INVALID")
+        self.semantic_state_enabled = semantic_state_enabled
         clock, utc = time.monotonic(), time.time()
         relative = kwargs.get("deadline")
         if relative is not None:
@@ -156,6 +158,11 @@ class TaskAgentExecutionV2(TaskAgentExecution):
             with_history_projection,
         )
         from src.mod_agent.task_agent_v2_experiment_tools import experiment_configuration_facts
+        from src.mod_agent.task_agent_v2_semantic_state import (
+            semantic_contract,
+            semantic_state_view,
+            with_semantic_evidence,
+        )
         from src.mod_agent.task_agent_v2_working_state import (
             update_working_state,
             working_state_view,
@@ -190,14 +197,21 @@ class TaskAgentExecutionV2(TaskAgentExecution):
                 "enforcement": "cooperative_between_actions; outer_controller_owns_hard_process_stop"},
             "experiment_capabilities": experiment_configuration_facts(self),
             "baseline_usage": "Historical source reference; editing must name current_revision_ref and a matching source_view_ref."}
+        semantic_enabled = getattr(self, "semantic_state_enabled", True)
+        if semantic_enabled:
+            current["semantic_state_contract"] = semantic_contract()
+            current["semantic_work_state"] = semantic_state_view(
+                self._v2_working_state, self._v2_working_state["boundary"])
         prepared = replace(request, messages=(*request.messages, AgentMessage("user", {"current_task_state": current})))
         if getattr(self, "_experience", None) is not None:
             prepared = self._experience.prepare_decision_request(prepared, session)
         prepared, projection = project_history(prepared, state,
             context_window=getattr(self.profile, "context_window", None),
-            output_budget=getattr(self.profile, "output_budget", None), provider=getattr(self, "_v2_client", None))
+            output_budget=getattr(self.profile, "output_budget", None), provider=getattr(self, "_v2_client", None),
+            decorate=with_semantic_evidence if semantic_enabled else None)
         self._v2_context_projection = projection
-        return with_history_projection(prepared, projection) if projection is not None else prepared
+        prepared = with_history_projection(prepared, projection) if projection is not None else prepared
+        return with_semantic_evidence(prepared) if semantic_enabled else prepared
 
     def complete_terminal_learning(self):
         if getattr(self, "_experience", None) is None:
@@ -481,6 +495,12 @@ class TaskAgentExecutionV2(TaskAgentExecution):
                     from src.mod_agent.task_agent_v2_working_state import retain_model_statement
                     self._v2_working_state = retain_model_statement(getattr(self, "_v2_working_state", None),
                         response, response_ref=event["response_ref"], source_boundary=deepcopy(self._v2_working_state.get("boundary")))
+                    if self.semantic_state_enabled:
+                        from src.mod_agent.task_agent_v2_semantic_state import record_semantic_state
+                        # 为什么要有它：语义记录属于本次原始模型响应，只能引用实际发送请求；动作尚未执行，不能借未来结果补写判断。
+                        self._v2_working_state = record_semantic_state(self._v2_working_state, asdict(response),
+                            actual_request=read_bound_json(event["request_ref"]),
+                            request_ref=event["request_ref"], response_ref=event["response_ref"])
                     reservation.update(response_ref=event["response_ref"], call_ids=[call.call_id for call in response.tool_calls])
                     task.record_resources(response.usage.to_dict(),
                         operation_id="model-usage:" + reservation["reservation_id"])

@@ -45,6 +45,7 @@ _VALUES = frozenset({
     "--technical-executor", "--constraint-policy", "--task-agent-edit-paths", "--task-agent-candidate-mode",
     "--task-agent-protocol",
     "--task-agent-experience-config",
+    "--task-agent-semantic-state",
     "--repository-profile",
 })
 _REQUIRED = {

@@ -70,6 +70,78 @@ def test_loop_unknown_pending_is_not_reissued():
     assert owners.budget.consumed == 1
 
 
+def test_normal_cli_semantic_provider_receipt_recovery_rejects_forgery_and_charges_once(
+    repository_workspace, monkeypatch, capsys,
+):
+    from src.mod_agent import cli
+    from src.mod_agent.model_qualification import canonical_hash
+    from src.mod_agent.task_agent_v2_execution import TaskAgentExecutionV2
+    from tests.unit.test_continuous_repair_product_entry import (
+        test_normal_cli_no_plan_or_binding_gate_retains_observation_and_repairs,
+    )
+
+    observed_turns, retained = [], []
+
+    def semantic_observer(*, arguments, current, turn, **_kwargs):
+        observed_turns.append(turn)
+        selected = next(row for row in current["semantic_evidence_catalog"] if row["kind"] == "task_requirements")
+        if turn > 1:
+            assert current["semantic_work_state"]["latest_update"]["status"] in {"accepted", "reaffirmed"}
+        evidence = [{"id": selected["id"], "quote": "Arithmetic.Double"}]
+        return {**arguments, "working_state": {
+            "observations": [{"statement": "The original task describes Arithmetic.Double", "evidence": evidence}],
+            "hypotheses": [{"id": "h1", "statement": "The implementation needs checking", "status": "open", "evidence": []}],
+            "open_questions": ["Which observation will test this hypothesis?"],
+            "next_action": {"purpose": "Continue the recorded task", "expected_observation": "A current source or public check result",
+                "decision_if_observed": "Choose the next action from the actual result"}}}
+
+    original_save = TaskAgentExecutionV2._save
+
+    def interrupt(owner, name, payload):
+        reference = original_save(owner, name, payload)
+        if name.startswith("provider-outcome-") and payload.get("status") == "responded" and payload["turn"] == 3 and not retained:
+            retained.append((owner.store.root, owner.v2_checkpoint_ref, owner.budget_snapshot()["consumed"]))
+            raise KeyboardInterrupt()
+        return reference
+
+    monkeypatch.setattr(TaskAgentExecutionV2, "_save", interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        test_normal_cli_no_plan_or_binding_gate_retains_observation_and_repairs(
+            repository_workspace, monkeypatch, capsys, semantic_observer=semantic_observer)
+    capsys.readouterr()
+    monkeypatch.setattr(TaskAgentExecutionV2, "_save", original_save)
+    store, reference, consumed = retained[0]
+    assert consumed == 3 and observed_turns == [1, 2, 3]
+
+    # 为什么要有它：已收到的第三响应只重建一次；有真词句的伪造状态也不能借恢复进入实际请求。
+    loaded = load_task_agent_checkpoint(artifact_store_root=store, checkpoint_ref=reference, reconcile=True)
+    good_ref, checkpoint, task = loaded["checkpoint_ref"], loaded["checkpoint"], loaded["state"]
+    assert loaded["host"]["semantic_state_enabled"] is True
+    semantic = checkpoint["owner"]["working_state"]["semantic_state"]
+    assert len(semantic["events"]) == 3 and len(semantic["snapshots"]) == 1
+    assert len(semantic["snapshots"][0]["occurrences"]) == 3
+    assert observed_turns == [1, 2, 3]
+    forged = deepcopy(checkpoint)
+    forged["owner"]["working_state"]["semantic_state"]["snapshots"][0]["state"]["hypotheses"][0]["status"] = "refuted"
+    forged_ref = task.save("session-checkpoint", forged)
+    pointer = task.root / "session-checkpoints" / (canonical_hash(task.contract_ref) + ".json")
+    original_pointer = pointer.read_bytes()
+    pointer.write_text(json.dumps({"checkpoint_ref": forged_ref, "host_config_ref": checkpoint["host_config_ref"]}), encoding="utf-8")
+    with pytest.raises(ValueError, match="SEMANTIC_STATE_NOT_OBSERVED"):
+        load_task_agent_checkpoint(artifact_store_root=store, checkpoint_ref=forged_ref)
+    pointer.write_bytes(original_pointer)
+    assert observed_turns == [1, 2, 3]
+
+    code = cli.main(["run-request", "--resume-task-agent", good_ref, "--artifact-store-root", str(store)])
+    result = json.loads(capsys.readouterr().out)
+    assert code == 0 and result["status"] == "awaiting_delivery", result
+    assert result["new_task_created"] is False
+    assert observed_turns == list(range(1, 11))
+    assert result["cumulative_resources"]["model_calls"] == 10
+    final = load_task_agent_checkpoint(artifact_store_root=store, checkpoint_ref=result["v2_checkpoint_ref"])
+    assert len(final["checkpoint"]["owner"]["working_state"]["semantic_state"]["events"]) == 10
+
+
 def test_os_lock_excludes_concurrent_owner_but_releases_without_deleting_file(tmp_path):
     with single_task_lock(tmp_path, "contract"):
         with pytest.raises(ValueError, match="SESSION_ALREADY_RUNNING"):

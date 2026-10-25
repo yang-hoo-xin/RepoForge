@@ -7022,6 +7022,7 @@ def run_local_request(
     task_agent_candidate_mode: str = "baseline",
     task_agent_protocol: str = "v1",
     task_agent_experience_config: str | None = None,
+    task_agent_semantic_state: str = "enabled",
     execution_trace_configuration: Any = None,
     external_patch_profile: Any = None,
     defer_approval: bool = False,
@@ -7031,6 +7032,10 @@ def run_local_request(
     """Run one request through the existing graph against an isolated target copy."""
     entry_clock = None
     task_deadline_utc = None
+    if task_agent_semantic_state not in {"enabled", "disabled"}:
+        raise LocalEntryError("RUN_REQUEST_SEMANTIC_STATE_POLICY_INVALID")
+    if task_agent_semantic_state != "enabled" and task_agent_protocol != "v2":
+        raise LocalEntryError("RUN_REQUEST_SEMANTIC_STATE_REQUIRES_V2")
     if task_agent_protocol == "v2":
         entry_clock = {"received_at": datetime.now(timezone.utc).isoformat(),
             "monotonic": time.monotonic(), "process_id": os.getpid()}
@@ -8386,7 +8391,8 @@ def run_local_request(
                 from src.mod_agent.task_agent_v2_execution import TaskAgentExecutionV2
                 executor_class = TaskAgentExecutionV2
             task_agent_execution = executor_class(
-                **({"experience_configuration_ref": experience_configuration_ref, "deadline_utc": task_deadline_utc}
+                **({"experience_configuration_ref": experience_configuration_ref, "deadline_utc": task_deadline_utc,
+                    "semantic_state_enabled": task_agent_semantic_state == "enabled"}
                    if task_agent_protocol == "v2" else {}),
                 artifact_store=artifact_store, workspace_root=run_root, profile=worker_profile,
                 policy=worker_policy, behavior_evaluator=patch_worker_configuration.behavior_evaluator(),

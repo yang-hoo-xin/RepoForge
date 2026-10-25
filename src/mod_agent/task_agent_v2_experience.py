@@ -235,6 +235,70 @@ def seal_current_public_episode(owner, session=None):
     return collector._episode(session)
 
 
+def _semantic_validation_evidence(owner, session, execution):
+    """Seal compact validation facts from an authenticated checkpoint, without model calls.
+
+    为什么要有它：结构化声明可被接受、拒绝或留空，后续学习需要这些真实处理结果，而不是再复制全部状态正文。
+    """
+    checkpoint_ref = getattr(owner, "_public_episode_checkpoint_ref", None) or getattr(owner, "v2_checkpoint_ref", None)
+    if checkpoint_ref is None:
+        return None
+    state = session.state
+    checkpoint = state.load(checkpoint_ref)
+    semantic = (checkpoint.get("owner", {}).get("working_state") or {}).get("semantic_state")
+    if semantic is None:
+        return None
+    _learning_require(checkpoint["task_contract_ref"] == state.contract_ref
+        and all(checkpoint["details"].get(key) == execution.get(key) for key in ("run_id", "request_id")),
+        "SEMANTIC_CHECKPOINT_TASK_CHANGED")
+    from src.mod_agent.task_agent_v2_recovery import _ref, _trusted_read, _validate_completed
+    from src.mod_agent.task_agent_v2_semantic_state import validate_semantic_state
+
+    host = state.load(checkpoint["host_config_ref"])
+    _learning_require(host.get("semantic_state_enabled") is True, "SEMANTIC_POLICY_NOT_ENABLED")
+    _validate_completed(checkpoint, state.store_root)
+    turns = []
+    for index, turn in enumerate(checkpoint["details"]["provider_turns"], 1):
+        _learning_require(turn["turn"] == index, "SEMANTIC_PROVIDER_SEQUENCE_CHANGED")
+        if not turn.get("response_ref"):
+            continue
+        request = _trusted_read(_public_reference(turn["request_ref"]), state.store_root)
+        response = _trusted_read(_public_reference(turn["response_ref"]), state.store_root)
+        _learning_require(isinstance(turn.get("reservation_id"), str)
+            and re.fullmatch(r"[0-9a-f]{32}", turn["reservation_id"]), "SEMANTIC_PROVIDER_RESERVATION_INVALID")
+        # 为什么要有它：停止检查点可能已有下一次预留但尚无响应；仅核验已落盘响应，不替未知尾部补终态。
+        outcome_ref = _ref(Path(turn["request_ref"]["path"]).parent / ("provider-outcome-" + turn["reservation_id"] + ".json"))
+        _learning_require(_trusted_read(_public_reference(outcome_ref), state.store_root) == turn,
+            "SEMANTIC_PROVIDER_OUTCOME_CHANGED")
+        turns.append({"request_ref": turn["request_ref"], "response_ref": turn["response_ref"],
+            "request": request, "response": response})
+    validate_semantic_state(checkpoint["owner"]["working_state"], turns)
+    completed_order = {row["call_id"]: index for index, row in enumerate(execution["completed_tool_records"])}
+    events = []
+    for event in semantic["events"]:
+        compact = {key: deepcopy(event[key]) for key in (
+            "request_ref", "response_ref", "call_ids", "status", "diagnostics", "snapshot_id") if key in event}
+        # 为什么要有它：校验事实需要接回实际动作索引；未在完成prefix中的调用保留未知，不能凭声明推断已执行。
+        compact["action_indices"] = [completed_order[call_id] for call_id in event["call_ids"] if call_id in completed_order]
+        compact["outside_completed_prefix_call_ids"] = [call_id for call_id in event["call_ids"] if call_id not in completed_order]
+        events.append(compact)
+    summary = {"schema": "task-agent-public-semantic-validation.v1", "task_contract_ref": state.contract_ref,
+        "source_checkpoint_ref": _ref(Path(state.store_root) / checkpoint_ref),
+        "source_execution_ref": deepcopy(owner.execution_receipt().execution_ref),
+        "events": events,
+        "validation_scope": "Retained checkpoint prefix: recorded metadata shape, visible-quote provenance and update handling only. "
+            "call_ids names metadata-bearing calls, not every action in a response. "
+            "Accepted/reaffirmed does not mean semantic truth, hypothesis refutation, business success or strategy adoption.",
+        "model_calls": 0, "authority_changed": False}
+    name = "public-semantic-validation-" + canonical_hash(summary) + ".json"
+    try:
+        return owner._save(name, summary)
+    except FileExistsError:
+        reference = _ref(Path(owner.output_root) / name)
+        _learning_require(read_bound_json(reference) == summary, "SEMANTIC_VALIDATION_CHANGED")
+        return reference
+
+
 def _process_context(session, current_task_state=None):
     """Project current, source-bound process facts for conditional strategy selection.
 
@@ -592,6 +656,11 @@ class TaskAgentV2Experience:
                 for field in ("name", "arguments"))
             selections.append({"evidence_id": evidence_id, "locator": ["content"],
                 "role": "model_statement", "action_index": index})
+            if "working_state" in _response["tool_calls"][index_in_response]["arguments"]:
+                # 为什么要有它：同一次动作中的结构化声明也是明确表达；原字典、空值及非法声明均保留，不代写判断。
+                selections.append({"evidence_id": evidence_id,
+                    "locator": ["tool_calls", index_in_response, "arguments", "working_state"],
+                    "role": "model_statement", "action_index": index})
             result_id = evidence_id + "_result"
             sources.append({"kind": "json_file", "evidence_id": result_id, **call["execution_receipt_ref"],
                 "visibility": "public", "allowed_uses": ["strategy_learning"]})
@@ -616,6 +685,12 @@ class TaskAgentV2Experience:
         selections.extend({"evidence_id": "technical_outcome", "locator": [field], "role": "technical_outcome"}
             for field in ("status", "candidate_ref", "check_ref", "unknown_effects",
                 "native_terminal", "business_result", "stop_attribution", "collector_scope") if field in execution)
+        semantic_validation = _semantic_validation_evidence(self.owner, session, execution)
+        if semantic_validation is not None:
+            sources.append({"kind": "json_file", "evidence_id": "semantic_validation", **semantic_validation,
+                "visibility": "public", "allowed_uses": ["strategy_learning"]})
+            selections.extend({"evidence_id": "semantic_validation", "locator": [field], "role": "technical_outcome"}
+                for field in ("events", "source_checkpoint_ref", "source_execution_ref", "validation_scope", "authority_changed"))
         if execution.get("schema") == "task-agent-public-process-observation.v1":
             checkpoint_path = Path(session.state.store_root) / execution["checkpoint_ref"]
             lineage = {"process_stop": execution["stop_ref"], "process_source": execution["process_ref"],

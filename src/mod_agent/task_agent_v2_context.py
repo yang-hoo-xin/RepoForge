@@ -98,14 +98,15 @@ def _action_facts(exchanges):
     return facts, total
 
 
-def project_history(request, state, *, history_bytes=None, context_window=None, output_budget=None, provider=None):
+def project_history(request, state, *, history_bytes=None, context_window=None, output_budget=None, provider=None,
+                    decorate=None):
     """Keep whole recent exchanges and the last public check; archive older ones.
 
     为什么要有它：已闭合原生调用可整体省略，但不能拆散请求响应、删执行事实，或把摘要当成模型当时的推理。
     """
     if history_bytes is None:
         return _project_configured_history(request, state, context_window=context_window,
-            output_budget=output_budget, provider=provider)
+            output_budget=output_budget, provider=provider, decorate=decorate)
     if type(history_bytes) is not int or history_bytes < 0:
         raise ValueError("TASK_AGENT_HISTORY_BUDGET_INVALID")
     history = request.historical_tool_exchanges
@@ -128,7 +129,7 @@ def project_history(request, state, *, history_bytes=None, context_window=None, 
             break
     archived = [asdict(exchange) for index, exchange in enumerate(history) if index not in retained]
     if not archived:
-        return request, None
+        return decorate(request) if decorate is not None else request, None
     reference = state.save("context-archive", {"schema": "task-agent-context-archive.v2",
         "task_contract_ref": state.contract_ref, "exchanges": archived})
     action_facts, archived_actions = _action_facts(archived)
@@ -141,8 +142,9 @@ def project_history(request, state, *, history_bytes=None, context_window=None, 
         "latest_public_check_retained": latest_check is not None or any(row.name == "candidate_check" for row in request.tool_results),
         "meaning": "Older closed exchanges omitted from this input only. history_read can retrieve their exact public data. "
             "This is not a model reasoning summary. Current source must be read at its exact revision before editing."}
-    return replace(request, historical_tool_exchanges=tuple(exchange for index, exchange in enumerate(history)
-        if index in retained)), facts
+    projected = replace(request, historical_tool_exchanges=tuple(exchange for index, exchange in enumerate(history)
+        if index in retained))
+    return decorate(projected) if decorate is not None else projected, facts
 
 
 def history_text(state, reference):
@@ -236,7 +238,7 @@ def protected_history_indices(history):
     return protected
 
 
-def _project_configured_history(request, state, *, context_window, output_budget, provider):
+def _project_configured_history(request, state, *, context_window, output_budget, provider, decorate=None):
     """Fit complete closed exchanges against the real provider limit, not a fixed byte tail.
 
     为什么要有它：工具、任务状态和输出预留共同占用窗口；预算不足必须披露，不能静默丢失当前调用或公开反例。
@@ -253,6 +255,10 @@ def _project_configured_history(request, state, *, context_window, output_budget
     retained = set(range(len(history)))
     removable = [index for index in range(len(history)) if index not in protected]
     estimator = getattr(provider, "_context_admission", None)
+
+    def decorated(candidate):
+        # 为什么要有它：引用目录必须随实际保留的历史重建并计入容量，不能继续声称已归档正文仍在本轮输入中。
+        return decorate(candidate) if decorate is not None else candidate
 
     def measure(candidate):
         payload = _provider_payload(candidate, context_window=context_window, output_budget=output_budget, provider=provider)
@@ -275,8 +281,8 @@ def _project_configured_history(request, state, *, context_window, output_budget
         facts["history_ref"] = "context-archive/" + "0" * 192 if len(retained) < len(history) else None
         candidate = replace(request, messages=projected_messages,
             historical_tool_exchanges=tuple(row for index, row in enumerate(history) if index in retained))
-        facts["context_admission"] = measure(with_history_projection(candidate, facts))
-        checked = with_history_projection(candidate, facts)
+        facts["context_admission"] = measure(decorated(with_history_projection(candidate, facts)))
+        checked = decorated(with_history_projection(candidate, facts))
         admission = measure(checked)
         if admission.get("admitted") is True:
             break
@@ -295,7 +301,7 @@ def _project_configured_history(request, state, *, context_window, output_budget
     archived = [asdict(exchange) for index, exchange in enumerate(history) if index not in retained]
     facts["history_ref"] = state.save("context-archive", {"schema": "task-agent-context-archive.v2",
         "task_contract_ref": state.contract_ref, "exchanges": archived}) if archived else None
-    final = with_history_projection(candidate, facts)
+    final = decorated(with_history_projection(candidate, facts))
     final_admission = measure(final)
     if final_admission.get("admitted") is not True:
         raise AgentTurnProviderError("TASK_AGENT_FINAL_CONTEXT_EXCEEDS_LIMIT", diagnostic={

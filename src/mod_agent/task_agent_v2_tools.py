@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import Any
 from uuid import uuid4
 
@@ -74,8 +74,19 @@ class TaskAgentSessionV2:
 
     def initial_request(self):
         from src.mod_agent.task_agent_execution import prepare_task_agent_contract
-        return prepare_task_agent_contract(self.state, workspace_root=self.owner.workspace_root,
+        request = prepare_task_agent_contract(self.state, workspace_root=self.owner.workspace_root,
             evaluator=self.evaluator, policy=self.owner.policy, protocol="v2")
+        if not getattr(self.owner, "semantic_state_enabled", True):
+            return request
+        # 为什么要有它：工作状态随同一次正常动作表达，缺失或无效的说明不能成为合法动作的新门禁。
+        return replace(request, messages=(*request.messages, AgentMessage("system",
+            "Include working_state with your next normal tool action. Maintain concise observations, hypotheses, "
+            "open questions and the purpose/expected observation of that action using the semantic contract "
+            "and actually seen evidence provided in current_task_state. Use an empty object only when the retained "
+            "state still describes the current decision and needs no update; "
+            "in a read-only batch include at most one nonempty update. These are your explicit advisory statements, "
+            "not hidden reasoning, established truth, new permission or completion. "
+            "Do not invent observations or cite unseen evidence.")))
 
     def response_admission(self, response):
         from src.mod_agent.task_agent_execution import _admitted_response
@@ -90,12 +101,19 @@ class TaskAgentSessionV2:
                 "arguments_ref": self.owner._save("model-arguments-" + uuid4().hex + ".json", call.arguments)})
 
     def _origin(self, name, arguments):
-        rows = [row for row in self.actual_calls if row["name"] == name and row["arguments"] == arguments]
+        rows = [row for row in self.actual_calls if row["name"] == name]
         dispatch = getattr(self, "_dispatch_call_id", None)
         if dispatch is not None:
             rows = [row for row in rows if row["call_id"] == dispatch]
+        if getattr(self.owner, "semantic_state_enabled", True):
+            from src.mod_agent.task_agent_v2_semantic_state import strip_working_state
+
+            rows = [row for row in rows if strip_working_state(row["arguments"]) == arguments]
+        else:
+            rows = [row for row in rows if row["arguments"] == arguments]
         if len(rows) != 1:
             raise ValueError("TASK_V2_REAL_MODEL_CALL_REQUIRED")
+        # 为什么要有它：执行只消费业务参数，来源与调用哈希仍指向模型实际提交的完整原文。
         return rows[0]
 
     def observe_dispatch_event(self, event):
@@ -415,7 +433,22 @@ class TaskAgentSessionV2:
                 lambda args, name=name, schema=schema: self._prepare(name, schema, args),
                 lambda args, name=name: self._execute(name, args), role in {"source_read", "source_search", "finish"}))
         from src.mod_agent.task_agent_v2_experiment_tools import experiment_actions
-        return [*result, *experiment_actions(self)]
+        result = [*result, *experiment_actions(self)]
+        if not getattr(self.owner, "semantic_state_enabled", True):
+            return result
+        from src.mod_agent.task_agent_v2_semantic_state import strip_working_state
+
+        decorated = []
+        for action in result:
+            schema = deepcopy(action.definition.parameters)
+            # 为什么要有它：完整契约在当前状态中只发送一次，工具中只声明紧凑公共字段，避免重复撑大上下文。
+            schema["properties"]["working_state"] = {"type": "object", "description":
+                "Advisory model working-state update under the contract in current_task_state; {} means no update."}
+            schema["required"] = [*schema.get("required", []), "working_state"]
+            decorated.append(replace(action,
+                definition=replace(action.definition, parameters=schema),
+                prepare=lambda args, prepare=action.prepare: prepare(strip_working_state(args))))
+        return decorated
 
     def run(self, client, record_event):
         restored = getattr(self.owner, "_resume_v2", None)

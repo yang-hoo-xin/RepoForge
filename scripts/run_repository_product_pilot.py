@@ -99,6 +99,10 @@ def freeze(configuration_ref):
         return freeze_strategy_pair(configuration_ref, config)
     if mode not in {"matched_product_pair", "absolute_real_B"}:
         raise ValueError("EXPLICIT_PILOT_MODE_REQUIRED")
+    semantic_state = config.get("task_agent_semantic_state", "enabled")
+    if type(semantic_state) is not str or semantic_state not in {"enabled", "disabled"}:
+        raise ValueError("PILOT_SEMANTIC_STATE_POLICY_INVALID")
+    # 为什么要有它：普通产品试跑的语义状态选择必须进入已绑定argv；经验配对仍保留其原冻结输入。
     for key in configuration_keys(config):
         read_bound_json(config[key]) if key in {"intent_ref", "public_profile_ref", "qualification_ref"} else _verify(config[key])
     qualification = read_bound_json(config["qualification_ref"])
@@ -161,6 +165,7 @@ def freeze(configuration_ref):
                 "--ollama-timeout-seconds", "600", "--model-call-budget-policy", "meter_only",
                 "--source-retrieval", "rg_live", "--confirm-isolated-write", "--allow-build", "--defer-approval",
                 "--technical-executor", "task_agent", "--task-agent-protocol", "v2",
+                "--task-agent-semantic-state", semantic_state,
                 "--constraint-policy", "source_priority_v1", "--task-agent-edit-paths", json.dumps(profile.data["allowed_edit_paths"])]
             execution = _save(arm_root / "base-execution.json", {"arguments": arguments})
             selected = prepare_new_task(execution_config=execution["path"], description=common)
@@ -181,7 +186,9 @@ def freeze(configuration_ref):
             base.update(run_id=options["--run-id"], run_root=str(run_root), platform_ref=platform,
                 execution_config_ref=_ref(selected), authorization_ref=authorization, policy_id=policy_id,
                 inspection=evidence_locator(execution_config=selected, run_id=options["--run-id"]),
-                bound_inputs=bound, configuration_difference="explicit context65536/output4096/temperature0/seed0; no injected strategy or terminal extraction configured",
+                bound_inputs=bound, task_agent_semantic_state=semantic_state,
+                configuration_difference="explicit context65536/output4096/temperature0/seed0; semantic working state="
+                    + semantic_state + "; no injected strategy or terminal extraction configured",
                 command=[sys.executable, "-I", "-B", str(root / "platform/scripts/run_frozen_product.py"),
                     "--_child", platform["path"], platform["sha256"]])
         plans[arm] = _save(arm_root / "frozen-plan.json", base)

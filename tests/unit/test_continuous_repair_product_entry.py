@@ -18,7 +18,7 @@ from tests.unit.test_csharp_repository_product_entry import (
 
 
 def test_normal_cli_no_plan_or_binding_gate_retains_observation_and_repairs(
-    repository_workspace, monkeypatch, capsys,
+    repository_workspace, monkeypatch, capsys, semantic_observer=None,
 ):
     profile, source = _profile(repository_workspace)
     baseline = (source / "Library/Arithmetic.cs").read_bytes()
@@ -118,6 +118,10 @@ def test_normal_cli_no_plan_or_binding_gate_retains_observation_and_repairs(
         else:
             assert phase == "finish" and last["status"] == "passed"
             name, arguments = "finish", {"candidate_ref": revision, "check_ref": last["check_ref"]}
+        if semantic_observer is not None:
+            # 为什么要有它：同一正常入口可检验语义声明与既有修复轨迹共同运行，避免复制或替换执行器。
+            arguments = semantic_observer(name=name, arguments=arguments, current=current,
+                last=last, request=payload, turn=len(requests), workspace=repository_workspace)
         actions.append(name)
         return httpx.Response(200, request=request, json={
             "model": model, "message": {"role": "assistant", "content": content,

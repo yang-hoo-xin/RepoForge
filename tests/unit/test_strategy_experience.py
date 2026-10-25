@@ -173,6 +173,29 @@ def test_ordered_projection_keeps_source_values_and_unknown_reasoning(tmp_path, 
     assert observed["model_statement"][0]["value"] == source["content"]
 
 
+@pytest.mark.parametrize("value, status, forms", [
+    ({"observations": [{"statement": "Visible declared claim"}]}, "explicit_structured_statement_unassessed", ["structured"]),
+    ({}, "not_explicitly_expressed", []),
+    ("invalid structured metadata", "explicit_text_unassessed", ["text"]),
+])
+def test_structured_model_statement_is_literal_and_separate_from_validation(value, status, forms):
+    from copy import deepcopy
+
+    from src.mod_agent.planning.strategy_experience import _episode_observations
+
+    source = {"working_state": deepcopy(value), "validation_events": [{"call_ids": ["call"], "status": "invalid",
+        "diagnostics": ["metadata_schema_invalid"]}]}
+    episode = {"projection_version": "ordered_public_actions_v1", "selections": [
+        {"evidence_id": "native", "locator": ["working_state"], "role": "model_statement", "action_index": 0},
+        {"evidence_id": "native", "locator": ["validation_events"], "role": "technical_outcome"}]}
+    result = _episode_observations(episode, {"native": source})["experience"]
+    action = result["actions"][0]
+    assert action["model_statement"][0]["value"] == source["working_state"] == value
+    assert action["model_statement_status"] == status and action["model_statement_forms"] == forms
+    assert result["technical_outcome"][0]["value"] == source["validation_events"]
+    assert "does not assess semantic truth" in result["fact_scope"]["technical_outcome"]
+
+
 @pytest.mark.parametrize("change", [{"role": "independent_acceptance"}, {"action_index": True}, {"action_index": -1}])
 def test_projection_metadata_cannot_add_outcome_or_fake_order(change):
     from src.mod_agent.planning.strategy_experience import _episode_observations

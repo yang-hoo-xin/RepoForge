@@ -54,6 +54,10 @@ jobs:
           tests/unit/test_task_agent_v2_source_paging.py
           tests/unit/test_task_agent_v2_context.py
           tests/unit/test_task_agent_v2_working_state.py
+          tests/unit/test_task_agent_v2_semantic_state.py
+          tests/unit/test_semantic_context_projection.py
+          tests/unit/test_semantic_work_state_tools.py
+          tests/unit/test_semantic_work_state_product_entry.py
           tests/unit/test_task_agent_v2_handoff.py
           tests/unit/test_task_agent_v2_product_entry.py
           tests/unit/test_task_agent_v2_recovery.py

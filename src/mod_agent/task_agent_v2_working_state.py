@@ -8,6 +8,7 @@ from copy import deepcopy
 
 from src.libs.llm.agent_turn import AgentTurnProviderError, _parse_ollama_tool_call
 from src.mod_agent.model_qualification import canonical_hash
+from src.mod_agent.task_agent_v2_semantic_state import strip_working_state
 
 _SCHEMA = "task-agent-working-state.v1"
 
@@ -107,7 +108,8 @@ def update_working_state(previous, request, *, task_contract_ref, current_revisi
                 continue
             seen_calls.append(identity)
             call = calls.get(result.call_id)
-            arguments = deepcopy(call.arguments) if call is not None and call.name == result.name else None
+            # 为什么要有它：同一读取的模型状态注释变化不等于工具产生新证据，原生调用哈希仍在执行台账保留。
+            arguments = strip_working_state(call.arguments) if call is not None and call.name == result.name else None
             fingerprint = canonical_hash({"name": result.name, "arguments": arguments,
                 "output": result.output})
             counts["completed_returns"] += 1

@@ -18,6 +18,63 @@ def test_absolute_real_b_does_not_require_external_product_readiness():
     assert "codex_executable_ref" in pilot.configuration_keys({"mode": "matched_product_pair"})
 
 
+@pytest.mark.parametrize("mode", ["absolute_real_B", "matched_product_pair"])
+@pytest.mark.parametrize("selected", [None, "enabled", "disabled"], ids=["default", "enabled", "disabled"])
+def test_semantic_state_reaches_generated_configuration_and_product_argv(tmp_path, monkeypatch, capsys, mode, selected):
+    from tests.unit.test_csharp_repository_backend import _profile
+
+    profile, source = _profile(tmp_path)
+    problem, contract, settings, executable = (tmp_path / name for name in ("problem.txt", "contract.txt", "settings.yaml", "codex.exe"))
+    problem.write_text("Double the input while preserving public signatures.", encoding="utf-8")
+    contract.write_text("Use the registered public checks.", encoding="utf-8")
+    settings.write_text("llm: {}\n", encoding="utf-8")
+    executable.write_text("CONTROLLED TEST DOUBLE; NOT EXECUTED", encoding="utf-8")
+    config = {"mode": mode, "root": str(tmp_path / "pilot"), "public_source_root": str(source),
+        "intent_ref": _save(tmp_path / "intent.json", {"kind": "controlled_pilot_freeze"}),
+        "public_profile_ref": profile.reference, "public_problem_ref": _ref(problem), "public_contract_ref": _ref(contract),
+        "qualification_ref": _save(tmp_path / "qualification.json", {"qualified": True,
+            "evaluator_ref": _save(tmp_path / "evaluator.json", {"controlled": True})}),
+        "settings_ref": _ref(settings), "environment": {}}
+    if mode == "matched_product_pair":
+        config["codex_executable_ref"] = _ref(executable)
+    if selected is not None:
+        config["task_agent_semantic_state"] = selected
+    captured = []
+
+    def snapshot(**kwargs):
+        captured.append(kwargs)
+        return _save(Path(kwargs["snapshot_root"]) / "execution_snapshot.json", {
+            "argv": kwargs["business_argv"], "controlled": True})
+
+    monkeypatch.setattr(pilot, "prepare_snapshot", snapshot)
+    monkeypatch.setattr(pilot, "validate_frozen_evaluator", lambda _qualification: None)
+    monkeypatch.setattr(pilot, "read_ollama_model_identity", lambda _url, model: {"model": model, "digest": pilot.DIGEST})
+    monkeypatch.setattr(pilot, "local_codex_command", lambda *_args: ["controlled-codex-not-executed"])
+    configuration = _save(tmp_path / "pilot-config.json", config)
+    pilot.freeze(configuration)
+    frozen = pilot.read_bound_json(json.loads(capsys.readouterr().out)["pilot_ref"])
+    plan = pilot.read_bound_json(frozen["plans"]["RepoForge_B"])
+    execution = pilot.read_bound_json(plan["execution_config_ref"])
+    expected = selected or "enabled"
+    for arguments in (execution["arguments"], captured[0]["business_argv"]):
+        assert arguments.count("--task-agent-semantic-state") == 1
+        assert arguments[arguments.index("--task-agent-semantic-state") + 1] == expected
+    assert plan["task_agent_semantic_state"] == expected
+    assert plan["configuration_ref"] == configuration
+    assert configuration in plan["bound_inputs"]
+    assert frozen["model_calls"] == 0 and not (Path(plan["root"]) / "started.json").exists()
+
+
+@pytest.mark.parametrize("mode", ["absolute_real_B", "matched_product_pair"])
+@pytest.mark.parametrize("value", [None, True, "on", {}], ids=["null", "boolean", "unknown", "object"])
+def test_invalid_semantic_state_is_rejected_before_freeze_preparation(tmp_path, monkeypatch, mode, value):
+    monkeypatch.setattr(pilot, "validate_frozen_evaluator", lambda _value: pytest.fail("No evaluator preparation"))
+    monkeypatch.setattr(pilot, "read_ollama_model_identity", lambda *_args: pytest.fail("No provider admission"))
+    configuration = _save(tmp_path / "invalid.json", {"mode": mode, "task_agent_semantic_state": value})
+    with pytest.raises(ValueError, match="SEMANTIC_STATE_POLICY_INVALID"):
+        pilot.freeze(configuration)
+
+
 def test_local_command_preserves_native_provider_and_private_boundaries(tmp_path):
     workspace = tmp_path / "workspace"
     project = workspace / "source/test/Example"

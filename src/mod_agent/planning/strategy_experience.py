@@ -81,17 +81,29 @@ def _episode_observations(episode, documents):
             groups[role].append(value)
     ordered = [actions[index] for index in sorted(actions)]
     for action in ordered:
-        action["model_statement_status"] = ("explicit_text_unassessed" if any(
-            row["value"] for row in action["model_statement"]) else "not_explicitly_expressed")
+        values = [row["value"] for row in action["model_statement"]]
+        forms = []
+        if any(isinstance(value, str) and bool(value) for value in values):
+            forms.append("text")
+        if any(isinstance(value, (dict, list)) and bool(value) for value in values):
+            forms.append("structured")
+        if any(value is not None and not isinstance(value, (str, dict, list)) for value in values):
+            forms.append("scalar")
+        action["model_statement_forms"] = forms
+        action["model_statement_status"] = ("explicit_structured_statement_unassessed" if "structured" in forms
+            else "explicit_scalar_statement_unassessed" if "scalar" in forms else "explicit_text_unassessed" if forms
+            else "not_explicitly_expressed")
     return {"experience": {"projection_version": episode["projection_version"], "actions": ordered, **groups,
         "fact_scope": {
             "order": "completed tool receipt order, not evidence of causal understanding",
             "action_request": "requested arguments, not proof of execution or correctness",
             "action_return": "actual returned fields, not proof they reached a subsequent request or were adopted",
-            "model_statement": "verbatim visible response only; no inferred hypothesis or private reasoning",
+            "model_statement": "verbatim visible response text or raw structured working_state arguments; "
+                "empty and invalid declarations remain as supplied; no inferred hypothesis or private reasoning",
             "nonexecuted_attempt": "loop retained not-dispatched records only; no code edit, test or side effect established",
             "public_check": "verified generated public reports, not independent hidden acceptance",
-            "technical_outcome": "native technical execution status; candidate_ready is not delivered",
+            "technical_outcome": "native technical execution status; candidate_ready is not delivered. "
+                "Recorded semantic metadata validation, when present, does not assess semantic truth or business success",
             "business_success_and_transfer": "not established by this projection"}}}
 
 

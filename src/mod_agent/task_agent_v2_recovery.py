@@ -91,6 +91,7 @@ class TaskAgentRecoveryJournal:
             task_agent_v2_experience,
             task_agent_v2_experiment_tools,
             task_agent_v2_experiments,
+            task_agent_v2_semantic_state,
             task_agent_v2_state,
             task_agent_v2_tools,
             task_agent_v2_working_state,
@@ -114,13 +115,15 @@ class TaskAgentRecoveryJournal:
                 "graph_state": deepcopy(graph_state), "original_budget_before": validate_budget(original_budget),
                 "logical_session_key": self.lock_key,
                 "candidate_mode": owner.candidate_mode, "deadline_utc": deadline,
+                "semantic_state_enabled": getattr(owner, "semantic_state_enabled", False),
                 "experience_configuration_ref": owner._experience.configuration_ref if owner._experience is not None else None,
                 "task_timing_origin_ref": deepcopy(getattr(owner, "_task_timing_origin_ref", None)),
                 "initial_request_ref": owner._save("recovery-initial-request.json", asdict(session.initial_request())),
                 "owner_refs": [_ref(module.__file__) for module in (
                     task_agent_execution, task_agent_loop, task_agent_v2_execution, task_agent_v2_tools,
                     task_agent_v2_state, task_agent_v2_experience, task_agent_v2_experiments,
-                    task_agent_v2_experiment_tools, task_agent_v2_context, task_agent_v2_working_state, public_failure_feedback,
+                    task_agent_v2_experiment_tools, task_agent_v2_context, task_agent_v2_working_state,
+                    task_agent_v2_semantic_state, public_failure_feedback,
                     strategy_experience, learning_request)] + [_ref(__file__)]}
             self.host_config_ref = self.state.save("host-recovery-config", host)
             with self.state._transaction("host-recovery-config", {"kind": "host_recovery_config", "host_config_ref": self.host_config_ref}) as (_head, result, _replay):
@@ -395,6 +398,11 @@ def _reconcile_checkpoint(state, checkpoint_ref, checkpoint, latest_path):
             registry_ref=boundary["binding_registry_ref"], current_check_ref=boundary["current_check_ref"])
         owner["working_state"] = retain_model_statement(working, response,
             response_ref=event["response_ref"], source_boundary=boundary)
+        if state.load(value["host_config_ref"]).get("semantic_state_enabled", False):
+            from src.mod_agent.task_agent_v2_semantic_state import record_semantic_state
+            # 为什么要有它：收到响应后的中断重建同一模型声明，不新增调用，也不按未投影历史扩大可引用范围。
+            owner["working_state"] = record_semantic_state(owner["working_state"], response,
+                actual_request=effective, request_ref=event["request_ref"], response_ref=event["response_ref"])
         owner["context_projection"] = deepcopy(current.get("context_budget"))
         usage = AgentUsage(**response["usage"]).to_dict()
         old_head, new_head = value["task_head"], state.head
@@ -523,6 +531,7 @@ def load_task_agent_checkpoint(*, artifact_store_root, checkpoint_ref, reconcile
     _no_links(latest)
     _require(json.loads(latest.read_bytes())["checkpoint_ref"] == checkpoint_ref, "CHECKPOINT_SUPERSEDED")
     host = state.load(checkpoint["host_config_ref"])
+    _require(type(host.get("semantic_state_enabled", False)) is bool, "SEMANTIC_STATE_FLAG_INVALID")
     _require(host["task_contract_ref"] == state.contract_ref and Path(host["artifact_store_root"]).resolve() == root, "HOST_TASK_CHANGED")
     _validate_host_binding(state, checkpoint, host)
     _require(all(_ref(ref["path"]) == ref for ref in host["owner_refs"]), "OWNER_CODE_CHANGED")
@@ -541,6 +550,12 @@ def load_task_agent_checkpoint(*, artifact_store_root, checkpoint_ref, reconcile
     validate_working_state(checkpoint["owner"].get("working_state"),
         responses=[_trusted_read(row["response_ref"], root) for row in checkpoint["details"]["provider_turns"]
             if row.get("response_ref")], call_records=checkpoint["loop"]["call_records"])
+    if host.get("semantic_state_enabled", False):
+        from src.mod_agent.task_agent_v2_semantic_state import validate_semantic_state
+        validate_semantic_state(checkpoint["owner"].get("working_state"), [
+            {"request_ref": row["request_ref"], "response_ref": row["response_ref"],
+             "request": _trusted_read(row["request_ref"], root), "response": _trusted_read(row["response_ref"], root)}
+            for row in checkpoint["details"]["provider_turns"] if row.get("response_ref")])
     return {"checkpoint_ref": checkpoint_ref, "checkpoint": checkpoint, "host": host, "state": state}
 
 
@@ -721,7 +736,8 @@ def _resume_v2_task_agent(*, artifact_store_root, checkpoint_ref):
             budget_snapshot=lambda: deepcopy(budget), allowed_edit_paths=tuple(host["allowed_edit_paths"]),
             allowed_read_roots=tuple(host["allowed_read_roots"]), output_root=output,
             deadline_utc=deadline_utc, candidate_mode=host["candidate_mode"],
-            experience_configuration_ref=host["experience_configuration_ref"])
+            experience_configuration_ref=host["experience_configuration_ref"],
+            semantic_state_enabled=host.get("semantic_state_enabled", False))
         _require(asdict(owner.policy) == host["policy"], "POLICY_CHANGED")
         owner._resume_v2 = loaded
         owner._resume_lock_held = True

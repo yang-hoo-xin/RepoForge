@@ -56,6 +56,23 @@ def test_repeated_return_feedback_is_factual_and_recovery_does_not_reset_or_doub
     assert changed["consecutive_repeated_returns"] == 0
 
 
+def test_changed_advisory_metadata_does_not_make_an_identical_read_new_evidence():
+    from src.mod_agent.model_qualification import canonical_hash
+
+    first, second = observed("first"), observed("second")
+    first.provider_state["tool_calls"][0]["function"]["arguments"]["working_state"] = {"hypothesis": "first"}
+    second.provider_state["tool_calls"][0]["function"]["arguments"]["working_state"] = {"hypothesis": "revised"}
+    raw_first = first.provider_state["tool_calls"][0]["function"]["arguments"]
+    raw_second = second.provider_state["tool_calls"][0]["function"]["arguments"]
+    assert canonical_hash(raw_first) != canonical_hash(raw_second)
+    working = advance(None, [first, second])
+    assert working["counts"]["completed_returns"] == 2
+    assert working["counts"]["distinct_returns"] == working["counts"]["repeated_returns"] == 1
+    assert working["latest_action"]["arguments"] == {"path": "source.cs"}
+    assert raw_first["working_state"] == {"hypothesis": "first"}
+    assert raw_second["working_state"] == {"hypothesis": "revised"}
+
+
 def test_model_response_content_is_exact_and_never_promoted_to_fact():
     response = AgentTurnResponse(provider="fixture", model="fixture", content="Hypothesis A is unconfirmed. " * 1000)
     working = retain_model_statement(None, response, response_ref={"path": "response.json", "sha256": "hash"})

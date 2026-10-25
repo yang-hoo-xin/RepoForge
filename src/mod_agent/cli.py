@@ -1238,6 +1238,8 @@ def build_parser(
     run_parser.add_argument("--task-agent-protocol", choices=("v1", "v2"), default="v1",
         help="Explicit task-agent protocol; v2 separates authority, technical plans and file bindings.")
     run_parser.add_argument("--task-agent-experience-config", help="Hash-bound host strategy snapshot and terminal learning configuration for v2.")
+    run_parser.add_argument("--task-agent-semantic-state", choices=("enabled", "disabled"), default="enabled",
+        help="Maintain model-authored evidence and hypotheses alongside normal v2 actions; disabled retains the legacy decision view.")
     run_parser.add_argument("--stage-model-call-limits",
         help="JSON object with the existing requirement_projection, requirement_findings, planning, initial_patch and repair call limits.")
     run_parser.add_argument("--dependency-api-config", help="Explicit hash-bound metadata/IL inspector configuration for the run-local GameFolder copy.")
@@ -2821,10 +2823,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "task_agent_candidate_mode": args.task_agent_candidate_mode,
                     "task_agent_protocol": args.task_agent_protocol,
                     "task_agent_experience_config": args.task_agent_experience_config,
+                    "task_agent_semantic_state": args.task_agent_semantic_state,
                     "task_agent_allowed_edit_paths": _task_agent_edit_paths(args.task_agent_edit_paths)}
                    if (args.technical_executor != "workflow" or args.constraint_policy is not None
                        or args.task_agent_edit_paths is not None or args.task_agent_candidate_mode != "baseline"
-                       or args.task_agent_protocol != "v1" or args.task_agent_experience_config is not None) else {}),
+                       or args.task_agent_protocol != "v1" or args.task_agent_experience_config is not None
+                       or args.task_agent_semantic_state != "enabled") else {}),
                 stage_model_call_limits=stage_limits,
                 execution_trace_configuration=_execution_trace_configuration(args),
                 defer_approval=bool(args.defer_approval),

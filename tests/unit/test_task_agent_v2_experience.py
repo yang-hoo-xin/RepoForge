@@ -419,7 +419,8 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
             row["name"] for row in native["completed_tool_records"]]
         assert all(a["model_statement_status"] == "not_explicitly_expressed" for a in actions)
         assert all(not a["model_statement"][0]["value"] for a in actions)
-        assert {row["locator"][0]: row["value"] for row in experience["technical_outcome"]} == {
+        assert {row["locator"][0]: row["value"] for row in experience["technical_outcome"]
+            if row["evidence_id"] == "technical_outcome"} == {
             key: native[key] for key in ("status", "candidate_ref", "check_ref", "unknown_effects")}
         assert "not delivered" in experience["fact_scope"]["technical_outcome"]
         assert "subsequent request" in experience["fact_scope"]["action_return"]
