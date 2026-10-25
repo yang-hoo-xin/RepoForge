@@ -20,6 +20,7 @@ from src.mod_agent.task_agent_v2_experiments import (
     ExperimentRejectedError,
     TaskAgentExperiments,
     _source,
+    probe_submission_contract,
 )
 
 
@@ -29,7 +30,7 @@ def experiment_configuration_facts(owner):
     为什么要有它：模型选择实验前应知道已确定的环境限制，配置存在仍不证明实际执行资格。
     """
     facts = {"scope": "configuration_only_not_runtime_qualification",
-        "probe_submission": {"status": "available", "executes_code": False},
+        "probe_submission": {"status": "available", "executes_code": False, "contract": probe_submission_contract()},
         "registered_tests": {"status": "configuration_unknown"},
         "probe_execution": {"status": "configuration_unknown"}}
     reference = getattr(owner, "worker_configuration_ref", None)
@@ -72,18 +73,21 @@ def _experiments(session):
 
 def experiment_actions(session):
     text = {"type": "string", "minLength": 1}
+    probe_contract = probe_submission_contract()
     specs = [
         ("test_catalog", {"type": "object", "additionalProperties": False, "properties": {
             "source_revision_ref": text, "execute_discovery": {"type": "boolean"}}},
          "Read registered method-group IDs from an executed public check. With execute_discovery=true, explicitly build and run the existing public suite at source_revision_ref (baseline is allowed) to register actual tests. Parameterized cases select the whole group; discovery does not grant finish."),
         ("probe_submit", {"type": "object", "additionalProperties": False,
-            "properties": {"source_revision_ref": text, "files": {"type": "array", "minItems": 1,
+            "properties": {"source_revision_ref": text, "files": {"type": "array", "minItems": 1, "maxItems": probe_contract["max_files"],
+                "description": "C# source only; at most 32768 UTF-8 bytes per file and 65536 bytes total. No project files or build scripts.",
                 "items": {"type": "object", "additionalProperties": False,
-                    "properties": {"relative_path": text, "content": {"type": "string"}},
+                    "properties": {"relative_path": {**text, "description": probe_contract["path_rule"],
+                        "examples": probe_contract["path_examples"]}, "content": {"type": "string"}},
                     "required": ["relative_path", "content"]}}, "entrypoint_id": {"enum": ["csharp_console"]},
                 "rationale": text, "expected_observation": text},
             "required": ["source_revision_ref", "files", "entrypoint_id", "rationale", "expected_observation"]},
-         "Save a version-bound temporary C# probe artifact under probe/*.cs. This does not run code or modify the candidate. Probe execution requires a qualified isolated runner."),
+         "Submit temporary C# console source at the exact revision. Use Program.cs or checks/Compare.cs; the host stores it privately under probe/. Already prefixed probe/*.cs is accepted. Submission does not run code or modify candidate/source. Execution requires a separate experiment_run with a qualified isolated runner."),
         ("experiment_run", {"type": "object", "additionalProperties": False,
             "properties": {"source_revision_ref": text, "kind": {"enum": ["registered_test", "temporary_probe"]},
                 "catalog_ref": text, "test_ids": {"type": "array", "minItems": 1, "uniqueItems": True, "items": text},
@@ -135,7 +139,18 @@ def experiment_actions(session):
                 probe_artifact_ref=args["probe_artifact_ref"], operation_id=origin["call_id"], model_origin=model_origin)
         except ExperimentRejectedError as error:
             # 为什么要有它：该类型只表示已知准入拒绝，真正执行后未知异常仍交给共享循环保留unknown。
-            return {"status": "rejected", "reason": str(error), "executed": False, "grants_acceptance": False}
+            rejected = {"status": "rejected", "reason": str(error), "executed": False, "grants_acceptance": False}
+            if name == "probe_submit":
+                code = str(error)
+                fields = {"PROBE_PATH_DENIED": "files[].relative_path", "PROBE_DUPLICATE_PATH": "files[].relative_path",
+                    "PROBE_FILES_INVALID": "files", "PROBE_FILE_INVALID": "files[]", "PROBE_FILE_TOO_LARGE": "files[].content",
+                    "PROBE_SUBMISSION_TOO_LARGE": "files", "PROBE_ENTRYPOINT_DENIED": "entrypoint_id",
+                    "PROBE_HYPOTHESIS_REQUIRED": "rationale/expected_observation"}
+                rejected["feedback"] = {"code": code, "field": fields.get(code), "repairable": code in fields,
+                    "next_action": "Correct the indicated field using this contract and resubmit; no probe was executed."
+                        if code in fields else "The host probe configuration requires repair before resubmission.",
+                    "contract": probe_submission_contract()}
+            return rejected
 
     def execute(name, args):
         output = execute_owned(name, args)

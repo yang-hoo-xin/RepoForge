@@ -363,6 +363,138 @@ def _validate_host_binding(state, checkpoint, host):
     _require(envelope["status"] == "success", "FEATURE_SPEC_NOT_ADMITTED")
 
 
+def _validate_probe_receipt(state, origin, output, *, receipt_ref, model_profile, known_calls=()):
+    """Recheck saved probe facts without constructing or invoking an execution runner.
+
+    为什么要有它：工具回执先于循环检查点落盘，恢复只能核验既有原件，不能重做资格检查或容器执行。
+    """
+    from types import SimpleNamespace
+
+    from src.mod_agent.task_agent_v2_experiments import (
+        _PROBE_PROFILE,
+        _source,
+        normalize_probe_path,
+    )
+    from src.mod_agent.task_agent_v2_semantic_state import strip_working_state
+
+    arguments = strip_working_state(origin["arguments"])
+    ref, identity, _files = _source(state, arguments["source_revision_ref"])
+    model_origin = {key: origin[key] for key in ("call_id", "response_ref", "arguments_ref")}
+    if origin["name"] == "probe_submit":
+        _require(set(output) == {"probe_artifact_ref", "source_revision_ref", "source_identity", "executed", "path_mapping"}
+            and output["source_revision_ref"] == ref and output["source_identity"] == identity
+            and output["executed"] is False, "PROBE_SUBMISSION_RECEIPT_CHANGED")
+        probe = state.load(output["probe_artifact_ref"])
+        profile = state.load(probe["profile_ref"])
+        _require(profile == _PROBE_PROFILE, "PROBE_PROFILE_CHANGED")
+        files = arguments["files"]
+        _require(isinstance(files, list) and 0 < len(files) <= profile["max_files"], "PROBE_FILES_CHANGED")
+        rows, mapping = [], []
+        for row in files:
+            path = normalize_probe_path(row["relative_path"])
+            _require(isinstance(row["content"], str) and len(row["content"].encode("utf-8")) <= profile["max_file_bytes"],
+                "PROBE_FILES_CHANGED")
+            rows.append({"relative_path": path, "content": row["content"],
+                "sha256": hashlib.sha256(row["content"].encode("utf-8")).hexdigest()})
+            mapping.append({"submitted_path": row["relative_path"], "artifact_path": path})
+        _require(len({row["relative_path"].casefold() for row in rows}) == len(rows)
+            and sum(len(row["content"].encode("utf-8")) for row in rows) <= profile["max_total_bytes"], "PROBE_FILES_CHANGED")
+        _require(probe == {"schema": "task-agent-probe.v2", "task_contract_ref": state.contract_ref,
+            "source_revision_ref": ref, "source_identity": identity, "profile_ref": probe["profile_ref"],
+            "entrypoint_id": arguments["entrypoint_id"], "files": rows, "path_mapping": mapping,
+            "rationale": arguments["rationale"], "expected_observation": arguments["expected_observation"],
+            "model_origin": model_origin} and output["path_mapping"] == mapping
+            and arguments["entrypoint_id"] == "csharp_console", "PROBE_SUBMISSION_CHANGED")
+        return
+
+    original = state.load(output["result_ref"])
+    request = original["request"]
+    operation = state.head["operations"].get("experiment:" + origin["call_id"])
+    _require(original.get("schema") == "task-agent-experiment-result.v2" and operation is not None
+        and operation["request_hash"] == canonical_hash(request)
+        and request["task_contract_ref"] == state.contract_ref and request["model_origin"] == model_origin
+        and request["source_revision_ref"] == ref and request["source_identity"] == identity
+        and request["verification_scope"] == "exploration_only", "EXPERIMENT_OPERATION_CHANGED")
+    kind = "probe" if arguments["kind"] == "temporary_probe" else "registered_tests"
+    selection = ("probe_artifact_ref",) if kind == "probe" else ("catalog_ref", "test_ids")
+    _require(request["kind"] == kind and all(request[key] == arguments[key] for key in selection),
+        "EXPERIMENT_SELECTION_CHANGED")
+    probe = None
+    if kind == "probe":
+        from src.mod_agent.task_agent_v2_experience import _validated_action
+
+        probe = state.load(request["probe_artifact_ref"])
+        _require(probe.get("task_contract_ref") == state.contract_ref and probe.get("source_revision_ref") == ref
+            and probe.get("source_identity") == identity and probe.get("profile_ref") == request["profile_ref"],
+            "EXPERIMENT_PROBE_CHANGED")
+        submissions = [call for call in known_calls if call["name"] == "probe_submit"
+            and {key: call[key] for key in ("call_id", "response_ref", "arguments_ref")} == probe["model_origin"]]
+        _require(len(submissions) == 1, "EXPERIMENT_PROBE_SUBMISSION_MISSING")
+        submission = submissions[0]
+        session = SimpleNamespace(state=state,
+            owner=SimpleNamespace(profile=SimpleNamespace(to_dict=lambda: model_profile)))
+        _response, _index, submitted = _validated_action(submission, session)
+        _require(submitted["output"].get("probe_artifact_ref") == request["probe_artifact_ref"], "EXPERIMENT_PROBE_CHANGED")
+        _validate_probe_receipt(state, submission, submitted["output"],
+            receipt_ref=submission["execution_receipt_ref"], model_profile=model_profile)
+    if output.get("executed") is True:
+        from src.mod_agent.task_agent_v2_experience import _experiment_evidence
+
+        _require(operation["result"] == output, "EXPERIMENT_RECEIPT_CHANGED")
+        session = SimpleNamespace(state=state, actual_calls=[{**origin, "execution_receipt_ref": receipt_ref}],
+            owner=SimpleNamespace(profile=SimpleNamespace(to_dict=lambda: model_profile)))
+        evidence = _experiment_evidence(session, {origin["call_id"]})
+        _require(len(evidence) == 1 and evidence[0]["result_ref"] == output["result_ref"], "EXPERIMENT_EVIDENCE_MISSING")
+        observed = evidence[0]["observations"]
+        logs = state.load(observed["logs_ref"])
+        if kind == "probe":
+            if observed["execution_kind"] == "controlled":
+                _require(("operation_id" not in logs or logs["operation_id"] == origin["call_id"])
+                    and ("observations" not in logs or logs["observations"] == observed.get("observations")),
+                    "CONTROLLED_PROBE_LOG_CHANGED")
+            else:
+                _require(observed["execution_kind"] == "isolated" and logs.get("schema") == "task-agent-probe-execution.v2"
+                    and logs.get("operation_id") == origin["call_id"]
+                    and logs.get("source_revision_ref") == ref and logs.get("source_identity") == identity
+                    and logs.get("probe") == probe and logs.get("runner_identity") == observed["runner_identity"],
+                    "PROBE_LOG_BINDING_CHANGED")
+                executed = logs["execution"]
+                runtime = executed["runtime_execution"]
+                _require(observed["exit_code"] == executed["exit_code"] and observed["passed"] == executed["passed"]
+                    and observed["compiled_project_path"] == logs["project_path"]
+                    and observed["source_manifest_sha256"] == canonical_hash(executed["source_manifest"])
+                    and observed["dependency_manifest_sha256"] == canonical_hash(executed["dependency_manifest"])
+                    and observed["observations"] == {"compiled": executed["compiled"], "build_status": executed.get("build_status"),
+                        "build_diagnostics": executed.get("build_diagnostics"), "stdout": runtime["stdout"] if runtime else "",
+                        "stderr": runtime["stderr"] if runtime else executed["compile_execution"]["stderr"]},
+                    "PROBE_LOG_OBSERVATIONS_CHANGED")
+                for run in [executed["compile_execution"], *([runtime] if runtime else [])]:
+                    _require(read_bound_json(run["receipt_ref"]) == {key: value for key, value in run.items() if key != "receipt_ref"}
+                        and run["policy_verified"] is True, "PROBE_CONTAINER_RECEIPT_CHANGED")
+                    for field in ("create_ref", "inspect_before_ref", "inspect_after_ref"):
+                        read_bound_json(run[field])
+                _require(bool(logs["qualification_refs"]), "PROBE_QUALIFICATION_MISSING")
+                for reference in logs["qualification_refs"]:
+                    proof = read_bound_json(reference)
+                    _require(proof.get("status") == "qualified" and proof.get("profile_ref") == request["profile_ref"]
+                        and proof.get("runner_identity") == observed["runner_identity"] and proof.get("execution_kind") == "isolated"
+                        and proof.get("boundaries") == {"filesystem": "isolated", "network": "denied", "process": "isolated"},
+                        "PROBE_QUALIFICATION_CHANGED")
+                    for reference in proof["execution_refs"]:
+                        read_bound_json(reference)
+    else:
+        capability = request.get("capability")
+        expected = {**operation["result"],
+            "capability_reason": capability.get("reason", "qualified_runner_not_configured") if isinstance(capability, dict)
+                else "qualified_runner_not_configured",
+            "qualification_attempt_ref": capability.get("qualification_attempt_ref") if isinstance(capability, dict) else None}
+        _require(kind == "probe" and output == expected and output["status"] == "capability_unavailable"
+            and output["executed"] is False and output["grants_acceptance"] is False
+            and "dispatched_ref" not in original
+            and all(original.get(key) == value for key, value in operation["result"].items() if key != "result_ref"),
+            "EXPERIMENT_UNEXECUTED_RECEIPT_CHANGED")
+
+
 def _reconcile_checkpoint(state, checkpoint_ref, checkpoint, latest_path):
     from src.libs.llm.agent_turn import AgentUsage
     from src.mod_agent.task_agent_execution import _admitted_response
@@ -432,7 +564,9 @@ def _reconcile_checkpoint(state, checkpoint_ref, checkpoint, latest_path):
         pending = [key for key, row in loop["call_records"].items() if row["status"] == "pending"]
         _require(len(pending) == 1, "PENDING_TOOL_IDENTITY_INVALID")
         call_id = pending[0]
-        reference = _ref(output_root / ("tool-receipt-" + canonical_hash(call_id) + ".json"))
+        receipt_path = output_root / ("tool-receipt-" + canonical_hash(call_id) + ".json")
+        _require(receipt_path.is_file(), "TOOL_OUTCOME_UNCONFIRMED")
+        reference = _ref(receipt_path)
         receipt = read_bound_json(reference)
         origin = next(row for row in value["session"]["actual_calls"] if row["call_id"] == call_id)
         _require(receipt["origin"] == {key: item for key, item in origin.items() if key != "execution_receipt_ref"}
@@ -451,6 +585,9 @@ def _reconcile_checkpoint(state, checkpoint_ref, checkpoint, latest_path):
             checked = state.load(output["check_ref"])
             _require(checked["candidate_ref"] == arguments["candidate_ref"], "CHECK_CANDIDATE_CHANGED")
             validate_candidate_report_v2(checked["report"], context=read_bound_json(checked["request_ref"]))
+        elif name in {"probe_submit", "experiment_run"}:
+            _validate_probe_receipt(state, origin, output, receipt_ref=reference,
+                model_profile=value["details"]["model_profile"], known_calls=value["session"]["actual_calls"])
         elif name not in {"source_read", "candidate_read", "source_search", "check_feedback_read", "history_read", "finish"}:
             raise ValueError("TASK_V2_RECOVERY_TOOL_REQUIRES_SPECIALIZED_RECONCILIATION")
         previous = loop["call_records"][call_id]

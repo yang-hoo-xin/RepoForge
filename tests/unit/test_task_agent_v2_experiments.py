@@ -132,13 +132,45 @@ def test_probe_submission_without_sandbox_does_not_block_tests_or_candidates(sta
             probe_artifact_ref=submitted["probe_artifact_ref"], operation_id="wrong-version")
 
 
-@pytest.mark.parametrize("path", ["../A.cs", "Library/A.cs", "probe/build.targets", "probe/x.csproj", "probe/../A.cs",
-    "probe/.git/Own.cs", "probe/CON.cs"])
+@pytest.mark.parametrize("path", ["../A.cs", "/tmp/A.cs", "C:/tmp/A.cs", "\\\\host\\A.cs", "probe/build.targets",
+    "probe/x.csproj", "run.sh", "probe/../A.cs", "probe/.git/Own.cs", "probe/CON.cs", "aux.cs", "LPT¹.cs",
+    "CONIN$.cs", "nested//A.cs", "nested/./A.cs", "nested/A.cs ", "nested/A.CS", "nested/NUL/A.cs"])
 def test_probe_cannot_submit_project_scripts_or_escape_experiment_paths(state, path):
     owner = TaskAgentExperiments(state=state)
     with pytest.raises(ValueError):
         owner.probe_submit(source_revision_ref="baseline", files=[{"relative_path": path, "content": "text"}],
             entrypoint_id="csharp_console", rationale="reason", expected_observation="result")
+
+
+@pytest.mark.parametrize("path,normalized", [("Program.cs", "probe/Program.cs"),
+    ("checks/Compare.cs", "probe/checks/Compare.cs"), ("probe/Program.cs", "probe/Program.cs")])
+def test_logical_probe_paths_become_private_artifacts_without_candidate_changes(state, path, normalized):
+    owner = TaskAgentExperiments(state=state)
+    before = state.head_path.read_bytes()
+    files = [{"relative_path": path, "content": "class Program {}"}]
+    origin = {"call_id": "original-call", "response_ref": "original-response", "arguments_ref": "original-arguments"}
+    result = owner.probe_submit(source_revision_ref="baseline", files=files, entrypoint_id="csharp_console",
+        rationale="Compare a concrete result", expected_observation="The returned value differs", model_origin=origin)
+    artifact = state.load(result["probe_artifact_ref"])
+    assert artifact["files"][0]["relative_path"] == normalized
+    assert artifact["files"][0]["content"] == files[0]["content"]
+    assert artifact["model_origin"] == origin
+    assert files[0]["relative_path"] == path
+    assert result["path_mapping"] == [{"submitted_path": path, "artifact_path": normalized}]
+    assert artifact["path_mapping"] == result["path_mapping"]
+    assert result["executed"] is False and state.head_path.read_bytes() == before
+    assert state.current_revision_ref == state.contract["baseline_manifest_ref"]
+
+
+@pytest.mark.parametrize("paths", [("Program.cs", "probe/Program.cs"),
+    ("checks/A.cs", "probe/checks/a.cs"), ("A.cs", "a.cs")])
+def test_duplicate_normalized_probe_paths_are_rejected_before_artifact_write(state, paths):
+    owner = TaskAgentExperiments(state=state)
+    before = set(state.root.rglob("*"))
+    with pytest.raises(ExperimentRejectedError, match="PROBE_DUPLICATE_PATH"):
+        owner.probe_submit(source_revision_ref="baseline", files=[{"relative_path": path, "content": "class P {}"}
+            for path in paths], entrypoint_id="csharp_console", rationale="compare", expected_observation="value")
+    assert set(state.root.rglob("*")) == before
 
 
 def test_probe_size_and_entrypoint_are_host_limits(state):
@@ -171,6 +203,62 @@ def test_controlled_probe_runner_requires_evidence_and_remains_labelled_controll
     result = owner.experiment_run(source_revision_ref="baseline", probe_artifact_ref=probe["probe_artifact_ref"], operation_id="controlled-probe")
     assert result["observations"]["execution_kind"] == "controlled" and len(calls) == 1
     assert result["grants_acceptance"] is False
+
+
+@pytest.mark.parametrize("outcome", ["completed", "unavailable", "unknown", "dispatched"])
+def test_probe_replay_or_unknown_precedes_new_runner_qualification(state, outcome):
+    owner = TaskAgentExperiments(state=state)
+    probe = submit_probe(owner)
+    capability = {"status": "qualified", "profile_ref": owner.probe_profile_ref,
+        "execution_kind": "controlled", "runner_identity": {"kind": "controlled-fixture"},
+        "boundaries": {"filesystem": "isolated", "network": "denied", "process": "isolated"}}
+    capability["evidence_refs"] = [state.save("probe-qualification", deepcopy(capability))]
+    calls = {"qualification": 0, "run": 0}
+
+    def verify(_reference):
+        calls["qualification"] += 1
+        return None if outcome == "unavailable" else deepcopy(capability)
+
+    def run(**args):
+        calls["run"] += 1
+        if outcome == "unknown":
+            raise OSError("execution completion unknown")
+        if outcome == "dispatched":
+            raise KeyboardInterrupt("host stopped after dispatch")
+        ref, identity, _ = _source(state, args["source_revision_ref"])
+        return {"source_revision_ref": ref, "source_identity": identity, "runner_identity": capability["runner_identity"],
+            "execution_kind": "controlled", "execution_origin": "executed", "exit_code": 0,
+            "logs_ref": state.save("probe-logs", {"observed": "controlled only"})}
+
+    owner.probe_runner = SimpleNamespace(verify_capability=verify, run_probe=run)
+    args = {"source_revision_ref": "baseline", "probe_artifact_ref": probe["probe_artifact_ref"],
+        "operation_id": "same-probe", "model_origin": {"call_id": "native-call", "response_ref": "raw-response", "arguments_ref": "raw-args"}}
+    if outcome in {"unknown", "dispatched"}:
+        with pytest.raises(ExperimentOutcomeUnknownError if outcome == "unknown" else KeyboardInterrupt):
+            owner.experiment_run(**args)
+    else:
+        result = owner.experiment_run(**args)
+    assert calls["qualification"] >= 1
+    assert calls["run"] == (0 if outcome == "unavailable" else 1)
+    after_first = state.head_path.read_bytes()
+    restarted = TaskAgentExperiments(state=state, probe_profile_ref=owner.probe_profile_ref,
+        probe_runner=SimpleNamespace(
+            verify_capability=lambda *_args: pytest.fail("Replay/unknown must not qualify a fresh runner"),
+            run_probe=lambda **_kwargs: pytest.fail("Replay/unknown must not run a probe again")))
+    if outcome in {"unknown", "dispatched"}:
+        with pytest.raises(TaskAgentV2StateError, match="operation_outcome_unknown"):
+            restarted.experiment_run(**args)
+    else:
+        assert restarted.experiment_run(**args) == result
+    changed = deepcopy(args)
+    changed["model_origin"]["arguments_ref"] = "different-raw-args"
+    with pytest.raises(TaskAgentV2StateError, match="operation_identity_conflict"):
+        restarted.experiment_run(**changed)
+    assert state.head_path.read_bytes() == after_first
+    another = owner.probe_submit(source_revision_ref="baseline", files=[{"relative_path": "Other.cs", "content": "class Other {}"}],
+        entrypoint_id="csharp_console", rationale="different probe", expected_observation="different observation")
+    with pytest.raises(TaskAgentV2StateError, match="operation_identity_conflict"):
+        restarted.experiment_run(**{**args, "probe_artifact_ref": another["probe_artifact_ref"]})
 
 
 def test_csharp_catalog_reparses_real_trx_definitions_and_rejects_stale_report(state, tmp_path):

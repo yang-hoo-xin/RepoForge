@@ -12,7 +12,11 @@ from copy import deepcopy
 from pathlib import Path
 
 from src.mod_agent.model_qualification import canonical_hash, read_bound_json
-from src.mod_agent.task_agent_v2_state import _no_links, _path
+from src.mod_agent.task_agent_v2_state import TaskAgentV2StateError, _no_links, _path
+
+_PROBE_PROFILE = {
+    "schema": "task-agent-probe-profile.v2", "entrypoints": {"csharp_console": {"source_prefix": "probe/", "extensions": [".cs"]}},
+    "max_files": 8, "max_file_bytes": 32768, "max_total_bytes": 65536}
 
 
 class ExperimentRejectedError(ValueError):
@@ -26,6 +30,32 @@ class ExperimentOutcomeUnknownError(RuntimeError):
 def _require(condition, code):
     if not condition:
         raise ExperimentRejectedError(code)
+
+
+def probe_submission_contract():
+    """Describe the normal host-owned artifact contract without creating or executing it."""
+    return {"entrypoint_id": "csharp_console", "storage_prefix": "probe/",
+        "path_examples": ["Program.cs", "checks/Compare.cs", "probe/Program.cs"],
+        "path_rule": "Relative POSIX .cs filenames; the host adds probe/ when absent. Existing probe/ paths remain valid.",
+        "denied_paths": "Absolute paths, backslashes, traversal, dot/empty components, hidden/reserved names, non-.cs files and case-insensitive normalized duplicates.",
+        **{key: _PROBE_PROFILE[key] for key in ("max_files", "max_file_bytes", "max_total_bytes")},
+        "candidate_modified": False, "submission_executes_code": False}
+
+
+def normalize_probe_path(value):
+    """Map a logical filename to the private artifact subtree, without touching source.
+
+    为什么要有它：内部目录前缀由宿主管理；规范化不能把越界路径或构建脚本变成可执行输入。
+    """
+    try:
+        path = _path(value)
+    except TaskAgentV2StateError as error:
+        raise ExperimentRejectedError("PROBE_PATH_DENIED") from error
+    _require(Path(path).suffix == ".cs" and not re.search(r'[<>"|?*\x00-\x1f\x7f]', path)
+        and not any(part.startswith(".") or part.endswith(".") or part != part.strip() or re.fullmatch(
+            r"(?:CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[1-9¹²³]|LPT[1-9¹²³])(?:\..*)?", part, re.I)
+            for part in path.split("/")), "PROBE_PATH_DENIED")
+    return path if path.startswith("probe/") else "probe/" + path
 
 
 def _file_ref(path):
@@ -174,9 +204,7 @@ class CSharpRegisteredTestRunner:
 class TaskAgentExperiments:
     def __init__(self, *, state, test_runner=None, probe_profile_ref=None, probe_runner=None):
         self.state, self.test_runner, self.probe_runner = state, test_runner, probe_runner
-        self.probe_profile_ref = probe_profile_ref or state.save("probe-profile", {
-            "schema": "task-agent-probe-profile.v2", "entrypoints": {"csharp_console": {"source_prefix": "probe/", "extensions": [".cs"]}},
-            "max_files": 8, "max_file_bytes": 32768, "max_total_bytes": 65536})
+        self.probe_profile_ref = probe_profile_ref or state.save("probe-profile", deepcopy(_PROBE_PROFILE))
 
     def test_catalog(self, verification_ref):
         _require(self.test_runner is not None, "TEST_RUNNER_UNAVAILABLE")
@@ -228,33 +256,30 @@ class TaskAgentExperiments:
         _require(profile.get("schema") == "task-agent-probe-profile.v2", "PROBE_PROFILE_INVALID")
         entry = profile["entrypoints"].get(entrypoint_id)
         _require(entry is not None, "PROBE_ENTRYPOINT_DENIED")
+        _require(entry.get("source_prefix") == "probe/" and entry.get("extensions") == [".cs"], "PROBE_PROFILE_INVALID")
         _require(isinstance(rationale, str) and bool(rationale.strip()) and isinstance(expected_observation, str)
             and bool(expected_observation.strip()), "PROBE_HYPOTHESIS_REQUIRED")
         _require(isinstance(files, list) and 0 < len(files) <= profile["max_files"], "PROBE_FILES_INVALID")
-        rows, seen, total = [], set(), 0
+        rows, mapping, seen, total = [], [], set(), 0
         for row in files:
             _require(isinstance(row, dict) and set(row) == {"relative_path", "content"}
                 and isinstance(row["content"], str), "PROBE_FILE_INVALID")
-            path = _path(row["relative_path"])
-            _require(path.casefold() not in seen and path.startswith(entry["source_prefix"])
-                and Path(path).suffix in entry["extensions"] and Path(path).suffix == ".cs"
-                and not re.search(r'[<>"|?*\x00-\x1f]', path)
-                and not any(part.startswith(".") or part.endswith((".", " ")) or re.fullmatch(
-                    r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?", part, re.I)
-                    for part in path.split("/")), "PROBE_PATH_DENIED")
+            path = normalize_probe_path(row["relative_path"])
+            _require(path.casefold() not in seen, "PROBE_DUPLICATE_PATH")
             seen.add(path.casefold())
             size = len(row["content"].encode("utf-8"))
             _require(size <= profile["max_file_bytes"], "PROBE_FILE_TOO_LARGE")
             total += size
             rows.append({"relative_path": path, "content": row["content"], "sha256": hashlib.sha256(row["content"].encode("utf-8")).hexdigest()})
+            mapping.append({"submitted_path": row["relative_path"], "artifact_path": path})
         _require(total <= profile["max_total_bytes"], "PROBE_SUBMISSION_TOO_LARGE")
         ref, identity, _files = _source(self.state, source_revision_ref)
         payload = {"schema": "task-agent-probe.v2", "task_contract_ref": self.state.contract_ref,
             "source_revision_ref": ref, "source_identity": identity, "profile_ref": self.probe_profile_ref,
-            "entrypoint_id": entrypoint_id, "files": rows, "rationale": rationale,
+            "entrypoint_id": entrypoint_id, "files": rows, "path_mapping": mapping, "rationale": rationale,
             "expected_observation": expected_observation, "model_origin": deepcopy(model_origin or {})}
         return {"probe_artifact_ref": self.state.save("probe", payload), "source_revision_ref": ref,
-            "source_identity": identity, "executed": False}
+            "source_identity": identity, "path_mapping": deepcopy(mapping), "executed": False}
 
     def experiment_run(self, *, source_revision_ref, probe_artifact_ref, operation_id, model_origin=None):
         probe = self.state.load(probe_artifact_ref)
@@ -262,6 +287,12 @@ class TaskAgentExperiments:
         _require(probe.get("schema") == "task-agent-probe.v2" and probe.get("task_contract_ref") == self.state.contract_ref
             and probe.get("profile_ref") == self.probe_profile_ref, "PROBE_CONTRACT_CHANGED")
         _require(probe["source_revision_ref"] == ref and probe["source_identity"] == identity, "PROBE_REVISION_CHANGED")
+        request = {"kind": "probe", "source_revision_ref": ref, "source_identity": identity,
+            "probe_artifact_ref": probe_artifact_ref, "profile_ref": self.probe_profile_ref,
+            "model_origin": deepcopy(model_origin or {})}
+        replay = self._replay_probe_operation(operation_id, request)
+        if replay is not None:
+            return replay
         capability = self.probe_runner.verify_capability(self.probe_profile_ref) if self.probe_runner is not None else None
         qualified = (isinstance(capability, dict) and capability.get("status") == "qualified"
             and capability.get("profile_ref") == self.probe_profile_ref and capability.get("evidence_refs")
@@ -272,9 +303,7 @@ class TaskAgentExperiments:
                 evidence = self.state.load(reference) if isinstance(reference, str) else read_bound_json(reference)
                 qualified = qualified and all(evidence.get(key) == capability[key]
                     for key in ("status", "profile_ref", "runner_identity", "execution_kind", "boundaries"))
-        request = {"kind": "probe", "source_revision_ref": ref, "source_identity": identity,
-            "probe_artifact_ref": probe_artifact_ref, "profile_ref": self.probe_profile_ref,
-            "model_origin": deepcopy(model_origin or {}), "runner_identity": capability.get("runner_identity") if qualified else None}
+        request["runner_identity"] = capability.get("runner_identity") if qualified else None
         if not qualified:
             unavailable = self._execute(operation_id, {**request, "capability": deepcopy(capability)}, None)
             return {**unavailable, "capability_reason": capability.get("reason", "qualified_runner_not_configured") if isinstance(capability, dict)
@@ -289,6 +318,47 @@ class TaskAgentExperiments:
             return output
 
         return self._execute(operation_id, request, run)
+
+    def _replay_probe_operation(self, operation_id, request):
+        """Resolve historical work before any runner qualification side effects.
+
+        为什么要有它：新进程没有资格缓存；重放或未知结果必须先认出原操作，不能为了读回执再次启动容器。
+        """
+        _require(isinstance(operation_id, str) and operation_id, "EXPERIMENT_OPERATION_ID_REQUIRED")
+        key = "experiment:" + operation_id
+        expected = {**request, "task_contract_ref": self.state.contract_ref, "verification_scope": "exploration_only"}
+        head = self.state.head
+
+        def validate(stored, request_hash):
+            _require(isinstance(stored, dict) and canonical_hash(stored) == request_hash
+                and set(stored) in (set(expected) | {"runner_identity"}, set(expected) | {"runner_identity", "capability"}),
+                "EXPERIMENT_REPLAY_REQUEST_INVALID")
+            if any(stored.get(field) != value for field, value in expected.items()):
+                raise TaskAgentV2StateError("operation_identity_conflict")
+
+        if head.get("pending_operation"):
+            pending = self.state.load(head["pending_operation"])
+            _require(pending.get("schema") == "task-agent-operation-intent.v2"
+                and pending.get("contract_ref") == self.state.contract_ref, "EXPERIMENT_REPLAY_INTENT_INVALID")
+            if pending.get("operation_id") == key:
+                validate(pending["request"], pending["request_hash"])
+            raise TaskAgentV2StateError("operation_outcome_unknown")
+        operation = head["operations"].get(key)
+        if operation is None:
+            return None
+        result = operation["result"]
+        stored = self.state.load(result["result_ref"])
+        _require(stored.get("schema") == "task-agent-experiment-result.v2"
+            and all(stored.get(field) == value for field, value in result.items() if field != "result_ref"),
+            "EXPERIMENT_REPLAY_RESULT_INVALID")
+        validate(stored["request"], operation["request_hash"])
+        replay = self._execute(operation_id, stored["request"], None)
+        if replay.get("status") == "capability_unavailable":
+            capability = stored["request"].get("capability")
+            return {**replay, "capability_reason": capability.get("reason", "qualified_runner_not_configured")
+                if isinstance(capability, dict) else "qualified_runner_not_configured",
+                "qualification_attempt_ref": capability.get("qualification_attempt_ref") if isinstance(capability, dict) else None}
+        return replay
 
     def _execute(self, operation_id, request, runner):
         _require(isinstance(operation_id, str) and operation_id, "EXPERIMENT_OPERATION_ID_REQUIRED")

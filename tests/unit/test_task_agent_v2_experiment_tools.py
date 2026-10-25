@@ -2,6 +2,7 @@
 
 为什么要有它：测试发现是模型可选执行动作，失败不能丢失观察或继续沿用同版本旧验收。
 """
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -108,7 +109,11 @@ def test_actual_decision_request_reports_probe_configuration_without_claiming_qu
     assert actual.messages[0] == original.messages[0]
     assert facts["repository_profile_ref"] == profile_ref
     assert facts["registered_tests"]["status"] == "configured"
-    assert facts["probe_submission"] == {"status": "available", "executes_code": False}
+    assert facts["probe_submission"]["status"] == "available"
+    assert facts["probe_submission"]["executes_code"] is False
+    contract = facts["probe_submission"]["contract"]
+    assert contract["path_examples"] == ["Program.cs", "checks/Compare.cs", "probe/Program.cs"]
+    assert contract["storage_prefix"] == "probe/" and contract["max_files"] == 8
     assert facts["probe_execution"]["status"] == ("qualification_required" if configured else "unavailable")
     assert facts["probe_execution"]["runtime_qualification_verified"] is False
     # 为什么要有它：决策准备会保存公开工作状态，但不能执行环境资格、修改原件或消耗模型资源。
@@ -121,3 +126,49 @@ def test_actual_decision_request_reports_probe_configuration_without_claiming_qu
     expected = {state.store_root / state_ref, state.store_root / archive_ref}
     after = {path for path in state.root.rglob("*") if path.is_file()}
     assert after - set(before) == expected - set(before)
+
+
+def test_probe_path_rejection_is_repairable_and_raw_model_call_survives_normalization(session):
+    from src.libs.llm.agent_turn import AgentTurnResponse
+    from src.mod_agent.model_qualification import canonical_hash
+    from tests.unit.test_task_agent_v2_admission import action, response
+
+    state = session.state
+    session._experiments = TaskAgentExperiments(state=state)
+    baseline = state.materialize(state.current_revision_ref)
+    original_identity = {key: state.head[key] for key in ("current_revision_ref", "registry_ref", "plan_ref")}
+    raw, observations = [], []
+    definition = action(session, "probe_submit").definition
+    path_schema = definition.parameters["properties"]["files"]["items"]["properties"]["relative_path"]
+    assert "Program.cs" in path_schema["examples"]
+    assert "host" in path_schema["description"].lower()
+
+    def complete(request):
+        if raw:
+            observations.append(request.tool_results[-1].output["value"])
+        if len(raw) == 2:
+            return AgentTurnResponse("ollama_chat_local", "local", "", (), stop_reason="refusal", provider_state={})
+        args = {"source_revision_ref": state.current_revision_ref,
+            "files": [{"relative_path": "../Program.cs" if not raw else "Program.cs", "content": "class Program {}"}],
+            "entrypoint_id": "csharp_console", "rationale": "Compare a value", "expected_observation": "A different value",
+            "working_state": {"not_authority": "the original metadata survives"}}
+        raw.append(deepcopy(args))
+        return response("probe_submit", args, "path-fix-" + str(len(raw)))
+
+    result = session.run(SimpleNamespace(complete_turn=complete), session.observe_dispatch_event)
+    rejected, submitted = observations
+    assert rejected["status"] == "rejected" and rejected["executed"] is False
+    assert rejected["grants_acceptance"] is False and rejected["feedback"]["repairable"] is True
+    assert rejected["feedback"]["code"] == "PROBE_PATH_DENIED"
+    assert rejected["feedback"]["field"] == "files[].relative_path"
+    assert "Program.cs" in rejected["feedback"]["contract"]["path_examples"]
+    artifact = state.load(submitted["probe_artifact_ref"])
+    assert artifact["files"][0]["relative_path"] == "probe/Program.cs"
+    for index, call in enumerate(session.actual_calls):
+        assert call["arguments"] == raw[index]
+        assert result.call_records[call["call_id"]]["arguments_sha256"] == canonical_hash(raw[index])
+    assert artifact["model_origin"] == {key: session.actual_calls[1][key]
+        for key in ("call_id", "response_ref", "arguments_ref")}
+    assert state.materialize(state.current_revision_ref) == baseline
+    assert {key: state.head[key] for key in original_identity} == original_identity
+    assert result.unknown_effects is False
