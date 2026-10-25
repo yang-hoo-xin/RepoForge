@@ -100,8 +100,11 @@ class CSharpRepositoryProfile:
         required = {"profile_version", "dotnet_ref", "project_path", "test_project_path",
                     "nuget_config_path", "configuration", "allowed_edit_paths",
                     "expected_artifacts", "test_command", "test_report", "timeout_seconds"}
-        _require(required <= set(data) <= required | {"build_properties", "probe_runner", "diagnostics"},
+        _require(required <= set(data) <= required | {"build_properties", "probe_runner", "diagnostics", "allowed_skipped_tests"},
                  "PROFILE_FIELDS_INVALID")
+        if "allowed_skipped_tests" in data:
+            _skip_policy(data["allowed_skipped_tests"])
+            _require(data["test_report"]["format"] == "trx", "SKIP_POLICY_REQUIRES_TRX")
         if "diagnostics" in data:
             from src.mod_agent.domain.repository_diagnostics import validate_policy
             validate_policy(data["diagnostics"])
@@ -259,7 +262,62 @@ def _capture_targets():
     return ElementTree.tostring(project, encoding="utf-8", xml_declaration=True)
 
 
-def _read_tests(path, kind):
+def _skip_policy(value):
+    # 为什么要有它：只有宿主冻结的精确公开测试身份可以跳过，不能按名称通配或由模型扩大范围。
+    _require(isinstance(value, list), "SKIP_POLICY_INVALID")
+    policy = {}
+    for row in value:
+        _require(isinstance(row, dict) and set(row) == {"name", "class_name", "method_name", "max_instances"}
+                 and all(type(row[key]) is str and row[key].strip() == row[key] and bool(row[key])
+                         for key in ("name", "class_name", "method_name"))
+                 and type(row["max_instances"]) is int and row["max_instances"] > 0,
+                 "SKIP_POLICY_INVALID")
+        identity = tuple(row[key] for key in ("name", "class_name", "method_name"))
+        _require(identity not in policy, "SKIP_POLICY_DUPLICATE")
+        policy[identity] = row["max_instances"]
+    return policy
+
+
+def read_repository_tests(path, data, *, report=None):
+    """Parse once with the immutable profile and validate separately retained exclusions.
+
+    为什么要有它：候选、公开反馈和独立交付验收不能对同一份报告采用不同的跳过标准。
+    """
+    metadata = {}
+    if "allowed_skipped_tests" in data:
+        checks = _read_tests(path, data["test_report"]["format"], data["allowed_skipped_tests"], metadata=metadata)
+    else:
+        checks = _read_tests(path, data["test_report"]["format"])
+    if report is not None:
+        _require(report.get("test_execution_metadata", {}) == metadata, "TEST_EXECUTION_METADATA_CHANGED")
+    return checks, metadata
+
+
+def validate_declared_skips(report, *, profile_ref=None):
+    """Revalidate new-policy receipts without changing legacy receipt scope.
+
+    为什么要有它：正式Build、重放和恢复都必须核对跳过原件，旧未配置报告则保留原验证范围。
+    """
+    reference = profile_ref or report["profile_ref"]
+    _require(reference == report["profile_ref"], "PROFILE_CHANGED")
+    profile = CSharpRepositoryProfile(reference)
+    if "allowed_skipped_tests" not in profile.data:
+        _require("test_execution_metadata" not in report, "TEST_EXECUTION_METADATA_CHANGED")
+        return
+    if report.get("status") not in {"passed", "behavior_failed"}:
+        return
+    execution = report["test_execution"]
+    raw = execution["report_ref"]
+    _require(execution.get("status") == "executed" and _ref(raw["path"]) == raw, "TEST_REPORT_CHANGED")
+    checks, _ = read_repository_tests(Path(raw["path"]), profile.data, report=report)
+    _require(checks == report["checks"] and report["verification_summary"] == {
+        "checks": len(checks), "failed_checks": sum(not row["passed"] for row in checks),
+        "executions": 1, "test_command_executed": True}, "TEST_RESULTS_MISMATCH")
+    _require(report["status"] != "passed" or (all(row["passed"] for row in checks) and execution["exit_code"] == 0),
+             "TEST_RESULTS_MISMATCH")
+
+
+def _read_tests(path, kind, allowed_skipped_tests=None, *, metadata=None):
     if kind == "json_assertions":
         value = json.loads(path.read_text(encoding="utf-8-sig"))
         _require(isinstance(value, dict) and value.get("schema_version") == "csharp-test-report.v1",
@@ -276,9 +334,21 @@ def _read_tests(path, kind):
     counters = tree.find(".//{*}Counters")
     summary = tree.find(".//{*}ResultSummary")
     _require(rows and counters is not None and summary is not None, "TESTS_NOT_EXECUTED")
+    policy = _skip_policy(allowed_skipped_tests) if allowed_skipped_tests is not None else {}
+    outcomes = Counter(row.attrib.get("outcome") for row in rows)
     executed = int(counters.attrib.get("executed", "0"))
-    _require(executed > 0 and executed == len(rows) and all(row.attrib.get("outcome") in {"Passed", "Failed"} for row in rows),
+    _require(executed > 0 and executed == outcomes["Passed"] + outcomes["Failed"]
+             and set(outcomes) <= ({"Passed", "Failed", "NotExecuted"} if allowed_skipped_tests is not None else {"Passed", "Failed"}),
              "TESTS_NOT_EXECUTED")
+    expected_counts = {"total": len(rows), "executed": executed, "passed": outcomes["Passed"], "failed": outcomes["Failed"]}
+    _require(all(int(value) >= 0 for value in counters.attrib.values()), "TRX_COUNTER_MISMATCH")
+    for name, count in expected_counts.items():
+        _require((name in counters.attrib or allowed_skipped_tests is None)
+                 and (name not in counters.attrib or int(counters.attrib[name]) == count), "TRX_COUNTER_MISMATCH")
+    _require(all(int(counters.attrib.get(name, "0")) == 0 for name in
+                 ("error", "timeout", "aborted", "inconclusive", "passedButRunAborted", "notRunnable",
+                  "disconnected", "inProgress", "pending")), "TRX_EXECUTION_INCOMPLETE")
+    _require(summary.attrib.get("outcome") in {"Completed", "Failed"}, "TRX_EXECUTION_INCOMPLETE")
     reference = _ref(path)
     definitions = defaultdict(list)
     for definition in tree.findall(".//{*}TestDefinitions/{*}UnitTest"):
@@ -293,14 +363,15 @@ def _read_tests(path, kind):
     _require(all(type(key["display_name"]) is str and key["display_name"] for key in keys), "TRX_RESULT_NAME_MISSING")
     groups = Counter(canonical_hash(key) for key in keys)
     occurrences = Counter()
-    tests = []
+    tests, skipped = [], []
+    skip_counts = Counter()
     for index, (row, key) in enumerate(zip(rows, keys)):
         base_id = canonical_hash(key)
         occurrences[base_id] += 1
         local = groups[base_id] > 1 or not key["test_id"]
         # 为什么要有它：参数化结果的display name可能相同；真正重复组合只能按报告内出现位置区分，不能冒充跨运行语义身份。
         identity = {**key, **({"report_sha256": reference["sha256"], "occurrence": occurrences[base_id]} if local else {})}
-        tests.append({
+        parsed = {
             "check_id": "trx:" + canonical_hash(identity), "name": key["display_name"],
             "test_id": key["test_id"], "test_definitions": definitions.get(key["test_id"], []),
             "identity_scope": "report_local_occurrence" if local else "runner_test_id_and_display_name",
@@ -309,7 +380,25 @@ def _read_tests(path, kind):
             "report_ref": reference, "result_index": index,
             "passed": row.attrib["outcome"] == "Passed", "expected": "Passed",
             "actual": row.attrib["outcome"], "details": "".join(row.itertext()).strip(),
-        })
+        }
+        if row.attrib["outcome"] == "NotExecuted":
+            declared = parsed["test_definitions"]
+            _require(len(declared) == 1, "SKIPPED_TEST_IDENTITY_AMBIGUOUS")
+            skip_identity = (parsed["name"], declared[0]["class_name"], declared[0]["method_name"])
+            skip_counts[skip_identity] += 1
+            _require(skip_identity in policy and skip_counts[skip_identity] <= policy[skip_identity],
+                     "SKIPPED_TEST_NOT_ALLOWED")
+            skipped.append({key: value for key, value in parsed.items() if key not in {"passed", "expected"}})
+        else:
+            tests.append(parsed)
+    if allowed_skipped_tests is not None and metadata is not None:
+        declared_not_executed = counters.attrib.get("notExecuted")
+        metadata.update(schema_version="repository_test_execution_metadata_v1", report_ref=reference,
+                        policy_sha256=canonical_hash(allowed_skipped_tests), counts={**expected_counts, "skipped": len(skipped)},
+                        skipped_tests=skipped, reported_counters=dict(counters.attrib),
+                        counter_discrepancies=([{"counter": "notExecuted", "reported": declared_not_executed,
+                            "observed": len(skipped)}] if declared_not_executed is None
+                            or int(declared_not_executed) != len(skipped) else []))
     _require(summary.attrib.get("outcome") == "Completed" or any(not row["passed"] for row in tests),
              "TRX_EXECUTION_INCOMPLETE")
     return tests
@@ -513,6 +602,7 @@ class CSharpRepositoryBackend:
                                         allow_execution=True, input_execution_mode=input_execution_mode)
         build = replace(build, stdout_path=str(run / "build.stdout.txt"), stderr_path=str(run / "build.stderr.txt"))
         checks, observations, test_execution = [], [], {"status": "not_executed"}
+        test_metadata = {}
         status, owner = ("passed", None) if build.claims_real_build_success else ("behavior_failed", "patch_implementation")
         if build_execution.get("restore_exit_code") != 0:
             status, owner = "infrastructure_failed", "environment"
@@ -585,7 +675,7 @@ class CSharpRepositoryBackend:
                         _require(report_path.is_file() and not report_path.is_symlink(), "TEST_REPORT_MISSING")
                         _require(report_path.resolve().is_relative_to(output), "TEST_REPORT_OUTSIDE_OUTPUT")
                         _require(report_path.stat().st_mtime_ns >= started - 2_000_000_000, "TEST_REPORT_STALE")
-                        checks = _read_tests(report_path, data["test_report"]["format"])
+                        checks, test_metadata = read_repository_tests(report_path, data)
                         test_execution["report_ref"] = _ref(report_path)
                     except (ValueError, KeyError, OSError, ElementTree.ParseError) as error:
                         status, owner = "infrastructure_failed", "validator"
@@ -677,6 +767,7 @@ class CSharpRepositoryBackend:
                   "build_result": build.to_artifact_payload(), "build_execution": build_execution,
                   "isolated_build_profile": profile.to_dict(),
                   "compile_inputs": compiled, "test_execution": test_execution, "checks": checks,
+                  **({"test_execution_metadata": test_metadata} if test_metadata else {}),
                   "observations": observations, "verification_summary": {"checks": len(checks),
                   "failed_checks": sum(not row["passed"] for row in checks),
                   "executions": int(test_execution["status"] == "executed"),
@@ -819,6 +910,8 @@ class CSharpRepositoryBackend:
             "task_contract_ref", "binding_registry_ref", "candidate_ref", "candidate_source_id",
             "public_acceptance_ref", "source_snapshot_sha256")}
         report = {**binding, "schema_version": "task_agent_candidate_report_v2",
+            **({"test_execution_metadata": executed["test_execution_metadata"]}
+               if "test_execution_metadata" in executed else {}),
             "status": executed["status"], "failure_owner": owner,
             "owner_binding_ids": sorted({row["binding_id"] for row in changes})
                 if owner == "patch_implementation" else [],
@@ -943,8 +1036,10 @@ def validate_candidate_report_v2(report_ref, *, context=None, require_pass=None,
         ref = verification["test_execution"]["report_ref"]
         _require("raw_test_result" in stages and read_bound_json(stages["raw_test_result"])["raw_report_ref"] == ref,
                  "RAW_TEST_STAGE_MISMATCH")
-        _require(_ref(ref["path"]) == ref and _read_tests(Path(ref["path"]),
-                 CSharpRepositoryProfile(report["profile_ref"]).data["test_report"]["format"]) == verification["checks"],
+        parsed, metadata = read_repository_tests(Path(ref["path"]),
+            CSharpRepositoryProfile(report["profile_ref"]).data, report=verification)
+        _require(report.get("test_execution_metadata", {}) == metadata, "TEST_EXECUTION_METADATA_CHANGED")
+        _require(_ref(ref["path"]) == ref and parsed == verification["checks"],
                  "TEST_RESULTS_MISMATCH")
     if report["status"] != "passed":
         # 为什么要有它：真实失败可以进入下一轮决策，产品交付仍须显式要求成功及完整测试原件。
@@ -975,7 +1070,7 @@ def validate_candidate_report_v2(report_ref, *, context=None, require_pass=None,
              "TESTS_NOT_EXECUTED")
     test_ref = test_execution["report_ref"]
     _require(_ref(test_ref["path"]) == test_ref, "TEST_REPORT_CHANGED")
-    tests = _read_tests(Path(test_ref["path"]), profile.data["test_report"]["format"])
+    tests, _ = read_repository_tests(Path(test_ref["path"]), profile.data, report=verification)
     _require(tests == verification["checks"] and all(row["passed"] for row in tests), "TEST_RESULTS_MISMATCH")
     summary = {"checks": len(tests), "failed_checks": 0, "executions": 1, "test_command_executed": True}
     _require(report["verification_summary"] == verification["verification_summary"] == summary,

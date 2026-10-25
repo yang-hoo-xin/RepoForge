@@ -23,10 +23,10 @@ from tests.unit.test_csharp_repository_product_entry import (
 )
 
 
-def _configuration(root, *, consume, extract, trial=False):
+def _configuration(root, *, consume, extract, trial=False, strategy_conditions=None):
     memory = StrategyExperience(ArtifactStore(root / "experience"))
     source = _save(root / "public-experience-source.json", {"observation": "A failed behavior was reproduced before repair."})
-    strategy = {"applicability": {"runtime": "dotnet", "target_domain": "csharp_repository"},
+    strategy = {"applicability": {"runtime": "dotnet", "target_domain": "csharp_repository", **(strategy_conditions or {})},
         "suggested_action": "Read the implementation and compare the public counterexample before editing.",
         "expected_observation": "The selected statement explains the public behavior mismatch.",
         "counterevidence": ["The implementation already produces the expected public behavior."]}
@@ -75,14 +75,33 @@ def test_trial_arm_cannot_relabel_a_consuming_configuration_as_baseline(tmp_path
 
 @pytest.mark.parametrize("mode", ["consume", "withdraw", "extract", "compile_extract", "rejected_extract",
     "discovery_extract", "discovery_tamper_extract", "discovery_environment_extract", "recheck_extract",
-    "trial_consume", "trial_off"])
+    "trial_consume", "trial_off", "multi_extract", "context_trial_consume", "context_trial_off"])
 def test_experience_through_normal_cli_actual_requests_and_terminal(repository_workspace, monkeypatch, capsys, mode,
-                                                                expire_learning_send=False, capture_projection=None):
+                                                                expire_learning_send=False, capture_projection=None,
+                                                                capture_owner=None):
     root = repository_workspace
     profile, source = _profile(root)
     extract_mode = mode.endswith("extract")
-    consume = not extract_mode and mode != "trial_off"
-    memory, config = _configuration(root, consume=consume, extract=extract_mode, trial=mode.startswith("trial_"))
+    consume = not extract_mode and mode not in {"trial_off", "context_trial_off"}
+    contextual = mode.startswith("context_trial_")
+    conditions = {"has_candidate": False, "task_phase": "investigation", "stagnation_triggered": True} if contextual else None
+    memory, config = _configuration(root, consume=consume, extract=extract_mode,
+        trial=mode.startswith("trial_") or contextual, strategy_conditions=conditions)
+    if mode == "multi_extract":
+        episodes = []
+        for run_id in ("retained-one", "retained-two"):
+            observation = _save(root / (run_id + "-observation.json"), {"status": "timed_out", "candidate_ref": None})
+            episodes.append(_save(root / (run_id + "-episode.json"), {
+                "schema_version": "public_strategy_episode_v1", "visibility": "public", "data_use": "strategy_learning",
+                "run_id": run_id, "task_contract_ref": run_id + "-contract", "projection_version": "ordered_public_actions_v1",
+                "information_gain": ["public_process_observation"], "applicability": {"runtime": "dotnet"},
+                "evidence_refs": [{"kind": "json_file", "evidence_id": "outcome", **observation,
+                    "visibility": "public", "allowed_uses": ["strategy_learning"]}],
+                "selections": [{"evidence_id": "outcome", "locator": ["status"], "role": "technical_outcome"}]}))
+        frozen = memory.freeze_episode_set(episodes, applicability={"runtime": "dotnet"},
+            source_roles=["context", "opposing"])
+        value = json.loads(Path(config["path"]).read_text(encoding="utf-8"))
+        config = _save(root / "multi-experience-config.json", {**value, "extraction_episode_set_ref": asdict(frozen)})
     if expire_learning_send:
         original_window = TaskAgentExecutionV2.require_model_send_window
 
@@ -157,7 +176,13 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
         views = [json.loads(row["content"])["strategy_experience"] for row in payload["messages"]
             if row["role"] == "user" and '"strategy_experience"' in row["content"]]
         if consume:
-            assert len(views) == 1 and views[0]["strategies"][0]["suggested_action"].startswith("Read the implementation")
+            if contextual:
+                assert len(views) == 1
+                current = next(json.loads(row["content"])["current_task_state"] for row in payload["messages"]
+                    if row["role"] == "user" and '"current_task_state"' in row["content"])
+                saved.setdefault("strategy_selections", []).append({"view": views[0], "current": current})
+            else:
+                assert len(views) == 1 and views[0]["strategies"][0]["suggested_action"].startswith("Read the implementation")
         else:
             assert not views
         context = next(json.loads(row["content"]) for row in payload["messages"]
@@ -192,6 +217,22 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
             name, args = "binding_add", {"expected_registry_ref": context["binding_registry_ref"],
                 "source_view_ref": saved["view"], "target_selector": "Library/Arithmetic.cs",
                 "rationale": "Read public implementation", "expected_validation": "Double test"}
+        elif contextual:
+            if turn == 3:
+                saved["binding"] = last["binding_id"]
+            if turn in {3, 4, 5}:
+                name, args = "source_read", {"parent_revision_ref": saved["parent"], "path": "Library/Arithmetic.cs"}
+            elif turn == 6:
+                saved["view"] = last["source_view_ref"]
+                name, args = "candidate_submit", {"parent_revision_ref": saved["parent"], "edits": [{
+                    "binding_id": saved["binding"], "source_view_ref": saved["view"],
+                    "before_text": "=> value;", "after_text": "=> value * 2;"}]}
+            elif turn == 7:
+                saved["parent"] = last["candidate_ref"]
+                name, args = "candidate_check", {"candidate_ref": saved["parent"]}
+            else:
+                assert turn == 8 and last["status"] == "passed"
+                name, args = "finish", {"candidate_ref": saved["parent"], "check_ref": last["check_ref"]}
         elif mode == "argument_extract" and turn >= 5:
             if turn in {5, 6}:
                 assert last["status"] == ("behavior_failed" if turn == 5 else "rejected_not_executed")
@@ -245,7 +286,7 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
             assert last["status"] == "passed"
             name, args = "finish", {"candidate_ref": saved["parent"], "check_ref": last["check_ref"]}
         return httpx.Response(200, request=request, json={"model": model, "message": {"role": "assistant", "content": "",
-            "tool_calls": [{**({"id": f"controlled-recheck-{turn}"} if mode == "recheck_extract" else {}),
+            "tool_calls": [{**({"id": f"controlled-recheck-{turn}"} if mode == "recheck_extract" or contextual else {}),
                 "function": {"name": name, "arguments": args}}]}, "done": True,
             "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", transport)
@@ -272,6 +313,33 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
             "termination": json.loads(original).get("termination")})
     receipt = owner.complete_terminal_learning()
     assert Path(execution_ref["path"]).read_bytes() == original
+    if capture_owner is not None:
+        capture_owner(owner)
+    if contextual:
+        assert len(requests) == 8 and not learning
+        if consume:
+            selected_turns = [index + 1 for index, row in enumerate(saved["strategy_selections"]) if row["view"]["strategies"]]
+            assert selected_turns == [6]
+            assert saved["strategy_selections"][5]["current"]["working_state"]["stagnation"]["triggered"] is True
+            assert saved["strategy_selections"][6]["current"]["current_revision_ref"] != saved["strategy_selections"][6]["current"]["baseline_revision_ref"]
+            receipts = [json.loads(path.read_text(encoding="utf-8")) for path in owner.output_root.glob("experience-selection-*.json")]
+            assert len(receipts) == 8
+            chosen = next(row for row in receipts if row["selection"]["selected"])
+            sources = chosen["context_sources"]
+            actual = saved["strategy_selections"][5]["current"]
+            assert all(sources[key] == actual[key] for key in (
+                "task_contract_ref", "current_revision_ref", "working_state_ref", "current_check_ref"))
+            assert chosen["selection"]["current_context"]["has_candidate"] is False
+            assert chosen["selection"]["current_context"]["task_phase"] == "investigation"
+            assert sources["stagnation_scope"] == "exact_repeated_tool_returns_only_not_semantic_progress"
+        else:
+            assert not list(owner.output_root.glob("experience-selection-*.json"))
+        episode = json.loads(Path(receipt["episode_ref"]["path"]).read_text(encoding="utf-8"))
+        assert episode["applicability"]["has_candidate"] is True
+        assert episode["applicability"]["task_phase"] == "public_check_passed"
+        assert episode["applicability_sources"]["current_revision_ref"] == saved["parent"]
+        assert "hypothesis_refuted" not in episode["information_gain"]
+        return
     if expire_learning_send:
         assert receipt["status"] == "failed" and not learning
         assert receipt["model_calls"] == 1 and receipt["unknown_usage_calls"] == 1
@@ -280,7 +348,16 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
         assert json.loads(raw.read_bytes())["purpose"] == "strategy_learning"
         assert json.loads(raw.read_bytes())["transport_attempted"] is False
         return
-    if mode in {"extract", "compile_extract", "discovery_extract", "recheck_extract", "argument_extract"}:
+    if mode == "multi_extract":
+        assert receipt["status"] == "completed" and len(learning) == 1
+        assert receipt["episode_set_ref"] == asdict(frozen)
+        sent = json.loads(learning[0]["messages"][-1]["content"])
+        assert [row["run_id"] for row in sent["episodes"]] == ["retained-one", "retained-two"]
+        assert [row["source_role"] for row in sent["episodes"]] == ["context", "opposing"]
+        assert receipt["known_usage"][0]["total_tokens"] == 30
+        assert memory.read(receipt["strategy_ref"])["state"] == "proposed"
+        assert owner.complete_terminal_learning() == receipt and len(learning) == 1
+    elif mode in {"extract", "compile_extract", "discovery_extract", "recheck_extract", "argument_extract"}:
         assert receipt["status"] == "completed", receipt
         assert len(learning) == 1
         assert receipt["budget_after"]["consumed"] == owner.execution_receipt().budget_after["consumed"] + 1
@@ -360,7 +437,10 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
             if mode == "recheck_extract":
                 assert owner._v2_session.public_checks[0]["report"]["candidate_source_id"] == owner._v2_session.public_checks[1]["report"]["candidate_source_id"]
     elif mode == "rejected_extract":
-        assert receipt["status"] == "no_information_gain" and not learning
+        assert receipt["status"] == "completed" and len(learning) == 1
+        episode = json.loads(Path(receipt["episode_ref"]["path"]).read_text(encoding="utf-8"))
+        assert episode["information_gain"] == ["public_process_observation"]
+        assert not episode["public_counterexamples"]
         assert not owner._v2_session.public_checks
         assert owner._experience.context(owner._v2_session)["has_public_counterexample"] is False
         assert owner._experience.context(owner._v2_session)["counterexample_kind"] == "none"
@@ -368,7 +448,10 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
         assert receipt["status"] == "failed" and "EXPERIMENT_RESULT_CHANGED" in receipt["message"]
         assert not learning and receipt["model_calls"] == 0
     elif mode == "discovery_environment_extract":
-        assert receipt["status"] == "no_information_gain" and not learning
+        assert receipt["status"] == "completed" and len(learning) == 1
+        episode = json.loads(Path(receipt["episode_ref"]["path"]).read_text(encoding="utf-8"))
+        assert episode["information_gain"] == ["public_process_observation"]
+        assert not episode["public_counterexamples"]
         assert owner._experience.context(owner._v2_session)["counterexample_kind"] == "none"
     else:
         assert receipt["status"] == "not_enabled"
@@ -398,3 +481,92 @@ def test_ordered_episode_keeps_parameter_correction_and_original_receipts(
     test_experience_through_normal_cli_actual_requests_and_terminal(
         repository_workspace, monkeypatch, capsys, "argument_extract",
         capture_projection=lambda refs: record_property("projection_receipts", json.dumps(refs)))
+
+
+def test_stopped_pending_prefix_seals_without_resume_or_model_and_binds_stop_source(
+        repository_workspace, monkeypatch, capsys):
+    from src.mod_agent.model_qualification import read_bound_json
+    from src.mod_agent.task_agent_v2_experience import (
+        seal_current_public_episode,
+        seal_saved_public_episode,
+    )
+
+    owners = []
+    test_experience_through_normal_cli_actual_requests_and_terminal(
+        repository_workspace, monkeypatch, capsys, "consume", capture_owner=owners.append)
+    owner = owners[0]
+    original_calls = owner.budget_snapshot()["consumed"]
+    normal = seal_current_public_episode(owner)
+    assert normal == seal_current_public_episode(owner)
+    checkpoint_ref = owner.v2_checkpoint_ref
+    while True:
+        checkpoint = owner._v2_state.load(checkpoint_ref)
+        if checkpoint["loop"]["phase"] == "provider_pending" and len(checkpoint["details"]["completed_tool_records"]) == 1:
+            break
+        checkpoint_ref = checkpoint["previous_checkpoint_ref"]
+        assert checkpoint_ref is not None
+    checkpoint_path = Path(owner.store.root) / checkpoint_ref
+    original_checkpoint = checkpoint_path.read_bytes()
+    source = _save(repository_workspace / "stopped-process.json", {"status": "user_stopped", "exit_code": 130,
+        "run_id": checkpoint["details"]["run_id"], "request_id": checkpoint["details"]["request_id"]})
+    stop_value = {"schema": "task-agent-process-stop.v1", "checkpoint_ref": checkpoint_ref,
+        "task_contract_ref": checkpoint["task_contract_ref"], "run_id": checkpoint["details"]["run_id"],
+        "request_id": checkpoint["details"]["request_id"], "stop_kind": "user_stopped", "source_ref": source,
+        "exit_code": 130}
+    stop = _save(repository_workspace / "stop.json", stop_value)
+    sealed = seal_saved_public_episode(artifact_store_root=owner.store.root, checkpoint_ref=checkpoint_ref, stop_ref=stop)
+    assert sealed == seal_saved_public_episode(artifact_store_root=owner.store.root, checkpoint_ref=checkpoint_ref, stop_ref=stop)
+    episode = read_bound_json(sealed)
+    assert episode["information_gain"] == ["public_process_observation"]
+    assert not episode["public_counterexamples"]
+    assert episode["applicability"]["has_candidate"] is False
+    assert episode["applicability"]["task_phase"] == "investigation"
+    assert episode["applicability_sources"]["current_revision_ref"] == checkpoint["task_head"]["current_revision_ref"]
+    assert episode["applicability_sources"]["working_state_locator"] == ["owner", "working_state"]
+    observed = read_bound_json(episode["execution_ref"])
+    assert observed["status"] == "user_stopped" and observed["native_terminal"] is False
+    assert observed["business_result"] == "not_established"
+    assert observed["unknown_effects"] == ["provider_response_unknown"]
+    assert owner.budget_snapshot()["consumed"] == original_calls
+    assert checkpoint_path.read_bytes() == original_checkpoint
+    wrong_stop = _save(repository_workspace / "wrong-stop.json", {**stop_value, "run_id": "another-run"})
+    with pytest.raises(ValueError, match="PROCESS_STOP_TASK_CHANGED"):
+        seal_saved_public_episode(artifact_store_root=owner.store.root, checkpoint_ref=checkpoint_ref, stop_ref=wrong_stop)
+    wrong_timeout = _save(repository_workspace / "wrong-timeout.json", {**stop_value, "stop_kind": "timed_out"})
+    with pytest.raises(ValueError, match="PROCESS_STOP_SOURCE_CHANGED"):
+        seal_saved_public_episode(artifact_store_root=owner.store.root, checkpoint_ref=checkpoint_ref, stop_ref=wrong_timeout)
+    normal_source = _save(repository_workspace / "normal-process.json", {"status": "exited", "exit_code": 0,
+        "run_id": stop_value["run_id"], "request_id": stop_value["request_id"]})
+    mislabeled_stop = _save(repository_workspace / "mislabeled-stop.json", {
+        **stop_value, "source_ref": normal_source, "exit_code": 0})
+    with pytest.raises(ValueError, match="PROCESS_STOP_SOURCE_CHANGED"):
+        seal_saved_public_episode(artifact_store_root=owner.store.root, checkpoint_ref=checkpoint_ref, stop_ref=mislabeled_stop)
+    arm_root = repository_workspace / "owned-arm"
+    argv = ["python", "-m", "controlled_public_runner"]
+    planned_source = _save(arm_root / "execution/process.json", {"status": "timed_out", "timeout": True,
+        "exit_code": 124, "argv": argv, "cwd": str(repository_workspace)})
+    plan_value = {"run_id": stop_value["run_id"], "run_root": str(Path(owner.store.root).parent),
+        "root": str(arm_root), "workspace": str(repository_workspace), "command": argv}
+    plan = _save(repository_workspace / "frozen-plan.json", plan_value)
+    planned_stop = {**stop_value, "stop_kind": "timed_out", "exit_code": 124,
+        "source_ref": planned_source, "plan_ref": plan}
+    plan_stop_ref = _save(repository_workspace / "planned-stop.json", planned_stop)
+    planned_episode = seal_saved_public_episode(artifact_store_root=owner.store.root,
+        checkpoint_ref=checkpoint_ref, stop_ref=plan_stop_ref)
+    planned_outcome = read_bound_json(read_bound_json(planned_episode)["execution_ref"])
+    assert planned_outcome["collector_scope"] == "post_process_public_collector"
+    assert planned_outcome["collector_source_refs"] and planned_outcome["plan_ref"] == plan
+    bad_plan = _save(repository_workspace / "bad-frozen-plan.json", {**plan_value, "command": ["other-run"]})
+    bad_plan_stop = _save(repository_workspace / "bad-plan-stop.json", {**planned_stop, "plan_ref": bad_plan})
+    with pytest.raises(ValueError, match="PROCESS_PLAN_BINDING_CHANGED"):
+        seal_saved_public_episode(artifact_store_root=owner.store.root, checkpoint_ref=checkpoint_ref, stop_ref=bad_plan_stop)
+    unbound_stop = _save(repository_workspace / "unbound-process-stop.json", {
+        key: value for key, value in planned_stop.items() if key != "plan_ref"})
+    with pytest.raises(ValueError, match="PROCESS_STOP_SOURCE_TASK_CHANGED"):
+        seal_saved_public_episode(artifact_store_root=owner.store.root, checkpoint_ref=checkpoint_ref, stop_ref=unbound_stop)
+    Path(source["path"]).write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError):
+        seal_saved_public_episode(artifact_store_root=owner.store.root, checkpoint_ref=checkpoint_ref, stop_ref=stop)
+    memory = StrategyExperience(ArtifactStore(repository_workspace / "sealed-learning"))
+    with pytest.raises(ValueError):
+        memory.freeze_episode_set([sealed], applicability={"runtime": "dotnet"})

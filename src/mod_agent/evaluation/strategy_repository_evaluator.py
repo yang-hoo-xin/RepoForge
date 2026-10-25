@@ -202,7 +202,7 @@ def _report(configuration, reference):
         and facts["test_execution"]["commands"]["test"] == test["command"], "TEST_BUILD_COMMAND_CHANGED")
     captured = backend._test_build_outputs(data, source, root / "test-outputs.targets", root / "test-outputs.txt")
     _require(captured == test["test_build_outputs"], "TEST_BUILD_OUTPUTS_CHANGED")
-    tests = backend._read_tests(expected_report, data["test_report"]["format"])
+    tests, test_metadata = backend.read_repository_tests(expected_report, data, report=report)
     _require(tests == report["checks"], "TEST_CHECKS_CHANGED")
     groups = _groups(tests, data["test_report"]["format"])
     target, preservation = set(configuration["target_test_ids"]), set(configuration["preservation_test_ids"])
@@ -218,6 +218,7 @@ def _report(configuration, reference):
     _require(report["verification_summary"] == {"checks": len(tests), "failed_checks": sum(not row["passed"] for row in tests),
              "executions": 1, "test_command_executed": True}, "TEST_SUMMARY_CHANGED")
     return {"task_success": all(all(groups[key]) for key in target),
+            **({"test_execution_metadata": test_metadata} if test_metadata else {}),
             "preservation_passed": all(all(groups[key]) for key in preservation),
             "source_manifest": {path: hashes[path] for path in sorted(production)}, "test_counts": counts,
             "report_ref": reference, "verification_identity": identity}

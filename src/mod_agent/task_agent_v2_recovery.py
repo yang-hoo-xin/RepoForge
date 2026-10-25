@@ -93,6 +93,7 @@ class TaskAgentRecoveryJournal:
             task_agent_v2_experiments,
             task_agent_v2_state,
             task_agent_v2_tools,
+            task_agent_v2_working_state,
         )
 
         self.owner, self.session, self.state, self.details = owner, session, session.state, details
@@ -118,7 +119,7 @@ class TaskAgentRecoveryJournal:
                 "owner_refs": [_ref(module.__file__) for module in (
                     task_agent_execution, task_agent_loop, task_agent_v2_execution, task_agent_v2_tools,
                     task_agent_v2_state, task_agent_v2_experience, task_agent_v2_experiments,
-                    task_agent_v2_experiment_tools, task_agent_v2_context, public_failure_feedback)] + [_ref(__file__)]}
+                    task_agent_v2_experiment_tools, task_agent_v2_context, task_agent_v2_working_state, public_failure_feedback)] + [_ref(__file__)]}
             self.host_config_ref = self.state.save("host-recovery-config", host)
             with self.state._transaction("host-recovery-config", {"kind": "host_recovery_config", "host_config_ref": self.host_config_ref}) as (_head, result, _replay):
                 result["host_config_ref"] = self.host_config_ref
@@ -138,7 +139,9 @@ class TaskAgentRecoveryJournal:
                 "deadline_utc": getattr(owner, "deadline_utc", None) if getattr(owner, "deadline_utc", None) is not None
                     else self.state.load(self.host_config_ref)["deadline_utc"],
                 "turn_count": getattr(owner, "_v2_turn_count", 0), "tool_charge_count": getattr(owner, "_v2_tool_charge_count", 0),
-                "reservation": deepcopy(getattr(owner, "_v2_reservation", None))},
+                "reservation": deepcopy(getattr(owner, "_v2_reservation", None)),
+                "working_state": deepcopy(getattr(owner, "_v2_working_state", None)),
+                "context_projection": deepcopy(getattr(owner, "_v2_context_projection", None))},
             "terminal_learning_receipt": deepcopy(owner._experience._terminal_receipt) if owner._experience is not None else None,
             "task_timing_observation": task_timing_snapshot(getattr(owner, "_task_timing_origin_ref", None),
                 "checkpoint_observed", loop_state["phase"]),
@@ -368,10 +371,29 @@ def _reconcile_checkpoint(state, checkpoint_ref, checkpoint, latest_path):
             "PROVIDER_OUTCOME_UNCONFIRMED")
         response = read_bound_json(event["response_ref"])
         _admitted_response(response, value["details"]["model_profile"])
+        from src.mod_agent.interrupted_patch_admission import retained_request_from_document
+        from src.mod_agent.task_agent_v2_context import validate_projected_request
+        from src.mod_agent.task_agent_v2_working_state import (
+            retain_model_statement,
+            update_working_state,
+        )
         effective = read_bound_json(event["request_ref"])
         expected = loop["request"]
-        _require(effective["messages"][:len(expected["messages"])] == expected["messages"]
-            and all(effective[key] == item for key, item in expected.items() if key != "messages"), "PROVIDER_REQUEST_CHANGED")
+        projection = validate_projected_request(expected, effective, state)
+        current = projection["current_task_state"]
+        boundary = {key: current.get(key) for key in ("task_contract_ref", "current_revision_ref",
+            "binding_registry_ref", "current_check_ref")}
+        _require(boundary == {"task_contract_ref": state.contract_ref,
+            "current_revision_ref": value["task_head"]["current_revision_ref"],
+            "binding_registry_ref": value["task_head"]["registry_ref"],
+            "current_check_ref": value["session"]["current_check"]}, "PROVIDER_WORKING_BOUNDARY_CHANGED")
+        # 为什么要有它：provider_pending在请求准备前落盘，恢复应重建实际请求的观察状态而不是沿用旧边界。
+        working = update_working_state(owner.get("working_state"), retained_request_from_document(expected),
+            task_contract_ref=boundary["task_contract_ref"], current_revision_ref=boundary["current_revision_ref"],
+            registry_ref=boundary["binding_registry_ref"], current_check_ref=boundary["current_check_ref"])
+        owner["working_state"] = retain_model_statement(working, response,
+            response_ref=event["response_ref"], source_boundary=boundary)
+        owner["context_projection"] = deepcopy(current.get("context_budget"))
         usage = AgentUsage(**response["usage"]).to_dict()
         old_head, new_head = value["task_head"], state.head
         operation_id = "model-usage:" + reservation["reservation_id"]
@@ -513,6 +535,10 @@ def load_task_agent_checkpoint(*, artifact_store_root, checkpoint_ref, reconcile
     _require(not checkpoint["session"]["_check_inflight"], "CHECK_REQUIRES_RECONCILIATION")
     _validate_resource_chain(state, checkpoint, host)
     _validate_completed(checkpoint, root, host)
+    from src.mod_agent.task_agent_v2_working_state import validate_working_state
+    validate_working_state(checkpoint["owner"].get("working_state"),
+        responses=[_trusted_read(row["response_ref"], root) for row in checkpoint["details"]["provider_turns"]
+            if row.get("response_ref")], call_records=checkpoint["loop"]["call_records"])
     return {"checkpoint_ref": checkpoint_ref, "checkpoint": checkpoint, "host": host, "state": state}
 
 

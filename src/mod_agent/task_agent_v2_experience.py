@@ -4,13 +4,14 @@
 """
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from dataclasses import asdict, replace
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
-from src.libs.llm.agent_turn import AgentMessage
+from src.libs.llm.agent_turn import AgentMessage, AgentTurnRequest
 from src.mod_agent.artifacts import ArtifactStore
 from src.mod_agent.model_call_budget import call_allowance, validate_budget
 from src.mod_agent.model_qualification import canonical_hash, read_bound_json
@@ -96,7 +97,10 @@ def _experiment_evidence(session, completed_ids=None):
     """
     import hashlib
 
-    from src.mod_agent.domain.csharp_repository_backend import CSharpRepositoryProfile, _read_tests
+    from src.mod_agent.domain.csharp_repository_backend import (
+        CSharpRepositoryProfile,
+        read_repository_tests,
+    )
     from src.mod_agent.task_agent_v2_experiments import _source
     from src.mod_agent.task_agent_v2_state import TaskAgentV2State
 
@@ -176,7 +180,7 @@ def _experiment_evidence(session, completed_ids=None):
                     _public_reference(test_ref)
                     _learning_require(hashlib.sha256(Path(test_ref["path"]).read_bytes()).hexdigest() == test_ref["sha256"],
                         "EXPERIMENT_TEST_REPORT_CHANGED")
-                    checks = _read_tests(Path(test_ref["path"]), profile.data["test_report"]["format"])
+                    checks, _ = read_repository_tests(Path(test_ref["path"]), profile.data, report=report)
                     _learning_require(checks == report["checks"] and bool(checks), "EXPERIMENT_TEST_RESULTS_CHANGED")
                     if any(not row["passed"] for row in checks) and (request["kind"] != "registered_tests"
                             or observed.get("selection_complete") is True and not observed.get("failure_code")):
@@ -217,13 +221,211 @@ def _effective_revision(state, failed, passed):
     return False
 
 
+def seal_current_public_episode(owner, session=None):
+    """Seal a live owner's retained execution even when extraction is not configured.
+
+    为什么要有它：公开过程采集不能以经验配置或一次模型调用为前提，调用者可在正常收尾独立保存事实。
+    """
+    session = session if session is not None else getattr(owner, "_v2_session", None)
+    if session is None or owner.execution_receipt() is None:
+        return None
+    collector = TaskAgentV2Experience.__new__(TaskAgentV2Experience)
+    collector.owner = owner
+    return collector._episode(session)
+
+
+def _process_context(session, current_task_state=None):
+    """Project current, source-bound process facts for conditional strategy selection.
+
+    为什么要有它：过程策略需要区分尚无候选、当前检查和精确重复返回；未知条件不能被补成false或语义无进展。
+    """
+    from src.mod_agent.task_agent_execution import _read
+
+    state, owner = session.state, session.owner
+    checkpoint_ref = getattr(owner, "_public_episode_checkpoint_ref", None)
+    if checkpoint_ref is not None:
+        checkpoint = state.load(checkpoint_ref)
+        _learning_require(checkpoint["task_contract_ref"] == state.contract_ref, "CONTEXT_CHECKPOINT_TASK_CHANGED")
+        head, saved_session = checkpoint["task_head"], checkpoint["session"]
+        current, registry, check_ref = head["current_revision_ref"], head["registry_ref"], saved_session.get("current_check")
+        inflight = saved_session.get("_check_inflight")
+        working = checkpoint["owner"].get("working_state")
+        working_ref, locator = checkpoint_ref, ["owner", "working_state"]
+    else:
+        current, registry, check_ref = state.current_revision_ref, state.registry_ref, getattr(session, "current_check", None)
+        inflight = getattr(session, "_check_inflight", None)
+        saved = current_task_state if current_task_state is not None else getattr(owner, "_v2_strategy_context_sources", None)
+        expected = {"task_contract_ref": state.contract_ref, "current_revision_ref": current,
+            "binding_registry_ref": registry, "current_check_ref": check_ref}
+        working, working_ref, locator = None, None, []
+        if isinstance(saved, dict) and all(saved.get(key) == value for key, value in expected.items()):
+            working_ref = saved.get("working_state_ref")
+            if working_ref is not None:
+                _learning_require(isinstance(working_ref, str)
+                    and re.fullmatch(r"v2/working-state/[0-9a-f]{64}\.json", working_ref), "CONTEXT_WORKING_REF_INVALID")
+                path = Path(state.store_root) / working_ref
+                # 为什么要有它：working-state原件采用v1 schema，复用受限path/hash读取而非误用仅接收v2 payload的state.load。
+                working = _read(_public_reference({"path": str(path.resolve()), "sha256": path.stem}), state.store_root)
+    boundary = {"task_contract_ref": state.contract_ref, "current_revision_ref": current,
+        "binding_registry_ref": registry, "current_check_ref": check_ref}
+    sources = {"schema_version": "strategy_selection_context_sources_v1", **boundary,
+        "working_state_ref": working_ref, "working_state_locator": locator,
+        "origin": "retained_public_checkpoint" if checkpoint_ref is not None else "current_execution_host",
+        "stagnation_scope": "exact_repeated_tool_returns_only_not_semantic_progress"}
+    facts = {}
+    baseline = state.contract.get("baseline_manifest_ref")
+    if isinstance(current, str) and isinstance(baseline, str):
+        candidate = state.validate_candidate(current) if current != baseline else None
+        facts["has_candidate"] = candidate is not None
+        if check_ref is None and inflight is False:
+            facts["task_phase"] = "candidate_unchecked" if candidate is not None else "investigation"
+        elif check_ref is not None and candidate is not None:
+            checked = state.load(check_ref)
+            if (checked.get("schema") == "task-agent-check.v2" and checked.get("task_contract_ref") == state.contract_ref
+                    and checked.get("candidate_ref") == current
+                    and checked.get("candidate_source_id") == candidate["candidate_source_id"]):
+                phase = {"passed": "public_check_passed", "behavior_failed": "public_check_failed",
+                    "unknown": "public_check_unknown"}.get(checked.get("status"))
+                if phase is not None:
+                    facts["task_phase"] = phase
+    if (isinstance(working, dict) and working.get("schema") == "task-agent-working-state.v1"
+            and working.get("boundary") == boundary):
+        from src.mod_agent.task_agent_v2_working_state import update_working_state
+
+        stagnation = working.get("stagnation", {})
+        streak = working.get("consecutive_repeated_returns")
+        if (type(stagnation.get("triggered")) is bool and type(streak) is int and streak >= 0
+                and stagnation.get("consecutive_repeated_returns") == streak
+                and stagnation.get("business_progress_inferred") is False):
+            retained = update_working_state(working, AgentTurnRequest(messages=()), task_contract_ref=state.contract_ref,
+                current_revision_ref=current, registry_ref=registry, current_check_ref=check_ref)
+            if retained["stagnation"]["triggered"] is stagnation["triggered"]:
+                facts["stagnation_triggered"] = stagnation["triggered"]
+                facts["consecutive_repeated_returns"] = streak
+    return facts, sources
+
+
+def seal_saved_public_episode(*, artifact_store_root, checkpoint_ref, stop_ref):
+    """Seal the verified completed prefix after a process stops, without resuming it.
+
+    为什么要有它：硬停止可能没有原生终态，但已完成工具原件仍有学习价值；封存不能派发在途操作或伪造完整执行。
+    """
+    from src.mod_agent.task_agent_v2_recovery import (
+        _ref,
+        _validate_completed,
+        _validate_host_binding,
+        _write_bound,
+    )
+    from src.mod_agent.task_agent_v2_state import TaskAgentV2State, _no_links, load_v2_artifact
+
+    root = Path(artifact_store_root).resolve(strict=True)
+    _no_links(root)
+    checkpoint = load_v2_artifact(root, checkpoint_ref)
+    _learning_require(checkpoint.get("schema") == "task-agent-session-checkpoint.v2", "CHECKPOINT_REQUIRED")
+    state = TaskAgentV2State(root, checkpoint["task_contract_ref"])
+    host = state.load(checkpoint["host_config_ref"])
+    _validate_host_binding(state, checkpoint, host)
+    for reference in host["owner_refs"]:
+        _learning_require(_ref(Path(reference["path"])) == reference, "FROZEN_OWNER_CHANGED")
+    # 为什么要有它：待返回调用的轮数不等于完整终态；只核实已完成prefix，不对账、恢复或改变原检查点。
+    _validate_completed(checkpoint, root)
+    stop = read_bound_json(_public_reference(stop_ref))
+    required = {"schema", "checkpoint_ref", "task_contract_ref", "run_id", "request_id", "stop_kind", "source_ref"}
+    _learning_require(required <= set(stop) and stop["schema"] == "task-agent-process-stop.v1"
+        and stop["checkpoint_ref"] == checkpoint_ref and stop["task_contract_ref"] == state.contract_ref
+        and stop["stop_kind"] in {"timed_out", "user_stopped", "process_failed"}, "PROCESS_STOP_INVALID")
+    _learning_require(all(stop[key] == checkpoint["details"][key] == host["graph_state"][key]
+        for key in ("run_id", "request_id")), "PROCESS_STOP_TASK_CHANGED")
+    process = read_bound_json(_public_reference(stop["source_ref"]))
+    _learning_require(isinstance(process, dict) and process.get("status") in {
+        "timed_out", "timeout", "exited", "failed", "terminated", "cancelled", "interrupted", "user_stopped"},
+        "PROCESS_STOP_SOURCE_INVALID")
+    if stop.get("plan_ref") is not None:
+        plan = read_bound_json(_public_reference(stop["plan_ref"]))
+        _learning_require(plan.get("run_id") == stop["run_id"]
+            and (Path(plan["run_root"]) / "a").resolve() == root
+            and Path(stop["source_ref"]["path"]).resolve() == (Path(plan["root"]) / "execution/process.json").resolve()
+            and process.get("argv") == plan["command"]
+            and Path(process["cwd"]).resolve() == Path(plan["workspace"]).resolve(), "PROCESS_PLAN_BINDING_CHANGED")
+        _learning_require(all(key not in process or process[key] == stop[key] for key in ("run_id", "request_id")),
+            "PROCESS_STOP_SOURCE_TASK_CHANGED")
+    else:
+        _learning_require(all(process.get(key) == stop[key] for key in ("run_id", "request_id")),
+            "PROCESS_STOP_SOURCE_TASK_CHANGED")
+    if stop["stop_kind"] == "timed_out":
+        _learning_require(process.get("timeout") is True or process["status"] in {"timed_out", "timeout"},
+            "PROCESS_STOP_SOURCE_CHANGED")
+    elif stop["stop_kind"] == "process_failed":
+        _learning_require(process["status"] in {"failed", "terminated"}
+            or type(process.get("exit_code")) is int and process["exit_code"] != 0, "PROCESS_STOP_SOURCE_CHANGED")
+    else:
+        _learning_require(process["status"] in {"user_stopped", "cancelled", "interrupted"}
+            or process.get("stop_kind") == "user_stopped" and process["status"] == "terminated",
+            "PROCESS_STOP_SOURCE_CHANGED")
+    if "exit_code" in stop:
+        _learning_require(stop["exit_code"] == process.get("exit_code"), "PROCESS_STOP_SOURCE_CHANGED")
+
+    def save(name, value):
+        path = root / "public-learning" / name
+        _no_links(path)
+        if path.exists():
+            reference = _ref(path)
+            _learning_require(read_bound_json(reference) == value, "SEALED_EPISODE_CHANGED")
+            return reference
+        return _write_bound(path, value)
+
+    loop = checkpoint["loop"]
+    records = checkpoint["details"]["completed_tool_records"]
+    completed_ids = [event["call_id"] for event in loop["events"] if event.get("event") == "tool_dispatch_completed"]
+    _learning_require([row["call_id"] for row in records] == completed_ids, "COMPLETED_PREFIX_CHANGED")
+    loop_projection = {"schema": "task-agent-public-loop-prefix.v1", "checkpoint_ref": checkpoint_ref,
+        "call_records": deepcopy(loop["call_records"])}
+    loop_ref = save("public-loop-" + canonical_hash(loop_projection) + ".json", loop_projection)
+    current = checkpoint["task_head"]["current_revision_ref"]
+    unknowns = [{"provider_pending": "provider_response_unknown", "tool_pending": "tool_execution_unknown"}[loop["phase"]]] \
+        if loop["phase"] in {"provider_pending", "tool_pending"} else []
+    if checkpoint["session"].get("_check_inflight"):
+        unknowns.append("public_check_inflight")
+    from src.mod_agent import (
+        task_agent_execution,
+        task_agent_v2_experiments,
+        task_agent_v2_recovery,
+        task_agent_v2_state,
+    )
+    from src.mod_agent.domain import csharp_repository_backend
+    from src.mod_agent.planning import strategy_experience
+
+    observation = {"schema": "task-agent-public-process-observation.v1", "status": stop["stop_kind"],
+        "run_id": stop["run_id"], "request_id": stop["request_id"], "task_contract_ref": state.contract_ref,
+        "checkpoint_ref": checkpoint_ref, "stop_ref": deepcopy(stop_ref), "process_ref": deepcopy(stop["source_ref"]),
+        "completed_tool_records": deepcopy(records), "loop_result_ref": loop_ref,
+        "candidate_ref": current if current != state.contract["baseline_manifest_ref"] else None,
+        "check_ref": checkpoint["session"].get("current_check"), "unknown_effects": unknowns,
+        "native_terminal": False, "business_result": "not_established", "model_calls": 0,
+        "collector_scope": "post_process_public_collector",
+        "collector_source_refs": [_ref(Path(path)) for path in (__file__, task_agent_execution.__file__,
+            task_agent_v2_experiments.__file__, task_agent_v2_recovery.__file__, task_agent_v2_state.__file__,
+            csharp_repository_backend.__file__, strategy_experience.__file__)],
+        "stop_attribution": "host_observed_stop; not model abandonment or hypothesis refutation"}
+    if stop.get("plan_ref") is not None:
+        observation["plan_ref"] = deepcopy(stop["plan_ref"])
+    observation_ref = save("process-observation-" + canonical_hash(observation) + ".json", observation)
+    owner = SimpleNamespace(_save=save, profile=SimpleNamespace(to_dict=lambda: checkpoint["details"]["model_profile"]),
+        _public_episode_checkpoint_ref=checkpoint_ref,
+        execution_receipt=lambda: SimpleNamespace(execution_ref=observation_ref))
+    session = SimpleNamespace(state=state, owner=owner,
+        actual_calls=deepcopy([call for call in checkpoint["session"]["actual_calls"] if call["call_id"] in completed_ids]),
+        public_checks=deepcopy(checkpoint["session"]["public_checks"]))
+    return seal_current_public_episode(owner, session)
+
+
 class TaskAgentV2Experience:
     def __init__(self, owner, configuration_ref):
         self.owner = owner
         self.configuration_ref = deepcopy(configuration_ref)
         self.config = read_bound_json(configuration_ref)
         required = {"schema_version", "store_root", "snapshot_ref", "extract_on_terminal"}
-        if (not required <= set(self.config) or set(self.config) - required - {"trial_binding_ref"}
+        if (not required <= set(self.config) or set(self.config) - required - {"trial_binding_ref", "extraction_episode_set_ref"}
                 or self.config["schema_version"] != "task_agent_experience_config_v1"
                 or type(self.config["extract_on_terminal"]) is not bool):
             raise ValueError("TASK_V2_EXPERIENCE_CONFIG_INVALID")
@@ -232,6 +434,7 @@ class TaskAgentV2Experience:
             raise ValueError("TASK_V2_EXPERIENCE_STORE_INVALID")
         self.memory = StrategyExperience(ArtifactStore(root))
         self.snapshot = self.config["snapshot_ref"]
+        self.extraction_episode_set_ref = deepcopy(self.config.get("extraction_episode_set_ref"))
         self.trial_binding = self._read_trial_binding()
         self._terminal_receipt = None
         self.check_boundary()
@@ -268,27 +471,43 @@ class TaskAgentV2Experience:
             raise ValueError("TASK_V2_TRIAL_BINDING_CHANGED")
         if self.snapshot is not None:
             self.memory.check_snapshot(self.snapshot)
+        if self.extraction_episode_set_ref is not None:
+            frozen = self.memory.read(self.extraction_episode_set_ref)
+            _learning_require(frozen.get("kind") == "episode_set" and frozen.get("frozen") is True
+                and frozen.get("visibility") == "public" and frozen.get("data_use") == "strategy_learning",
+                "FROZEN_EPISODE_SET_REQUIRED")
 
     @staticmethod
-    def context(session):
+    def context_with_sources(session, current_task_state=None):
         kinds = {kind for row in session.public_checks
             if (kind := public_counterexample_kind(row["report"])) is not None}
         if getattr(session, "actual_calls", None):
             kinds.update(row["counterexample_kind"] for row in _experiment_evidence(session) if row["counterexample_kind"] is not None)
         # 为什么要有它：只按已执行公开证据区分适用域，编译策略不能仅因同属C#就投放到业务反例；混合来源单独保留。
         kind = next(iter(kinds)) if len(kinds) == 1 else "mixed_public_counterexamples" if kinds else "none"
+        process, sources = _process_context(session, current_task_state)
         return {"runtime": "dotnet", "target_domain": "csharp_repository",
-            "has_public_counterexample": bool(kinds), "counterexample_kind": kind}
+            "has_public_counterexample": bool(kinds), "counterexample_kind": kind, **process}, sources
+
+    @staticmethod
+    def context(session, current_task_state=None):
+        return TaskAgentV2Experience.context_with_sources(session, current_task_state)[0]
 
     def prepare_decision_request(self, request, session):
         self.check_boundary()
+        current = next((message.content["current_task_state"] for message in reversed(request.messages)
+            if message.role == "user" and isinstance(message.content, dict)
+            and isinstance(message.content.get("current_task_state"), dict)
+            and message.content["current_task_state"].get("origin") == "execution_host"), None)
+        context, sources = self.context_with_sources(session, current)
+        self.owner._v2_strategy_context_sources = deepcopy(sources)
         if self.snapshot is None:
             return request
-        selection = self.memory.select(self.snapshot, self.context(session))
+        selection = self.memory.select(self.snapshot, context)
         view = self.memory.advisory_model_view(selection)
         selection_ref = self.owner._save("experience-selection-" + uuid4().hex + ".json", {
             "configuration_ref": self.configuration_ref, "selection": selection,
-            "model_view": view, "model_view_sha256": canonical_hash(view)})
+            "context_sources": sources, "model_view": view, "model_view_sha256": canonical_hash(view)})
         # 为什么要有它：每轮只附加本轮核验的投影，旧上下文不累积重复策略或获得新授权。
         prepared = replace(request, messages=(*request.messages, AgentMessage("user", {"strategy_experience": view})))
         final_ref = self.owner._save("experience-request-" + uuid4().hex + ".json", asdict(prepared))
@@ -338,8 +557,6 @@ class TaskAgentV2Experience:
                 gains.append("public_counterexample")
                 counterexamples.append({"kind": experiment["counterexample_kind"], "evidence_id": evidence_id,
                     "source_identity": experiment["source_identity"], "scope": "exploration_only"})
-        if not gains:
-            return None
         _learning_require(completed <= {call["call_id"] for call in session.actual_calls}, "COMPLETED_ACTION_MISSING")
         for call in session.actual_calls:
             if call["call_id"] not in completed:
@@ -379,7 +596,17 @@ class TaskAgentV2Experience:
             **_public_reference(self.owner.execution_receipt().execution_ref),
             "visibility": "public", "allowed_uses": ["strategy_learning"]})
         selections.extend({"evidence_id": "technical_outcome", "locator": [field], "role": "technical_outcome"}
-            for field in ("status", "candidate_ref", "check_ref", "unknown_effects") if field in execution)
+            for field in ("status", "candidate_ref", "check_ref", "unknown_effects",
+                "native_terminal", "business_result", "stop_attribution", "collector_scope") if field in execution)
+        if execution.get("schema") == "task-agent-public-process-observation.v1":
+            checkpoint_path = Path(session.state.store_root) / execution["checkpoint_ref"]
+            lineage = {"process_stop": execution["stop_ref"], "process_source": execution["process_ref"],
+                "process_checkpoint": {"path": str(checkpoint_path.resolve()), "sha256": checkpoint_path.stem}}
+            if execution.get("plan_ref") is not None:
+                lineage["process_plan"] = execution["plan_ref"]
+            # 为什么要有它：投影只发公开字段，但原停止记录及检查点仍须随策略被复核，不能用一份复制摘要替代来源绑定。
+            sources.extend({"kind": "json_file", "evidence_id": name, **_public_reference(reference),
+                "visibility": "public", "allowed_uses": ["strategy_learning"]} for name, reference in lineage.items())
         if execution.get("loop_result_ref"):
             loop_ref = _public_reference(execution["loop_result_ref"])
             loop = read_bound_json(loop_ref)
@@ -390,13 +617,46 @@ class TaskAgentV2Experience:
                 if record.get("status") == "not_dispatched":
                     selections.extend({"evidence_id": "public_loop", "locator": ["call_records", call_id, field],
                         "role": "nonexecuted_attempt"} for field in ("name", "status", "result"))
-        return self.owner._save("public-learning-episode-" + uuid4().hex + ".json", {
+        # 为什么要有它：无候选、重复调查和未派发拒绝也是实际过程经历；不得为启用学习补造业务反例或假设被推翻。
+        if not gains and (completed or any(row["role"] == "nonexecuted_attempt" for row in selections)
+                or execution.get("schema") == "task-agent-public-process-observation.v1"):
+            gains.append("public_process_observation")
+        if not gains:
+            return None
+        applicability, applicability_sources = self.context_with_sources(session)
+        for key in ("task_contract_ref", "current_revision_ref", "working_state_ref", "current_check_ref"):
+            reference = applicability_sources.get(key)
+            if reference is None:
+                continue
+            path = Path(session.state.store_root) / reference
+            sources.append({"kind": "json_file", "evidence_id": "context_" + key,
+                **_public_reference({"path": str(path.resolve()), "sha256": path.stem}),
+                "visibility": "public", "allowed_uses": ["strategy_learning"]})
+        episode = {
             "schema_version": "public_strategy_episode_v1", "visibility": "public", "data_use": "strategy_learning",
             "projection_version": "ordered_public_actions_v1",
             "information_gain": sorted(set(gains)), "evidence_refs": sources, "selections": selections,
             "public_counterexamples": counterexamples,
-            "applicability": self.context(session), "task_contract_ref": session.state.contract_ref,
-            "execution_ref": deepcopy(self.owner.execution_receipt().execution_ref)})
+            "applicability": applicability, "applicability_sources": applicability_sources,
+            "task_contract_ref": session.state.contract_ref,
+            "run_id": execution.get("run_id"), "request_id": execution.get("request_id"),
+            "execution_ref": deepcopy(self.owner.execution_receipt().execution_ref)}
+        name = "public-learning-episode-" + canonical_hash(episode) + ".json"
+        try:
+            return self.owner._save(name, episode)
+        except FileExistsError:
+            from src.mod_agent.task_agent_v2_recovery import _ref
+
+            reference = _ref(Path(self.owner.output_root) / name)
+            _learning_require(read_bound_json(reference) == episode, "SEALED_EPISODE_CHANGED")
+            return reference
+
+    def seal_public_episode(self, session=None):
+        """Capture immutable public facts without spending model resources.
+
+        为什么要有它：保存经历与调用提炼模型是两件事，停用提炼或人工停止不能抹去已经发生的过程。
+        """
+        return seal_current_public_episode(self.owner, session)
 
     def complete_terminal_learning(self):
         if self._terminal_receipt is not None:
@@ -407,13 +667,13 @@ class TaskAgentV2Experience:
             "budget_before": before, "model_calls": 0, "known_usage": [], "unknown_usage_calls": 0}
         try:
             self.check_boundary()
+            episode = self.seal_public_episode()
+            if episode is not None:
+                result["episode_ref"] = episode
             if self.config["extract_on_terminal"]:
-                session = getattr(owner, "_v2_session", None)
-                episode = self._episode(session) if session is not None else None
-                if episode is None:
+                if episode is None and self.extraction_episode_set_ref is None:
                     result["status"] = "no_information_gain"
                 else:
-                    result["episode_ref"] = episode
                     client = owner._v2_client
                     admission = owner._save("learning-admission-" + uuid4().hex + ".json", {
                         "status": "admitted", "purpose": "strategy_learning", "provider": client.provider,
@@ -453,8 +713,13 @@ class TaskAgentV2Experience:
                         owner._save("learning-call-receipt-" + uuid4().hex + ".json", receipt)
                         owner._v2_identity()
 
-                    learned = self.memory.propose_from_episode(
-                        SimpleNamespace(provider=client.provider, model=client.model, complete_turn=complete), episode,
+                    extraction = self.memory.propose_from_episode
+                    extraction_source = episode
+                    if self.extraction_episode_set_ref is not None:
+                        extraction, extraction_source = self.memory.propose_from_episodes, self.extraction_episode_set_ref
+                        result["episode_set_ref"] = deepcopy(extraction_source)
+                    learned = extraction(
+                        SimpleNamespace(provider=client.provider, model=client.model, complete_turn=complete), extraction_source,
                         admission_ref=admission, before_call=reserve, after_call=account)
                     result.update(status=learned["status"], strategy_ref=learned.get("strategy_ref"),
                         extraction_ref=learned.get("extraction_ref"))

@@ -43,6 +43,33 @@ jobs:
       - name: Ruff fatal errors
         run: uv run --frozen ruff check --select E9,F63,F7 src tests scripts main.py
 
+      # 为什么要有它：持续任务和策略经验的新正常入口不能只靠本机临时验证；这些受控检查不计真实自主成绩。
+      - name: Continuous repository task and strategy contracts
+        run: >-
+          uv run --frozen pytest -n 2 -q -o addopts=
+          --junitxml=${{ runner.temp }}/ci-results/continuous-repair.xml
+          tests/unit/test_task_agent_v2_state.py
+          tests/unit/test_task_agent_v2_admission.py
+          tests/unit/test_task_agent_v2_binding_feedback.py
+          tests/unit/test_task_agent_v2_source_paging.py
+          tests/unit/test_task_agent_v2_context.py
+          tests/unit/test_task_agent_v2_working_state.py
+          tests/unit/test_task_agent_v2_handoff.py
+          tests/unit/test_task_agent_v2_product_entry.py
+          tests/unit/test_task_agent_v2_recovery.py
+          tests/unit/test_task_agent_v2_delivery.py
+          tests/unit/test_task_agent_v2_experiment_tools.py
+          tests/unit/test_task_agent_v2_experiments.py
+          tests/unit/test_task_agent_v2_experience.py
+          tests/unit/test_strategy_experience.py
+          tests/unit/test_strategy_process_context.py
+          tests/unit/test_continuous_repair_product_entry.py
+          tests/unit/test_continuous_repair_controller.py
+          tests/unit/test_process_trajectory.py
+          tests/unit/test_extract_strategy_experience.py
+          tests/unit/test_repository_declared_skips.py
+          tests/unit/test_repository_product_pilot.py
+
       # 为什么要有它：缺项和失败不能变成评测成绩，真实临时文件的治理边界需要在每次变更后回归。
       - name: Offline governance scenario gate
         run: |
@@ -224,6 +251,8 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: checkpoint-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/ci-results/checkpoint.xml
+          path: |
+            ${{ runner.temp }}/ci-results/checkpoint.xml
+            ${{ runner.temp }}/ci-results/continuous-repair.xml
           if-no-files-found: warn
           retention-days: 30

@@ -20,6 +20,23 @@ the corresponding Git revision, tests, and evidence manifest.
 - FastAPI, worker, Redis, MCP, dashboard, and Prometheus integration around the
   shared application modules.
 
+### Experimental continuous-task additions
+
+- Optional v2 task execution retains model statements and public observations
+  across capacity-based history projection and recovery. These are attributable
+  working records, not a proven semantic summary of the model's understanding.
+- Path-based candidate edits bind authorized existing files atomically while
+  preserving exact source preimages and the older binding-ID interface.
+- Public process evidence can be sealed after a bounded failed attempt, without
+  resuming it or inventing a native successful terminal result.
+- Source-checkout tooling can prepare, preview, and perform one version-bound
+  extraction from selected public episodes with explicit omissions and costs.
+- Controlled tests cover the normal interfaces; the latest real repair and
+  multi-episode learning results remain negative. No general repair or transfer
+  benefit is claimed, and these research paths remain opt-in.
+
+为什么要有它：新增可选机制需要进入版本说明，但受控接线和真实负结果不能被表述为自主修复或学习收益。
+
 ### Release boundaries
 
 - This is an initial-development release; public interfaces may change.

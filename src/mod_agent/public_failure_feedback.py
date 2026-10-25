@@ -57,6 +57,16 @@ def failed_checks_text(checks):
     return json.dumps([row for row in checks if not row["passed"]], ensure_ascii=False, sort_keys=True, indent=2)
 
 
+def public_test_execution_summary(report):
+    # 为什么要有它：模型可见跳过与实际执行的区别，但跳过不是通过或用于指导修复的失败反例。
+    metadata = report.get("test_execution_metadata")
+    if not metadata:
+        return {}
+    return {"test_execution_summary": {"counts": deepcopy(metadata["counts"]),
+        "skipped_status": "not_executed_not_passed", "report_ref": deepcopy(metadata["report_ref"]),
+        "counter_discrepancies": deepcopy(metadata["counter_discrepancies"])}}
+
+
 def validated_public_checks(reference):
     """Reparse existing public originals; no invented details or rerun.
 
@@ -64,7 +74,7 @@ def validated_public_checks(reference):
     """
     from src.mod_agent.domain.csharp_repository_backend import (
         CSharpRepositoryProfile,
-        _read_tests,
+        read_repository_tests,
         _snapshot,
         validate_diagnostic_integrity,
     )
@@ -93,7 +103,7 @@ def validated_public_checks(reference):
     path = Path(raw["path"]).resolve(strict=True)
     if not path.is_relative_to(Path(reference["path"]).parent / "test-output") or _ref(path) != raw:
         raise ValueError("PUBLIC_FEEDBACK_REPORT_CHANGED")
-    checks = _read_tests(path, profile.data["test_report"]["format"])
+    checks, _ = read_repository_tests(path, profile.data, report=report)
     if checks != report["checks"]:
         raise ValueError("PUBLIC_FEEDBACK_CHECKS_CHANGED")
     if report["verification_summary"] != {"checks": len(checks), "failed_checks": sum(not row["passed"] for row in checks),
@@ -139,6 +149,8 @@ def project_saved_candidate_failure(*, report_ref, state, candidate_ref, origina
         raise ValueError("PUBLIC_FEEDBACK_CANDIDATE_CHANGED")
     failed = project_failed_checks(checks, raw_report_ref=report["test_execution"]["report_ref"], source_root=source)
     return {"candidate_ref": candidate_ref, "candidate_source_id": candidate["candidate_source_id"],
+        **({"test_execution_metadata": report["test_execution_metadata"]}
+           if "test_execution_metadata" in report else {}),
         "report_ref": report_ref, "observations": failed[:8], "failed_checks": len(failed),
         "observations_truncated": len(failed) > 8, "complete_public_details": failed_checks_text(checks),
         "scope": "saved_public_report_projection_not_model_execution_or_delivery"}

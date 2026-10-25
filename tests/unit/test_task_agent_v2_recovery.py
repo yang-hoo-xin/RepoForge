@@ -79,7 +79,7 @@ def test_os_lock_excludes_concurrent_owner_but_releases_without_deleting_file(tm
         assert list((tmp_path / "v2/session-locks").glob("*.lock"))
 
 
-@pytest.mark.parametrize("boundary", ["checkpoint_completed", "tool_receipt", "provider_receipt", "read_charge", "observation_charge", "resource_ledger", "history_receipt"])
+@pytest.mark.parametrize("boundary", ["checkpoint_completed", "tool_receipt", "provider_receipt", "read_charge", "observation_charge", "resource_ledger", "history_receipt", "projected_provider_receipt"])
 def test_normal_entry_interruption_reconstructs_owner_and_finishes_same_product(repository_workspace, monkeypatch, capsys, boundary):
     from src.mod_agent.task_agent_v2_execution import TaskAgentExecutionV2
     from src.mod_agent.task_agent_v2_state import load_v2_artifact
@@ -127,6 +127,15 @@ def test_normal_entry_interruption_reconstructs_owner_and_finishes_same_product(
 
     def interrupt_provider(owner, name, payload):
         ref = original_output(owner, name, payload)
+        if (boundary == "projected_provider_receipt" and name.startswith("provider-outcome-")
+                and payload.get("status") == "responded" and not retained):
+            from src.mod_agent.model_qualification import read_bound_json
+            actual = read_bound_json(payload["request_ref"])
+            current = next(row["content"]["current_task_state"] for row in actual["messages"]
+                if isinstance(row.get("content"), dict) and "current_task_state" in row["content"])
+            if (current.get("history_projection") or {}).get("history_ref"):
+                retained.append((owner.store.root, owner.v2_checkpoint_ref, owner.budget_snapshot()["consumed"]))
+                raise KeyboardInterrupt()
         if boundary == "provider_receipt" and name.startswith("provider-outcome-") and payload["turn"] == 5 and not retained:
             retained.append((owner.store.root, owner.v2_checkpoint_ref, owner.budget_snapshot()["consumed"]))
             raise KeyboardInterrupt()
@@ -155,7 +164,8 @@ def test_normal_entry_interruption_reconstructs_owner_and_finishes_same_product(
     monkeypatch.setattr(TaskAgentV2State, "record_resources", interrupt_resource)
     with pytest.raises(KeyboardInterrupt):
         test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_workspace, monkeypatch, capsys, False,
-            exercise_paging=boundary == "history_receipt", exercise_history=boundary == "history_receipt")
+            exercise_paging=boundary in {"history_receipt", "projected_provider_receipt"},
+            exercise_history=boundary in {"history_receipt", "projected_provider_receipt"})
     capsys.readouterr()
     monkeypatch.setattr(TaskAgentRecoveryJournal, "save", original_save)
     monkeypatch.setattr(TaskAgentExecutionV2, "record_v2_tool_receipt", original_tool)
@@ -177,6 +187,21 @@ def test_normal_entry_interruption_reconstructs_owner_and_finishes_same_product(
     from src.mod_agent import cli
     manifest_path = store.parent / "run_manifest.json"
     original_manifest = json.loads(manifest_path.read_bytes())
+    from src.mod_agent import task_agent_v2_recovery as recovery_owner
+    original_reconcile = recovery_owner._reconcile_checkpoint
+
+    def inspect_reconciled_working_boundary(task, checkpoint_ref, checkpoint, latest_path):
+        ref, value = original_reconcile(task, checkpoint_ref, checkpoint, latest_path)
+        if checkpoint["loop"]["phase"] == "provider_pending":
+            from src.mod_agent.model_qualification import read_bound_json
+            actual = read_bound_json(value["owner"]["reservation"]["request_ref"])
+            current = next(row["content"]["current_task_state"] for row in actual["messages"]
+                if isinstance(row.get("content"), dict) and "current_task_state" in row["content"])
+            assert value["owner"]["working_state"]["boundary"] == {key: current[key] for key in (
+                "task_contract_ref", "current_revision_ref", "binding_registry_ref", "current_check_ref")}
+        return ref, value
+
+    monkeypatch.setattr(recovery_owner, "_reconcile_checkpoint", inspect_reconciled_working_boundary)
     exit_code = cli.main(["run-request", "--resume-task-agent", reference, "--artifact-store-root", str(store)])
     result = json.loads(capsys.readouterr().out)
     assert exit_code == 0, result
@@ -202,9 +227,9 @@ def test_normal_entry_interruption_reconstructs_owner_and_finishes_same_product(
         read_bound_json(turn["response_ref"])
     assert result["request_id"] == host["graph_state"]["request_id"]
     assert result["run_id"] == host["graph_state"]["run_id"]
-    expected_turns = 20 if boundary == "history_receipt" else 13
+    expected_turns = 20 if boundary in {"history_receipt", "projected_provider_receipt"} else 13
     assert result["cumulative_resources"]["model_calls"] == expected_turns
-    assert before > 0 if boundary == "history_receipt" else before == 5
+    assert before > 0 if boundary in {"history_receipt", "projected_provider_receipt"} else before == 5
     final = load_task_agent_checkpoint(artifact_store_root=store, checkpoint_ref=result["v2_checkpoint_ref"])
     assert len(final["checkpoint"]["session"]["public_checks"]) == 2
     assert final["checkpoint"]["loop"]["model_turns"] == expected_turns

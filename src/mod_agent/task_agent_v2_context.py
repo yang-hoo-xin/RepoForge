@@ -5,10 +5,16 @@ import json
 from copy import deepcopy
 from dataclasses import asdict, replace
 
-from src.libs.llm.agent_turn import AgentTurnProviderError, _parse_ollama_tool_call
+from src.libs.llm.agent_turn import (
+    AgentTurnProviderError,
+    _chat_message,
+    _chat_tool,
+    _json_text,
+    _parse_ollama_tool_call,
+    _tool_exchanges,
+)
+from src.libs.llm.ollama_llm import build_ollama_context_admission
 from src.mod_agent.task_agent_v2_state import TaskAgentV2StateError
-
-HISTORY_BYTES = 12000
 
 
 def _text(value):
@@ -92,11 +98,16 @@ def _action_facts(exchanges):
     return facts, total
 
 
-def project_history(request, state, *, history_bytes=HISTORY_BYTES):
+def project_history(request, state, *, history_bytes=None, context_window=None, output_budget=None, provider=None):
     """Keep whole recent exchanges and the last public check; archive older ones.
 
     为什么要有它：已闭合原生调用可整体省略，但不能拆散请求响应、删执行事实，或把摘要当成模型当时的推理。
     """
+    if history_bytes is None:
+        return _project_configured_history(request, state, context_window=context_window,
+            output_budget=output_budget, provider=provider)
+    if type(history_bytes) is not int or history_bytes < 0:
+        raise ValueError("TASK_AGENT_HISTORY_BUDGET_INVALID")
     history = request.historical_tool_exchanges
     latest_check = next((index for index in range(len(history) - 1, -1, -1)
         if any(row.name == "candidate_check" for row in history[index].tool_results)), None)
@@ -150,5 +161,249 @@ def model_plan_view(state):
     if plan.get("schema") != "task-agent-technical-plan.v2" or plan.get("contract_ref") != state.contract_ref:
         raise TaskAgentV2StateError("technical_plan_contract_mismatch")
     text = _text(plan["plan"])
-    return {"technical_plan_ref": reference, "origin": "model_authored_advisory_plan", "text": text[:4000],
-        "truncated": len(text) > 4000, "total_chars": len(text), "grants_authority": False}
+    return {"technical_plan_ref": reference, "origin": "model_authored_advisory_plan", "text": text,
+        "truncated": False, "total_chars": len(text), "grants_authority": False}
+
+
+def _provider_payload(request, *, context_window, output_budget, provider):
+    """Use the adapter's native message helpers for the same pre-call budget projection."""
+    messages = [_chat_message(row) for row in request.messages]
+    for recorded in _tool_exchanges(request, len(messages)):
+        native = recorded.provider_state
+        if not isinstance(native, dict) or not isinstance(native.get("tool_calls"), list):
+            raise AgentTurnProviderError("OLLAMA_TOOL_RESULT_STATE_MISSING")
+        exchange = [{"role": "assistant", "content": native.get("content") or "",
+            "tool_calls": native["tool_calls"]}]
+        exchange.extend({"role": "tool", "tool_name": result.name, "content": _json_text(result.output)}
+            for result in recorded.tool_results)
+        messages[recorded.insert_index:recorded.insert_index] = exchange
+    payload = {"model": getattr(provider, "model", "configured-model"), "messages": messages,
+        "stream": False, "think": False, "options": {"temperature": request.temperature,
+            "num_predict": output_budget, "num_ctx": context_window, "seed": getattr(provider, "seed", 0)}}
+    if request.tools:
+        payload["tools"] = [_chat_tool(tool) for tool in request.tools]
+    if request.response_format is not None:
+        payload["format"] = request.response_format.schema
+    elif request.tool_choice == "required" and len(request.tools) == 1:
+        payload["format"] = request.tools[0].parameters
+    return payload
+
+
+def with_history_projection(request, facts):
+    messages = []
+    for message in request.messages:
+        content = message.content
+        if message.role == "user" and isinstance(content, dict) and set(content) == {"current_task_state"}:
+            content = deepcopy(content)
+            content["current_task_state"]["context_budget"] = deepcopy(facts)
+            content["current_task_state"]["history_projection"] = deepcopy(facts) if facts.get("history_ref") else None
+            message = replace(message, content=content)
+        messages.append(message)
+    return replace(request, messages=tuple(messages))
+
+
+def protected_history_indices(history):
+    """Identify native exchanges that projection may not omit.
+
+    为什么要有它：正常投影和恢复证明必须共用未闭合调用与公开反馈的保护条件，不能各自形成不同门禁。
+    """
+    protected = set()
+    for wanted in ("candidate_check", "check_feedback_read", "feedback_read"):
+        latest = next((index for index in range(len(history) - 1, -1, -1)
+            if any(row.name == wanted for row in history[index].tool_results)), None)
+        if latest is not None:
+            protected.add(latest)
+    for index in range(len(history) - 1, -1, -1):
+        failed = False
+        for row in history[index].tool_results:
+            output = row.output if isinstance(row.output, dict) else {}
+            value = output.get("value", output)
+            if row.name == "candidate_check" and isinstance(value, dict) and value.get("status") not in {None, "passed"}:
+                failed = True
+        if failed:
+            protected.add(index)
+            break
+    for index, exchange in enumerate(history):
+        native = exchange.provider_state
+        raw = native.get("tool_calls", []) if isinstance(native, dict) else []
+        try:
+            expected = {_parse_ollama_tool_call(call).call_id for call in raw}
+        except (AgentTurnProviderError, ValueError):
+            protected.add(index)
+            continue
+        if expected != {row.call_id for row in exchange.tool_results}:
+            protected.add(index)
+    return protected
+
+
+def _project_configured_history(request, state, *, context_window, output_budget, provider):
+    """Fit complete closed exchanges against the real provider limit, not a fixed byte tail.
+
+    为什么要有它：工具、任务状态和输出预留共同占用窗口；预算不足必须披露，不能静默丢失当前调用或公开反例。
+    """
+    context_window = getattr(provider, "context_window", None) or context_window
+    output_budget = getattr(provider, "max_output_tokens", None) or output_budget
+    if (type(context_window) is not int or type(output_budget) is not int
+            or output_budget <= 0 or context_window <= output_budget):
+        raise AgentTurnProviderError("TASK_AGENT_CONTEXT_LIMIT_UNAVAILABLE", diagnostic={
+            "failure_boundary": "context_projection", "configured_num_ctx": context_window,
+            "num_predict": output_budget, "transport_attempted": False})
+    history = request.historical_tool_exchanges
+    protected = protected_history_indices(history)
+    retained = set(range(len(history)))
+    removable = [index for index in range(len(history)) if index not in protected]
+    estimator = getattr(provider, "_context_admission", None)
+
+    def measure(candidate):
+        payload = _provider_payload(candidate, context_window=context_window, output_budget=output_budget, provider=provider)
+        return (estimator(payload) if callable(estimator) else build_ollama_context_admission(
+            payload=payload, configured_num_ctx=context_window, num_predict=output_budget))
+
+    facts = {"schema": "task-agent-history-projection.v2", "origin": "execution_host",
+        "projection_policy": "provider_budget_complete_exchanges_v1", "history_ref": None,
+        "archived_exchange_count": 0, "retained_exchange_count": len(history) + int(bool(request.tool_results)),
+        "protected_history_indices": sorted(protected), "active_exchange_preserved": True,
+        "model_statements_preserved": True, "configured_num_ctx": context_window, "output_token_reserve": output_budget,
+        "exact_prompt_tokens_available_pre_call": False,
+        "meaning": "Only closed historical exchanges may be omitted. The current exchange, latest public check/failure, "
+            "and model-authored working statements remain available. history_read returns archived original public data."}
+    projected_messages = request.messages
+    while True:
+        facts.update(archived_exchange_count=len(history) - len(retained),
+            retained_exchange_count=len(retained) + int(bool(request.tool_results)))
+        # The final reference has bounded content-addressed length; account for it before saving.
+        facts["history_ref"] = "context-archive/" + "0" * 192 if len(retained) < len(history) else None
+        candidate = replace(request, messages=projected_messages,
+            historical_tool_exchanges=tuple(row for index, row in enumerate(history) if index in retained))
+        facts["context_admission"] = measure(with_history_projection(candidate, facts))
+        checked = with_history_projection(candidate, facts)
+        admission = measure(checked)
+        if admission.get("admitted") is True:
+            break
+        if not removable:
+            compacted = _omit_oldest_statement(projected_messages)
+            if compacted is not None:
+                projected_messages = compacted
+                facts["model_statements_preserved"] = False
+                facts["model_statement_originals_archived"] = True
+                continue
+            raise AgentTurnProviderError("TASK_AGENT_PROTECTED_CONTEXT_EXCEEDS_LIMIT", diagnostic={
+                "failure_boundary": "context_projection", "context_admission": admission,
+                "protected_history_indices": sorted(protected), "active_exchange_preserved": True,
+                "model_statements_preserved": facts["model_statements_preserved"], "transport_attempted": False})
+        retained.remove(removable.pop(0))
+    archived = [asdict(exchange) for index, exchange in enumerate(history) if index not in retained]
+    facts["history_ref"] = state.save("context-archive", {"schema": "task-agent-context-archive.v2",
+        "task_contract_ref": state.contract_ref, "exchanges": archived}) if archived else None
+    final = with_history_projection(candidate, facts)
+    final_admission = measure(final)
+    if final_admission.get("admitted") is not True:
+        raise AgentTurnProviderError("TASK_AGENT_FINAL_CONTEXT_EXCEEDS_LIMIT", diagnostic={
+            "context_admission": final_admission, "transport_attempted": False})
+    return final, facts
+
+
+def _omit_oldest_statement(messages):
+    """Remove one non-anchor raw statement from input, never from its public archive.
+
+    为什么要有它：阅读旁白不能自动替代先前工作判断；时间锚点仅保留原文，不冒称理解哪些假设仍然成立。
+    """
+    for index, message in enumerate(messages):
+        content = message.content
+        if not isinstance(content, dict) or set(content) != {"current_task_state"}:
+            continue
+        working = content["current_task_state"].get("working_state") or {}
+        rows = working.get("model_statements", [])
+        projection = working.get("model_statement_projection") or {}
+        if not projection.get("archive_ref") or len(rows) <= 1:
+            return None
+        boundary = working.get("boundary")
+        latest = next((row for row in rows
+            if row["content_sha256"] == working.get("latest_model_statement_sha256")),
+            max(rows, key=lambda row: row.get("last_observed_sequence", row["statement_index"])))
+        anchors = {latest["statement_index"]}
+        current_rows = [row for row in rows if row.get("source_boundary") == boundary]
+        first_current = min(current_rows, key=lambda row: row.get(
+            "boundary_first_observed_sequence", row["statement_index"])) if current_rows else None
+        if first_current is not None:
+            anchors.add(first_current["statement_index"])
+        victim = next((row for row in rows if row["statement_index"] not in anchors), None)
+        if victim is None:
+            return None
+        changed = deepcopy(content)
+        view = changed["current_task_state"]["working_state"]
+        view["model_statements"] = [row for row in view["model_statements"]
+            if row["statement_index"] != victim["statement_index"]]
+        selected = view["model_statement_projection"]
+        selected["retained_statement_indices"] = [row["statement_index"] for row in view["model_statements"]]
+        selected["omitted_statement_indices"] = sorted([*selected["omitted_statement_indices"], victim["statement_index"]])
+        selected["current_boundary_statement_available"] = first_current is not None
+        selected["latest_statement_sha256"] = latest["content_sha256"]
+        selected["selection_basis"] = ("Budgeted raw statements: actual latest occurrence retained; "
+            + ("first statement at the current recorded boundary also retained. " if first_current is not None
+                else "No statement at the current boundary exists; prior statements are historical. ")
+            + "No semantic hypothesis status is inferred.")
+        return (*messages[:index], replace(message, content=changed), *messages[index + 1:])
+    return None
+
+
+def validate_projected_request(original, prepared, state):
+    """Prove a prepared request is an exact projection of one retained native request.
+
+    为什么要有它：恢复可以接受有据可查的闭合历史省略，但不能改变活动调用、工具、参数或伪造归档来注入新历史。
+    """
+    from src.mod_agent.interrupted_patch_admission import retained_request_from_document
+
+    def require(condition, reason):
+        if not condition:
+            raise ValueError("TASK_AGENT_CONTEXT_PROJECTION_INVALID:" + reason)
+
+    require(isinstance(original, dict) and isinstance(prepared, dict)
+        and set(original) == set(prepared), "request_fields")
+    require(all(prepared[key] == original[key] for key in original
+        if key not in {"messages", "historical_tool_exchanges"}), "native_fields_changed")
+    require(isinstance(prepared["messages"], list) and isinstance(original["messages"], list)
+        and prepared["messages"][:len(original["messages"])] == original["messages"], "message_prefix")
+    additions = prepared["messages"][len(original["messages"]):]
+    # Scope: exactly the host-state message, then its optional strategy projection.
+    # 为什么要有它：找到合法状态消息不代表其旁边的任意文字也有来源；恢复不得接受额外或重复的指导消息。
+    require(all(isinstance(row, dict) and set(row) == {"role", "content"} and row["role"] == "user"
+        and isinstance(row["content"], dict) for row in additions), "host_message_shape")
+    require(len(additions) in {1, 2} and set(additions[0]["content"]) == {"current_task_state"},
+        "host_message_sequence")
+    if len(additions) == 2:
+        require(set(additions[1]["content"]) == {"strategy_experience"}
+            and isinstance(additions[1]["content"]["strategy_experience"], dict), "host_message_strategy")
+    current = additions[0]["content"]["current_task_state"]
+    require(isinstance(current, dict), "current_task_state_missing_or_ambiguous")
+    require(current.get("origin") == "execution_host" and current.get("task_contract_ref") == state.contract_ref,
+        "task_state_origin")
+    history, selected = original["historical_tool_exchanges"], prepared["historical_tool_exchanges"]
+    require(isinstance(history, list) and isinstance(selected, list), "history_shape")
+    indices, cursor = [], 0
+    for exchange in selected:
+        index = next((index for index in range(cursor, len(history)) if history[index] == exchange), None)
+        require(index is not None, "history_not_ordered_original_subset")
+        indices.append(index)
+        cursor = index + 1
+    protected = protected_history_indices(retained_request_from_document(original).historical_tool_exchanges)
+    require(protected.issubset(indices), "protected_exchange_omitted")
+    omitted = [row for index, row in enumerate(history) if index not in indices]
+    projection = current.get("history_projection")
+    if omitted:
+        require(isinstance(projection, dict) and isinstance(projection.get("history_ref"), str), "archive_missing")
+        archive = state.load(projection["history_ref"])
+        require(archive.get("schema") == "task-agent-context-archive.v2"
+            and archive.get("task_contract_ref") == state.contract_ref
+            and archive.get("exchanges") == omitted, "archive_not_exact_omitted_history")
+        require(type(projection.get("archived_exchange_count")) is int
+            and projection["archived_exchange_count"] == len(omitted)
+            and type(projection.get("retained_exchange_count")) is int
+            and projection["retained_exchange_count"] == len(selected) + int(bool(original["tool_results"])),
+            "projection_count_changed")
+    else:
+        require(projection is None or isinstance(projection, dict)
+            and projection.get("history_ref") is None and projection.get("archived_exchange_count") == 0,
+            "unexpected_archive_claim")
+    return {"current_task_state": current, "retained_history_indices": indices,
+        "omitted_exchange_count": len(omitted)}

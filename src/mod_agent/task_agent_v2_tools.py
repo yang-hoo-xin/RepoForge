@@ -35,7 +35,8 @@ def prepare_v2_contract(state):
         AgentMessage("system", "You are the technical agent in one continuous repository task. "
             "Investigate, select authorized file targets, test hypotheses and revise current code. "
             "The task contract owns requirements and authority; your technical plan is advisory and mutable. "
-            "Read source before binding or editing. Every edit supplies a unique exact before_text from the "
+            "Read source before editing. Submit edits using path and source_view_ref; the host binds authorized files atomically. "
+            "An existing binding_id is also supported instead of path. Every edit supplies a unique exact before_text from the "
             "specified parent revision. First and later submissions use the same schema. Preserve unrelated code. "
             "Use current returned revision and registry references. Adding a binding does not require changing it. "
             "Read-only source_read/candidate_read/source_search may be batched. Invoke other actions alone. "
@@ -173,7 +174,9 @@ class TaskAgentSessionV2:
         bindings = state.validate_registry(state.registry_ref)["bindings"]
         unknown = []
         for edit in args["edits"]:
-            if not isinstance(edit.get("source_view_ref"), str) or not isinstance(edit.get("binding_id"), str):
+            if (not isinstance(edit.get("source_view_ref"), str)
+                    or ("path" in edit) == ("binding_id" in edit)
+                    or not isinstance(edit.get("path", edit.get("binding_id")), str)):
                 continue
             view = state.load(edit["source_view_ref"])
             if view.get("root_id") != "target" or view.get("contract_ref") != state.contract_ref:
@@ -181,7 +184,7 @@ class TaskAgentSessionV2:
             path = view.get("path")
             if path not in state.contract["allowed_edit_paths"]:
                 raise TaskAgentV2StateError("edit_path_denied")
-            binding = bindings.get(edit["binding_id"])
+            binding = state._file_binding(edit["path"]) if "path" in edit else bindings.get(edit["binding_id"])
             selected_path = binding["canonical_path"] if binding else path
             try:
                 state._validate_view(view, parent, selected_path)
@@ -256,9 +259,9 @@ class TaskAgentSessionV2:
             self.submission_origins[result["candidate_ref"]] = origin
             self.current_check = None
             # 为什么要有它：解释缺失应保留为未表达，不能据此阻断已满足权限、版本及精确前像的编辑。
-            return {**result, "edit_explanations": [{"binding_id": item["binding_id"],
+            return {**result, "edit_explanations": [{"binding_id": change["binding_id"],
                 "status": "expressed" if "rationale" in item else "not_expressed",
-                "rationale": item.get("rationale")} for item in args["edits"]]}
+                "rationale": item.get("rationale")} for item, change in zip(args["edits"], result["changes"], strict=True)]}
         if name == "candidate_check":
             return self._check(args["candidate_ref"])
         return {"candidate_ref": args["candidate_ref"], "check_ref": args["check_ref"]}
@@ -313,7 +316,10 @@ class TaskAgentSessionV2:
                 "candidate_source_id": candidate["candidate_source_id"], "check_ref": self.current_check,
                 "text": feedback["text"]})
         observations = feedback["observations"] if feedback is not None else report.get("observations", [])
+        from src.mod_agent.public_failure_feedback import public_test_execution_summary
+
         return {"candidate_ref": reference, "candidate_source_id": candidate["candidate_source_id"],
+                **public_test_execution_summary(report),
                 "check_ref": self.current_check, "status": report["status"],
                 "observations": deepcopy(observations[:8]), "observations_truncated": len(observations) > 8,
                 "observation_count": len(observations), "feedback_ref": feedback_ref,
@@ -357,9 +363,10 @@ class TaskAgentSessionV2:
         bindings = self.state.validate_registry(self.state.registry_ref)["bindings"]
         binding_schema = {**text, **({"enum": sorted(bindings)} if bindings else {})}
         edit = {"type": "object", "additionalProperties": False,
-            "properties": {"binding_id": binding_schema, "source_view_ref": text, "before_text": text,
+            "properties": {"path": text, "binding_id": binding_schema, "source_view_ref": text, "before_text": text,
                            "after_text": {"type": "string"}, "rationale": text},
-            "required": ["binding_id", "source_view_ref", "before_text", "after_text"]}
+            "required": ["source_view_ref", "before_text", "after_text"],
+            "oneOf": [{"required": ["path"]}, {"required": ["binding_id"]}]}
         specs: list[tuple[str, str, dict[str, Any], list[str], str]] = [
             ("source_read", "source_read", reading,
                 ["parent_revision_ref", "path"], "Read authorized source at baseline or a named candidate in bounded Unicode character pages "
@@ -388,10 +395,12 @@ class TaskAgentSessionV2:
                 "Record technical hypotheses and intended targets. This does not change code, authority or acceptance."),
             ("candidate_submit", "candidate_submit", {"parent_revision_ref": {**text, "enum": [self.state.current_revision_ref]},
                 "edits": {"type": "array", "minItems": 1, "items": edit}}, ["parent_revision_ref", "edits"],
-                "Apply exact edits to the specified parent revision. before_text is mandatory and unique. "
-                "binding_id must be returned by binding_add; a snapshot or source_view reference is not a binding ID. "
+                "Apply exact edits to the specified parent revision. Use path (canonical file path) with source_view_ref; "
+                "the host validates existing authority and creates any needed binding in the same atomic submission. "
+                "before_text is mandatory, visible in the read page and unique. Supply exactly one of path or binding_id. "
+                "For compatibility, binding_id may name an existing registered binding; a snapshot or source_view reference is not a binding ID. "
                 f"Current registry: {self.state.registry_ref}. Valid binding IDs: {sorted(bindings)}. "
-                + ("The registry is empty: register an authorized file before submitting. " if not bindings else "")
+                + ("The registry is empty: submit an authorized path directly; binding_add is optional. " if not bindings else "")
                 + "Same schema for first and later edits; all previous edits remain unless explicitly reversed. "
                 "rationale is optional explanatory evidence; omission is recorded as not_expressed without inventing a reason."),
             ("candidate_check", "candidate_check", {"candidate_ref": text}, ["candidate_ref"],

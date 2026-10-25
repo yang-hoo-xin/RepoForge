@@ -1,0 +1,68 @@
+{
+  "schema_version": "public_continuous_repair_evidence_summary_v1",
+  "date": "2026-10-25",
+  "source_baseline_commit": "f3c845fe5740e3a842a3708b500379f75f0b722b",
+  "current_changes": "Integrated working tree; final release candidate commit and its checks remain separate.",
+  "platform_paths": [
+    "capacity-aware history with attributable model statements",
+    "atomic path-based candidate edits",
+    "public failure revision and strict recovery",
+    "public process-prefix sealing",
+    "selected multi-episode extraction and applicable strategy injection"
+  ],
+  "controlled_scope": "Normal CLI, source/authority counterexamples, public-failure revision, recovered provider receipts and strategy request selection were verified with controlled model/build responses; these are not autonomous outcomes.",
+  "real_repair": {
+    "run_id": "dsh_20f44aa92a78475991db4479dac80962",
+    "status": "closed_timeout_no_candidate",
+    "correct_deliveries": "0/1",
+    "candidate_count": 0,
+    "model_responses": 18,
+    "known_tokens": 469408,
+    "unknown_tail_calls": 1,
+    "process_seconds": 1800.063,
+    "independent_business_scoring": "not performed: no candidate/native terminal",
+    "public_episode_sealed": true,
+    "originals_ref": {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261025\\continuous-repair\\real-task-result.json",
+      "sha256": "bd12fa4bd270d55d28385b762b6e2d27cbb618c1f152d9289d7f8422693fcfaf"
+    }
+  },
+  "real_learning": {
+    "sources": 5,
+    "selected_actions": 165,
+    "coverage": "Four completed public prefixes and original public B3 selections only",
+    "model_calls": 1,
+    "known_tokens": 17791,
+    "status": "insufficient_information",
+    "strategy_created": false,
+    "strategy_adopted": false,
+    "originals_ref": {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261025\\continuous-repair\\learning\\result.json",
+      "sha256": "46406d17aaeb04807dfc771c106828f07d8a75ffb66c17c5e37d888368186545"
+    }
+  },
+  "decision_diagnostic": {
+    "model_calls": 2,
+    "known_tokens": 62485,
+    "A": "source_read proposal",
+    "B": "source_search proposal",
+    "tools_executed": 0,
+    "candidate_created": false,
+    "conclusion": "This tool-description change did not establish a local shift into editing; no general causal or business conclusion.",
+    "originals_ref": {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261025\\continuous-repair\\next-decision\\result.json",
+      "sha256": "517f0bca56724dd31ca2c0de60215c8c8e5a8a88e10ad08d03bfbf69874d97c7"
+    }
+  },
+  "limitations": [
+    "No new autonomous business repair or same-version delivery was demonstrated by these runs.",
+    "No newly extracted strategy is eligible for B/B+ from this extraction; U5 remains incomplete.",
+    "Current raw working records are not a verified semantic hypothesis summary.",
+    "Automatic historical episode discovery/selection is not yet delivered as a general default.",
+    "Raw original requests, checkpoints and machine-specific evidence remain local; this file does not claim they were uploaded."
+  ],
+  "technical_assistance": "Codex implemented platform and diagnostic/evaluation adapters; source selection and generic tool-description variation are developer assistance, not model-origin learning. No business repair patch or hidden acceptance answer was supplied to the solver.",
+  "human_active_time": "not measured",
+  "money": "not measured",
+  "why": "为什么要有它：公开版本说明需要与原始结果一致，区分工程能力、真实模型行为、独立验收和未完成目标。"
+}

@@ -422,27 +422,54 @@ class TaskAgentV2State:
         parent = self._revision(parent_revision_ref)
         if parent != self.current_revision_ref:
             raise TaskAgentV2StateError("stale_parent_revision")
+        self._prepare_submission(parent, edits, self.validate_registry(self.registry_ref))
+
+    def _file_binding(self, path: str) -> dict[str, Any]:
+        path = _path(path)
+        if path not in self.contract["allowed_edit_paths"]:
+            raise TaskAgentV2StateError("edit_path_denied")
+        baseline = self.load(self.contract["baseline_manifest_ref"])["files"][path]
+        binding = {"authority_ref": self.contract["authority_ref"], "baseline_manifest_ref": self.contract["baseline_manifest_ref"],
+            "canonical_path": path, "operation": "modify_existing", "scope": "file", "baseline_file_sha256": baseline["sha256"]}
+        return {**binding, "binding_id": "file-" + _hash(binding)}
+
+    def _prepare_submission(self, parent: str, edits: list[dict[str, Any]], registry: dict[str, Any]):
+        """Resolve authorized targets and exact edits without publishing bindings.
+
+        为什么要有它：文件绑定是平台的确定性步骤；全部编辑验证成功前不能发布新增权限凭据或部分候选。
+        """
         if not edits:
             raise TaskAgentV2StateError("edits_required")
-        registry = self.validate_registry(self.registry_ref)
         original = self.materialize(parent)
         working = dict(original)
+        changes = []
         for edit in edits:
-            binding = registry["bindings"].get(edit.get("binding_id"))
-            if binding is None:
-                raise TaskAgentV2StateError("unknown_binding")
+            if not isinstance(edit, dict) or ("path" in edit) == ("binding_id" in edit):
+                raise TaskAgentV2StateError("exactly_one_edit_target_required")
+            if "path" in edit:
+                binding = self._file_binding(edit["path"])
+            else:
+                binding = registry["bindings"].get(edit.get("binding_id"))
+                if binding is None:
+                    raise TaskAgentV2StateError("unknown_binding")
             path = binding["canonical_path"]
             view = self.load(edit.get("source_view_ref", ""))
-            self._validate_view(view, parent, path)
+            self._validate_view(view, parent, path, original)
             before, after = edit.get("before_text"), edit.get("after_text")
             if not isinstance(before, str) or not before or not isinstance(after, str):
                 raise TaskAgentV2StateError("explicit_nonempty_before_and_after_required")
             self._validate_visible_preimage(view, before)
             if original[path].count(before) != 1 or working[path].count(before) != 1:
                 raise TaskAgentV2StateError("before_text_not_unique")
-            working[path] = working[path].replace(before, after, 1)
+            previous_text = working[path]
+            working[path] = previous_text.replace(before, after, 1)
+            registry["bindings"][binding["binding_id"]] = binding
+            changes.append({"path": path, "binding_id": binding["binding_id"], "source_view_ref": edit["source_view_ref"],
+                "before_text": before, "after_text": after, "before_sha256": _text_hash(previous_text),
+                "after_sha256": _text_hash(working[path])})
         if working == original:
             raise TaskAgentV2StateError("candidate_has_no_changes")
+        return working, changes
 
     def add_binding(self, expected_registry_ref: str, source_view_ref: str, path: str,
                     operation_id: str | None = None) -> dict[str, Any]:
@@ -459,11 +486,8 @@ class TaskAgentV2State:
             if path not in self.contract["allowed_edit_paths"]:
                 raise TaskAgentV2StateError("edit_path_denied")
             self._validate_view(view, view["parent_revision_ref"], path)
-            baseline = self.load(self.contract["baseline_manifest_ref"])["files"][path]
-            binding = {"authority_ref": self.contract["authority_ref"], "baseline_manifest_ref": self.contract["baseline_manifest_ref"],
-                "canonical_path": path, "operation": "modify_existing", "scope": "file", "baseline_file_sha256": baseline["sha256"]}
-            binding_id = "file-" + _hash(binding)
-            binding["binding_id"] = binding_id
+            binding = self._file_binding(path)
+            binding_id = binding["binding_id"]
             registry = self.validate_registry(expected_registry_ref)
             registry["bindings"][binding_id] = binding
             head["registry_ref"] = self.save("registry", registry)
@@ -509,39 +533,18 @@ class TaskAgentV2State:
                 return dict(result)
             if parent != head["current_revision_ref"]:
                 raise TaskAgentV2StateError("stale_parent_revision")
-            if not edits:
-                raise TaskAgentV2StateError("edits_required")
-            original = self.materialize(parent)
-            files = dict(original)
             registry = self.validate_registry(head["registry_ref"])
-            changes = []
-            for edit in edits:
-                binding = registry["bindings"].get(edit.get("binding_id"))
-                if binding is None:
-                    raise TaskAgentV2StateError("unknown_binding")
-                path = binding["canonical_path"]
-                view = self.load(edit.get("source_view_ref", ""))
-                self._validate_view(view, parent, path)
-                before, after = edit.get("before_text"), edit.get("after_text")
-                if not isinstance(before, str) or not before or not isinstance(after, str):
-                    raise TaskAgentV2StateError("explicit_nonempty_before_and_after_required")
-                self._validate_visible_preimage(view, before)
-                if original[path].count(before) != 1 or files[path].count(before) != 1:
-                    raise TaskAgentV2StateError("before_text_not_unique")
-                previous_text = files[path]
-                files[path] = previous_text.replace(before, after, 1)
-                changes.append({"path": path, "binding_id": binding["binding_id"], "source_view_ref": edit["source_view_ref"],
-                    "before_text": before, "after_text": after, "before_sha256": _text_hash(previous_text), "after_sha256": _text_hash(files[path])})
-            if files == original:
-                raise TaskAgentV2StateError("candidate_has_no_changes")
+            files, changes = self._prepare_submission(parent, edits, registry)
+            registry_ref = self.save("registry", registry)
             baseline = self.load(self.contract["baseline_manifest_ref"])["files"]
             overlay = {p: t for p, t in files.items() if t != baseline[p]["text"]}
             identity = _hash({"baseline_manifest_ref": self.contract["baseline_manifest_ref"], "files": {p: _text_hash(t) for p, t in sorted(files.items())}})
             candidate = {"schema": "task-agent-candidate.v2", "contract_ref": self.contract_ref,
                 "baseline_manifest_ref": self.contract["baseline_manifest_ref"], "parent_revision_ref": parent,
-                "registry_ref": head["registry_ref"], "files": overlay, "changes": changes,
+                "registry_ref": registry_ref, "files": overlay, "changes": changes,
                 "candidate_source_id": identity, "model_origin": dict(model_origin or {})}
             ref = self.save("candidate", candidate)
+            head["registry_ref"] = registry_ref
             head["current_revision_ref"] = ref
             result.update(candidate_ref=ref, candidate_source_id=identity, changes=changes)
         return dict(result)

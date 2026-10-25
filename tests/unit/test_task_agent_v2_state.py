@@ -244,3 +244,82 @@ def test_forged_registry_is_rejected_before_writing_candidate(state):
         state.submit(state.current_revision_ref, [{"binding_id": binding_id,
             "source_view_ref": view["source_view_ref"], "before_text": "private", "after_text": "bad"}])
     assert len(list((state.root / "candidate").glob("*.json"))) == 1
+
+
+def test_path_submission_binds_multiple_files_atomically_and_replays_after_restore(state):
+    parent, registry = state.current_revision_ref, state.registry_ref
+    edits = [{"path": path, "source_view_ref": state.read_source(parent, path)["source_view_ref"],
+        "before_text": before, "after_text": after} for path, before, after in [("A.cs", "1", "3"), ("B.cs", "2", "4")]]
+    before_validation = set(state.root.rglob("*"))
+    state.validate_submission(parent, edits)
+    assert state.registry_ref == registry and set(state.root.rglob("*")) == before_validation
+    origin = {"call_id": "direct-edit", "response_ref": "retained-response"}
+    result = state.submit(parent, edits, operation_id="direct-edit", model_origin=origin)
+    candidate = state.validate_candidate(result["candidate_ref"])
+    assert candidate["model_origin"] == origin and candidate["registry_ref"] == state.registry_ref != registry
+    assert state.materialize(result["candidate_ref"])["A.cs"] == "a = 3;\n"
+    assert state.materialize(result["candidate_ref"])["B.cs"] == "b = 4;\n"
+    assert {row["canonical_path"] for row in state.validate_registry(state.registry_ref)["bindings"].values()} == {"A.cs", "B.cs"}
+    assert all("binding_id" not in item for item in edits)
+    assert state.head["sequence"] == 1 and set(state.head["operations"]) == {"direct-edit"}
+    restored = TaskAgentV2State(state.store_root, state.contract_ref)
+    assert restored.submit(parent, edits, operation_id="direct-edit", model_origin=origin) == result
+    assert restored.head == state.head
+
+
+@pytest.mark.parametrize("second_path,before,code", [
+    ("B.cs", "missing", "before_text_not_unique"),
+    ("private.cs", "private", "edit_path_denied"),
+])
+def test_rejected_path_batch_publishes_neither_bindings_nor_candidate(state, second_path, before, code):
+    parent, registry = state.current_revision_ref, state.registry_ref
+    edits = [{"path": path, "source_view_ref": state.read_source(parent, path)["source_view_ref"],
+        "before_text": old, "after_text": "changed"} for path, old in [("A.cs", "1"), (second_path, before)]]
+    head = state.head
+    with pytest.raises(TaskAgentV2StateError, match=code):
+        state.submit(parent, edits)
+    assert state.head == head and state.registry_ref == registry
+    assert not (state.root / "candidate").exists()
+    assert len(list((state.root / "registry").glob("*.json"))) == 1
+
+
+def test_path_and_legacy_binding_edits_share_the_same_candidate_contract(state):
+    first = edit(state, "A.cs", "1", "3")
+    a_view = state.read_source(first["candidate_ref"], "A.cs")
+    b_view = state.read_source(first["candidate_ref"], "B.cs")
+    binding_id = first["changes"][0]["binding_id"]
+    result = state.submit(first["candidate_ref"], [
+        {"binding_id": binding_id, "source_view_ref": a_view["source_view_ref"], "before_text": "3", "after_text": "1"},
+        {"path": "B.cs", "source_view_ref": b_view["source_view_ref"], "before_text": "2", "after_text": "7"},
+    ])
+    assert state.validate_candidate(result["candidate_ref"])["parent_revision_ref"] == first["candidate_ref"]
+    assert [change["path"] for change in state.changes_from_baseline(result["candidate_ref"])] == ["B.cs"]
+
+
+@pytest.mark.parametrize("target", [{}, {"path": "A.cs", "binding_id": "invented"}])
+def test_atomic_edit_requires_one_unambiguous_target(state, target):
+    view = state.read_source("baseline", "A.cs")
+    with pytest.raises(TaskAgentV2StateError, match="exactly_one_edit_target_required"):
+        state.submit("baseline", [{**target, "source_view_ref": view["source_view_ref"], "before_text": "1", "after_text": "2"}])
+    assert not state.validate_registry(state.registry_ref)["bindings"]
+
+
+def test_interrupted_atomic_submit_keeps_old_registry_and_unknown_operation(state, monkeypatch):
+    parent, registry = state.current_revision_ref, state.registry_ref
+    view = state.read_source(parent, "A.cs")
+    edits = [{"path": "A.cs", "source_view_ref": view["source_view_ref"], "before_text": "1", "after_text": "8"}]
+    write = state._write_head
+
+    def crash_on_publish(head):
+        if "pending_operation" not in head:
+            raise OSError("interrupted before atomic head publish")
+        write(head)
+
+    monkeypatch.setattr(state, "_write_head", crash_on_publish)
+    with pytest.raises(OSError, match="interrupted"):
+        state.submit(parent, edits, operation_id="uncertain-edit")
+    restored = TaskAgentV2State(state.store_root, state.contract_ref)
+    assert restored.registry_ref == registry and restored.current_revision_ref == parent
+    assert restored.head["pending_operation"]
+    with pytest.raises(TaskAgentV2StateError, match="operation_outcome_unknown"):
+        restored.submit(parent, edits, operation_id="uncertain-edit")

@@ -25,8 +25,8 @@ def save(root, name, data):
     return {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
-@pytest.fixture
-def handoff_case(tmp_path, monkeypatch):
+@pytest.fixture(params=["binding_id", "path"])
+def handoff_case(tmp_path, monkeypatch, request):
     root = tmp_path / "store"
     root.mkdir()
     target = tmp_path / "source"
@@ -39,15 +39,20 @@ def handoff_case(tmp_path, monkeypatch):
             "feature_id": "controlled", "artifact_type": "feature_spec", "path": "feature.json", "artifact_hash": "abc"}})
     parent = task.current_revision_ref
     view = task.read_source(parent, "A.cs")
-    binding = task.add_binding(task.registry_ref, view["source_view_ref"], "A.cs")
-    args = {"parent_revision_ref": parent, "edits": [{"binding_id": binding["binding_id"],
+    target_arg = {"path": "A.cs"}
+    if request.param == "binding_id":
+        target_arg = {"binding_id": task.add_binding(task.registry_ref, view["source_view_ref"], "A.cs")["binding_id"]}
+    args = {"parent_revision_ref": parent, "edits": [{**target_arg,
         "source_view_ref": view["source_view_ref"], "before_text": "Value = 1", "after_text": "Value = 2",
         "rationale": "Controlled replacement."}]}
+    materialized_args = deepcopy(args)
+    if request.param == "path_mismatch":
+        args["edits"][0]["path"] = "B.cs"
     origin = {"call_id": "candidate_submit0", "arguments_ref": save(root, "candidate_submit0-args.json", args),
         "response_ref": save(root, "candidate_submit0-response.json", {"provider": "ollama_chat_local",
             "model": "controlled", "provider_state": {}, "stop_reason": "tool_calls",
             "tool_calls": [{"name": "candidate_submit", "call_id": "candidate_submit0", "arguments": args}]})}
-    candidate = task.submit(**args, operation_id="submit-1", model_origin=origin)
+    candidate = task.submit(**materialized_args, operation_id="submit-1", model_origin=origin)
     profile = {"model": "controlled"}
     records, calls, events = [], {}, []
 
@@ -119,6 +124,12 @@ def test_controlled_candidate_reaches_proposal_review_and_no_write_dryrun(handof
     assert "Value = 2" in dry["unified_diff"]
     assert len(c.checked) >= 4
     assert "implementation_plan_hash" not in proposal["context_pack"]
+
+
+@pytest.mark.parametrize("handoff_case", ["path_mismatch"], indirect=True)
+def test_platform_cannot_materialize_a_different_path_than_the_retained_model_submission(handoff_case):
+    with pytest.raises(ValueError, match="V2_SUBMITTED_BYTES_CHANGED"):
+        validate_task_agent_handoff_v2(handoff_case.outcome, **handoff_case.kwargs)
 
 
 @pytest.mark.parametrize("tamper", ["missing_submit", "wrong_result", "wrong_finish", "authority"])

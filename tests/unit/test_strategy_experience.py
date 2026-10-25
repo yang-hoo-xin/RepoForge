@@ -106,9 +106,9 @@ def test_real_request_response_and_cost_receipt_are_saved_once(tmp_path, setup):
     assert request["request"] == json.loads(json.dumps(asdict(client.requests[0])))
     prepared = client.requests[0]
     assert prepared.tool_choice == "none" and not prepared.tools
-    assert set(prepared.response_format.schema["properties"]) == {
+    assert set(prepared.response_format.schema["anyOf"][0]["properties"]) == {
         "suggested_action", "expected_observation", "counterevidence"}
-    descriptions = prepared.response_format.schema["properties"]
+    descriptions = prepared.response_format.schema["anyOf"][0]["properties"]
     assert "not a category label" in descriptions["suggested_action"]["description"]
     assert "inapplicable" in descriptions["counterevidence"]["description"]
     assert "different tasks" in prepared.messages[0].content
@@ -198,3 +198,75 @@ def test_unknown_provider_execution_is_recorded_and_never_replayed(tmp_path, set
     repeated = memory.propose_from_episode(client, episode, admission_ref=admission,
         before_call=lambda ref: True, after_call=receipts.append)
     assert repeated["status"] == "execution_unknown" and len(client.requests) == 1
+
+
+def test_insufficient_information_preserves_cost_and_replays_without_model(tmp_path, setup):
+    memory, _, _, _ = setup
+    episode, admission = extraction_inputs(tmp_path, setup)
+    client = Provider({"status": "insufficient_information", "reason": "The trace has actions but no discriminating observation."})
+    receipts = []
+    result = memory.propose_from_episode(client, episode, admission_ref=admission,
+        before_call=lambda _: True, after_call=receipts.append)
+    assert result["status"] == "insufficient_information" and result["strategy_ref"] is None
+    assert result["usage"]["total_tokens"] == 40 and len(receipts) == 1
+    repeated = memory.propose_from_episode(client, episode, admission_ref=admission,
+        before_call=lambda _: pytest.fail("already accounted"), after_call=lambda _: pytest.fail("already accounted"))
+    assert repeated["extraction_ref"] == result["extraction_ref"] and len(client.requests) == 1
+
+
+def test_frozen_episode_set_preserves_opposition_and_run_action_namespaces(tmp_path, setup):
+    memory, evidence, strategy, _ = setup
+    episode_refs = []
+    for run_id, status in (("run-a", "timed_out"), ("run-b", "user_stopped")):
+        source = _save(tmp_path / (run_id + ".json"), {"name": "source_read", "status": status})
+        episode_refs.append(_save(tmp_path / (run_id + "-episode.json"), {
+            "schema_version": "public_strategy_episode_v1", "visibility": "public", "data_use": "strategy_learning",
+            "run_id": run_id, "task_contract_ref": run_id + "-contract", "projection_version": "ordered_public_actions_v1",
+            "information_gain": ["public_process_observation"],
+            "applicability": strategy["applicability"] if run_id == "run-a" else {"mechanism": "user_cancellation"},
+            "evidence_refs": [{**evidence[0], **source}], "selections": [
+                {"evidence_id": "public", "locator": ["name"], "role": "action_request", "action_index": 0},
+                {"evidence_id": "public", "locator": ["status"], "role": "technical_outcome"}]}))
+    frozen = memory.freeze_episode_set(episode_refs, applicability=strategy["applicability"],
+        source_roles=["supporting", "inapplicable"])
+    entries = memory.read(frozen)["episodes"]
+    client = Provider({**strategy, "source_assessments": [
+        {"episode_id": entries[0]["episode_id"], "relation": "supporting", "reason": "Investigation exhausted the window."},
+        {"episode_id": entries[1]["episode_id"], "relation": "opposing", "reason": "User stopped it; ability is unknown."}]})
+    _, admission = extraction_inputs(tmp_path, setup)
+    receipts = []
+    result = memory.propose_from_episodes(client, frozen, admission_ref=admission,
+        before_call=lambda _: True, after_call=receipts.append)
+    assert result["status"] == "completed" and len(receipts) == 1
+    actual = client.requests[0].messages[1].content["episodes"]
+    assert [row["run_id"] for row in actual] == ["run-a", "run-b"]
+    assert [row["source_role"] for row in actual] == ["supporting", "inapplicable"]
+    assert [row["source_applicability"]["mechanism"] for row in actual] == ["retained_state", "user_cancellation"]
+    assert client.requests[0].messages[1].content["applicability"] == strategy["applicability"]
+    assert [row["experience"]["actions"][0]["action_index"] for row in actual] == [0, 0]
+    assert len({row["episode_id"] for row in actual}) == 2
+    saved = memory.read(result["strategy_ref"])
+    assert len({row["evidence_id"] for row in saved["evidence_refs"]}) == 2
+    assert memory.read(result["extraction_ref"])["source_assessments"][1]["relation"] == "opposing"
+    again = memory.propose_from_episodes(client, frozen, admission_ref=admission,
+        before_call=lambda _: pytest.fail("must not reserve again"), after_call=lambda _: pytest.fail("must not charge again"))
+    assert again["strategy_ref"] == result["strategy_ref"] and len(client.requests) == 1
+    from pathlib import Path
+    Path(episode_refs[1]["path"]).write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError):
+        memory.propose_from_episodes(client, frozen, admission_ref=admission,
+            before_call=lambda _: pytest.fail("changed input"), after_call=lambda _: None)
+    assert len(client.requests) == 1
+
+
+def test_extraction_version_separates_attempts_and_model_sources(tmp_path, setup, monkeypatch):
+    from src.mod_agent.planning import strategy_experience
+    memory, _, strategy, _ = setup
+    episode, admission = extraction_inputs(tmp_path, setup)
+    client, receipts = Provider(strategy), []
+    first = memory.propose_from_episode(client, episode, admission_ref=admission,
+        before_call=lambda _: True, after_call=receipts.append)
+    monkeypatch.setattr(strategy_experience, "_EXTRACTION_VERSION", "controlled-next-version")
+    second = memory.propose_from_episode(client, episode, admission_ref=admission,
+        before_call=lambda _: True, after_call=receipts.append)
+    assert first["strategy_ref"] != second["strategy_ref"] and len(client.requests) == len(receipts) == 2

@@ -249,3 +249,51 @@ def test_missing_experiment_catalog_returns_known_rejection_and_keeps_same_sessi
     assert session.state.current_revision_ref == baseline
     assert session.state.head["resources"]["model_calls"] == 3
     assert not any(key.startswith("experiment:") for key in session.state.head["operations"])
+
+
+def test_direct_path_submission_uses_actual_call_without_binding_tool_or_argument_rewrite(session):
+    state, requests = session.state, []
+    arguments = {}
+
+    def complete(request):
+        requests.append(request)
+        if len(requests) == 1:
+            return response("source_read", {"parent_revision_ref": state.current_revision_ref, "path": "A.cs"}, "actual-read")
+        if len(requests) == 2:
+            view = request.tool_results[-1].output["value"]
+            arguments.update(parent_revision_ref=state.current_revision_ref, edits=[{"path": "A.cs",
+                "source_view_ref": view["source_view_ref"], "before_text": "1", "after_text": "4"}])
+            head, files = state.head, set(state.root.rglob("*"))
+            action(session, "candidate_submit").prepare(arguments)
+            assert state.head == head and set(state.root.rglob("*")) == files
+            return response("candidate_submit", arguments, "actual-path-edit")
+        return AgentTurnResponse("ollama_chat_local", "local", "", (), stop_reason="refusal", provider_state={})
+
+    result = session.run(SimpleNamespace(complete_turn=complete), session.observe_dispatch_event)
+    assert not result.tool_argument_correction_used and not result.unknown_effects
+    assert result.call_records["actual-path-edit"]["status"] == "completed"
+    assert [row["name"] for row in session.actual_calls] == ["source_read", "candidate_submit"]
+    submitted = session.actual_calls[-1]
+    assert submitted["arguments"] == arguments and "binding_id" not in arguments["edits"][0]
+    candidate = state.validate_candidate(state.current_revision_ref)
+    assert candidate["model_origin"] == {key: submitted[key] for key in ("call_id", "response_ref", "arguments_ref")}
+    assert state.materialize(state.current_revision_ref)["A.cs"] == "a = 4;\n"
+    output = requests[-1].tool_results[-1].output["value"]
+    assert output["edit_explanations"] == [{"binding_id": candidate["changes"][0]["binding_id"],
+        "status": "not_expressed", "rationale": None}]
+
+
+@pytest.mark.parametrize("path,view_path,code", [
+    ("private.cs", "private.cs", "edit_path_denied"),
+    ("B.cs", "A.cs", "stale_or_invalid_source_view"),
+    ("../A.cs", "A.cs", "invalid_path"),
+])
+def test_direct_path_rejects_wrong_authority_or_source_before_dispatch(session, path, view_path, code):
+    state = session.state
+    view = state.read_source(state.current_revision_ref, view_path)
+    arguments = {"parent_revision_ref": state.current_revision_ref, "edits": [{"path": path,
+        "source_view_ref": view["source_view_ref"], "before_text": view["text"], "after_text": "changed"}]}
+    head = state.head
+    with pytest.raises(TaskAgentV2StateError, match=code):
+        action(session, "candidate_submit").prepare(arguments)
+    assert state.head == head and not state.validate_registry(state.registry_ref)["bindings"]

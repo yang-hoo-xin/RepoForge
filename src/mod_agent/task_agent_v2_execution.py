@@ -153,12 +153,24 @@ class TaskAgentExecutionV2(TaskAgentExecution):
             investigation_observations,
             model_plan_view,
             project_history,
+            with_history_projection,
         )
         from src.mod_agent.task_agent_v2_experiment_tools import experiment_configuration_facts
+        from src.mod_agent.task_agent_v2_working_state import (
+            update_working_state,
+            working_state_view,
+        )
 
         state = session.state
         observation_facts = investigation_observations(request, state.current_revision_ref)
-        request, history_projection = project_history(request, state)
+        self._v2_working_state = update_working_state(getattr(self, "_v2_working_state", None), request,
+            task_contract_ref=state.contract_ref, current_revision_ref=state.current_revision_ref,
+            registry_ref=state.registry_ref, current_check_ref=session.current_check)
+        working_ref = state.save("working-state", self._v2_working_state)
+        statement_archive = state.save("context-archive", {"schema": "task-agent-context-archive.v2",
+            "task_contract_ref": state.contract_ref, "exchanges": [
+                {"model_statement": deepcopy(row)} for row in self._v2_working_state["model_statements"]]})
+
         registry = state.validate_registry(state.registry_ref)
         current_check = state.load(session.current_check) if session.current_check is not None else None
         current = {"origin": "execution_host", "task_contract_ref": state.contract_ref,
@@ -167,7 +179,8 @@ class TaskAgentExecutionV2(TaskAgentExecution):
             "current_check_ref": session.current_check, "current_check_status": current_check["status"] if current_check else None,
             "technical_plan_ref": state.head["plan_ref"], "baseline_revision_ref": state.contract["baseline_manifest_ref"],
             "model_technical_plan": model_plan_view(state),
-            "history_projection": history_projection,
+            "history_projection": None,
+            "working_state_ref": working_ref, "working_state": working_state_view(self._v2_working_state, statement_archive_ref=statement_archive),
             "investigation_observations": observation_facts,
             "cumulative_resources": deepcopy(state.head["resources"]),
             "model_call_budget": validate_budget(self.budget_snapshot()),
@@ -178,11 +191,25 @@ class TaskAgentExecutionV2(TaskAgentExecution):
             "experiment_capabilities": experiment_configuration_facts(self),
             "baseline_usage": "Historical source reference; editing must name current_revision_ref and a matching source_view_ref."}
         prepared = replace(request, messages=(*request.messages, AgentMessage("user", {"current_task_state": current})))
-        return self._experience.prepare_decision_request(prepared, session) if getattr(self, "_experience", None) is not None else prepared
+        if getattr(self, "_experience", None) is not None:
+            prepared = self._experience.prepare_decision_request(prepared, session)
+        prepared, projection = project_history(prepared, state,
+            context_window=getattr(self.profile, "context_window", None),
+            output_budget=getattr(self.profile, "output_budget", None), provider=getattr(self, "_v2_client", None))
+        self._v2_context_projection = projection
+        return with_history_projection(prepared, projection) if projection is not None else prepared
 
     def complete_terminal_learning(self):
         if getattr(self, "_experience", None) is None:
-            return {"status": "not_configured"}
+            from src.mod_agent.task_agent_v2_experience import seal_current_public_episode
+            # 为什么要有它：无经验配置仍保留公开执行经历；封存失败必须披露，不能反转既有业务结果。
+            try:
+                episode_ref = seal_current_public_episode(self)
+            except Exception as error:
+                return {"status": "not_configured", "episode_status": "episode_unavailable",
+                    "episode_ref": None, "diagnostic": {"error_type": type(error).__name__, "message": str(error)}}
+            return {"status": "not_configured", "episode_status": "sealed" if episode_ref else "no_observed_episode",
+                "episode_ref": episode_ref}
         from src.mod_agent.task_agent_v2_recovery import single_task_lock
         lock = nullcontext() if getattr(self, "_resume_lock_held", False) else single_task_lock(self.store.root, self._recovery_journal.lock_key)
         with lock:
@@ -323,6 +350,8 @@ class TaskAgentExecutionV2(TaskAgentExecution):
             self._reads, self._observation_bytes = counters["reads"], counters["observation_bytes"]
             self._v2_turn_count, self._v2_tool_charge_count = counters["turn_count"], counters["tool_charge_count"]
             self._v2_reservation = deepcopy(counters["reservation"])
+            self._v2_working_state = deepcopy(counters.get("working_state"))
+            self._v2_context_projection = deepcopy(counters.get("context_projection"))
         details["task_timing_origin_ref"] = deepcopy(self._task_timing_origin_ref)
         task = session = loop = None
         loop_ref = finish_ref = None
@@ -407,11 +436,11 @@ class TaskAgentExecutionV2(TaskAgentExecution):
                 if resumed is not None and self._experience is not None:
                     self._experience._terminal_receipt = None
                 loop_request = asdict(request)
-                request = self.prepare_decision_request(request, session)
                 observed = identity()
                 bind = getattr(client, "bind_context_identity", None)
                 if callable(bind):
                     bind(model_identity=observed, owner_profile_sha256=canonical_hash(self.profile.to_dict()))
+                request = self.prepare_decision_request(request, session)
                 index = len(details["provider_turns"]) + 1
                 reservation = self._v2_reservation
                 _require(reservation["turn"] == index, "V2_RESERVATION_TURN_CHANGED")
@@ -449,6 +478,9 @@ class TaskAgentExecutionV2(TaskAgentExecution):
                     _require(isinstance(response, AgentTurnResponse), "RESPONSE_INVALID")
                     event.update(status="responded", response_ref=self._save(f"response-{index:03d}.json", asdict(response)),
                                  usage=response.usage.to_dict())
+                    from src.mod_agent.task_agent_v2_working_state import retain_model_statement
+                    self._v2_working_state = retain_model_statement(getattr(self, "_v2_working_state", None),
+                        response, response_ref=event["response_ref"], source_boundary=deepcopy(self._v2_working_state.get("boundary")))
                     reservation.update(response_ref=event["response_ref"], call_ids=[call.call_id for call in response.tool_calls])
                     task.record_resources(response.usage.to_dict(),
                         operation_id="model-usage:" + reservation["reservation_id"])

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -33,8 +34,10 @@ from src.mod_agent.domain.csharp_repository_backend import (
     _snapshot,
 )
 from src.mod_agent.domain.full_project_compilation import _ref, _save
+from src.mod_agent.evaluation.strategy_trial_preparation import verify_strategy_trials
+from src.mod_agent.evaluation.trial_comparison_identity import platform_identity
 from src.mod_agent.model_admission import read_ollama_model_identity
-from src.mod_agent.model_qualification import read_bound_json
+from src.mod_agent.model_qualification import canonical_hash, read_bound_json
 from src.mod_agent.platform_execution_snapshot import FrozenExecution, prepare_snapshot
 
 REPO = Path(__file__).resolve().parents[1]
@@ -92,6 +95,8 @@ def local_codex_command(executable, workspace, last_message, deny_roots, dotnet,
 def freeze(configuration_ref):
     config = read_bound_json(configuration_ref)
     mode = config.get("mode", "matched_product_pair")
+    if mode == "strategy_pair":
+        return freeze_strategy_pair(configuration_ref, config)
     if mode not in {"matched_product_pair", "absolute_real_B"}:
         raise ValueError("EXPLICIT_PILOT_MODE_REQUIRED")
     for key in configuration_keys(config):
@@ -197,8 +202,12 @@ def validate_frozen_evaluator(qualification):
     为什么要有它：资格绑定的是实际执行版本及路径，消费端不能改写原件或放宽身份检查。
     """
     reference = qualification["evaluator_ref"]
+    snapshot = qualification.get("snapshot_ref", qualification.get("platform_ref"))
+    if not snapshot or (qualification.get("snapshot_ref") and qualification.get("platform_ref")
+            and qualification["snapshot_ref"] != qualification["platform_ref"]):
+        raise ValueError("QUALIFIED_PLATFORM_IDENTITY_REQUIRED")
     evaluator = read_bound_json(reference)
-    frozen = FrozenExecution(qualification["snapshot_ref"])
+    frozen = FrozenExecution(snapshot)
     frozen.verify_files()
     expected = _ref(frozen.root / "src/mod_agent/evaluation/strategy_repository_evaluator.py")
     if evaluator["adoption_adapter_ref"] != expected:
@@ -214,8 +223,129 @@ def validate_frozen_evaluator(qualification):
 
 
 def configuration_keys(config):
+    if config.get("mode") == "strategy_pair":
+        return ("intent_ref", "prepared_ref", "public_profile_ref", "qualification_ref")
     keys = ("intent_ref", "public_problem_ref", "public_contract_ref", "public_profile_ref", "qualification_ref", "settings_ref")
     return (*keys, "codex_executable_ref") if config.get("mode", "matched_product_pair") == "matched_product_pair" else keys
+
+
+def freeze_strategy_pair(configuration_ref, config):
+    """Freeze already allocated B/B+ requests; never reconstruct their argv.
+
+    为什么要有它：经验只改变已经登记的输入边界，派发不能另造一套技术流程或刷新原任务身份。
+    """
+    for key in configuration_keys(config):
+        _verify(config[key])
+    prepared = verify_strategy_trials(config["prepared_ref"])
+    qualification = read_bound_json(config["qualification_ref"])
+    if qualification.get("qualified") is not True:
+        raise ValueError("QUALIFIED_ACCEPTANCE_REQUIRED")
+    validate_frozen_evaluator(qualification)
+    if qualification.get("profile_ref") != config["public_profile_ref"]:
+        raise ValueError("QUALIFIED_PUBLIC_PROFILE_CHANGED")
+    intent = read_bound_json(config["intent_ref"])
+    wall = config.get("wall_seconds")
+    if (type(wall) not in (int, float) or not math.isfinite(wall) or wall <= 0
+            or intent.get("wall_seconds") != wall):
+        raise ValueError("PREREGISTERED_ARM_DEADLINE_REQUIRED")
+    trials = prepared["trials"]
+    if (len(trials) != 2 or {t["arm"] for t in trials} != {"B", "B+"}
+            or len({(t["task_id"], t["attempt"]) for t in trials}) != 1):
+        raise ValueError("ONE_PREPARED_STRATEGY_PAIR_REQUIRED")
+    protocol = read_bound_json(prepared["protocol_ref"])
+    model = dict(protocol["invariants"]["model"])
+    if model.get("name") and model.get("model") and model["name"] != model["model"]:
+        raise ValueError("REGISTERED_MODEL_IDENTITY_CONFLICT")
+    model["model"] = model.get("model", model.get("name"))
+    if not all(isinstance(model.get(k), str) and model[k] for k in ("model", "base_url", "digest")):
+        raise ValueError("REGISTERED_MODEL_IDENTITY_REQUIRED")
+    profile = CSharpRepositoryProfile(config["public_profile_ref"])
+    root = Path(config["root"]).resolve()
+    if root.exists():
+        raise ValueError("FRESH_SEPARATE_PILOT_ROOT_REQUIRED")
+    rows, common_options, common_request = [], None, None
+    for trial in trials:
+        _, options = _configuration_arguments(trial["execution_config_ref"]["path"])
+        source = Path(options["--target-project"]).resolve(strict=True)
+        run_root = Path(trial["run_root"])
+        arm_root = run_root.parent.parent
+        if (root.is_relative_to(source) or source.is_relative_to(root)
+                or root.is_relative_to(arm_root) or arm_root.is_relative_to(root)
+                or run_root.exists() or (arm_root / "frozen-plan.json").exists()
+                or (arm_root / "started.json").exists()):
+            raise ValueError("FRESH_SEPARATE_PILOT_ROOT_REQUIRED")
+        if (options.get("--repository-profile") != profile.reference["path"]
+                or options.get("--ollama-model") != model["model"]
+                or options.get("--ollama-base-url", "http://127.0.0.1:11434") != model["base_url"]
+                or "--local-ollama" not in options):
+            raise ValueError("PREPARED_MODEL_OR_PROFILE_CHANGED")
+        if not {"--confirm-isolated-write", "--allow-build", "--defer-approval"} <= options.keys():
+            raise ValueError("PREPARED_ISOLATED_DELIVERY_AUTHORITY_REQUIRED")
+        for key, option in (("context_window", "--ollama-context-window"),
+                ("output_tokens", "--ollama-max-output-tokens")):
+            if key in model and str(model[key]) != options.get(option):
+                raise ValueError("PREPARED_MODEL_RESOURCE_CHANGED")
+        qualified_source = qualification.get("public_source_root")
+        if not qualified_source or source_snapshot(source) != source_snapshot(qualified_source):
+            raise ValueError("QUALIFIED_PUBLIC_SOURCE_CHANGED")
+        # Allocation and experience are the only permitted arm differences.
+        # 为什么要有它：两臂必须面对同一源码、请求、工具、权限和资源，不把其他配置差异计作经验收益。
+        comparison = {k: v for k, v in options.items() if k not in {
+            "--workspace-root", "--run-id", "--request-id", "--task-agent-experience-config", "--patch-worker-config"}}
+        request = read_bound_json(trial["request_ref"])["description"]
+        if common_options is not None and (comparison != common_options or request != common_request):
+            raise ValueError("STRATEGY_PAIR_COMMON_CONDITIONS_CHANGED")
+        common_options, common_request = comparison, request
+        profile.bind(source)
+        rows.append((trial, options, source, run_root, arm_root))
+    identity = read_ollama_model_identity(model["base_url"], model["model"])
+    if identity.get("digest") != model["digest"]:
+        raise ValueError("MODEL_CHANGED")
+    root.mkdir(parents=True, exist_ok=False)
+    plans, common_platform_files = {}, None
+    for trial, options, source, run_root, arm_root in rows:
+        arm = trial["arm"]
+        platform_root = root / arm / "platform"
+        bound = [configuration_ref, config["prepared_ref"], config["intent_ref"],
+            config["qualification_ref"], profile.reference, _ref(__file__),
+            *prepared["input_refs"], *trial["generated_refs"]]
+        platform = prepare_snapshot(source_root=REPO, snapshot_root=platform_root,
+            business_argv=trial["argv"], run_root=run_root,
+            bound_inputs=[(r["path"], r["sha256"]) for r in bound])
+        # 为什么要有它：两臂的输入配置与输出位置本来不同，平台一致性应复用源码身份而不是比较绑定输入字节。
+        files = platform_identity(read_bound_json(platform))["platform_files_sha256"]
+        if common_platform_files is not None and files != common_platform_files:
+            raise ValueError("STRATEGY_PAIR_PLATFORM_CHANGED_DURING_FREEZE")
+        common_platform_files = files
+        policy_id = "user_goal_disposable_strategy_pair_compile_only"
+        authorization = _save(arm_root / "host-delivery-authorization.json", {
+            "origin": "task_delegation_policy", "decision": "approve", "policy_id": policy_id,
+            "runtime": False, "deployment": False, "run_id": trial["run_id"],
+            "request_id": options["--request-id"], "isolated_root": str(arm_root / "delivery"),
+            "allowed_effects": ["isolated_apply", "build"], "human_semantic_review_completed": False,
+            "authorization_source": "existing user continuous engineering delegation for scoped disposable repository writes and build/test; not model output or technical review",
+            "why": "为什么要有它：经验不授予权限，交付仍核验真实委托、精确候选和前像。"})
+        plan = {"schema_version": "repository_product_arm_plan_v1", "arm": arm,
+            "task_id": trial["task_id"], "attempt": trial["attempt"], "root": str(arm_root),
+            "workspace": str(arm_root), "source_root": str(source), "source_before": source_snapshot(source),
+            "common_request_ref": trial["request_ref"], "configuration_ref": configuration_ref,
+            "prepared_ref": config["prepared_ref"], "wall_seconds": wall, "model_identity": identity,
+            "model_endpoint": model, "allowed_edit_paths": profile.data["allowed_edit_paths"],
+            "public_profile_ref": profile.reference, "controller_ref": _ref(__file__),
+            "environment": config["environment"], "evaluator_ref": qualification["evaluator_ref"],
+            "run_id": trial["run_id"], "run_root": str(run_root), "platform_ref": platform,
+            "execution_config_ref": trial["execution_config_ref"], "authorization_ref": authorization,
+            "policy_id": policy_id, "bound_inputs": bound,
+            "inspection": evidence_locator(execution_config=trial["execution_config_ref"]["path"], run_id=trial["run_id"]),
+            "configuration_difference": "frozen strategy snapshot only; original prepared argv retained",
+            "command": [sys.executable, "-I", "-B", str(platform_root / "scripts/run_frozen_product.py"),
+                "--_child", platform["path"], platform["sha256"]]}
+        plans[arm] = _save(arm_root / "frozen-plan.json", plan)
+    result = _save(root / "frozen-pilot.json", {"configuration_ref": configuration_ref,
+        "prepared_ref": config["prepared_ref"], "order": [t["arm"] for t in trials],
+        "plans": plans, "model_calls": 0, "mode": "strategy_pair",
+        "scope": "internal frozen B/B+ strategy comparison; no external product superiority claim"})
+    print(json.dumps({"pilot_ref": result, "arms_started": 0}))
 
 
 def deliver(plan_ref):
@@ -257,6 +387,77 @@ def deliver(plan_ref):
         native_execution_ref=_ref(Path(store) / "task-agent-execution/execution.json"))
 
 
+def seal_stopped_process(plan, process_ref, *, plan_ref):
+    """Seal only the known completed prefix; never resume or call a model.
+
+    为什么要有它：外层硬停止不能跳过过程经历；缺失或歧义只保留缺口，不能猜测最新任务或重发动作。
+    """
+    if "platform_ref" not in plan or not plan.get("run_root") or not plan.get("run_id"):
+        return {"status": "not_applicable", "model_calls": 0}
+    try:
+        from src.mod_agent.task_agent_v2_experience import seal_saved_public_episode
+        from src.mod_agent.task_agent_v2_state import _no_links, load_v2_artifact
+
+        if read_bound_json(plan_ref) != plan:
+            raise ValueError("STOP_PLAN_CHANGED")
+        process_path = Path(plan["root"]) / "execution/process.json"
+        _no_links(process_path)
+        if Path(process_ref["path"]).resolve(strict=True) != process_path.resolve(strict=True):
+            raise ValueError("STOP_PROCESS_OUTSIDE_ARM")
+        process = read_bound_json(process_ref)
+        timeout = process.get("timeout") is True or process.get("status") == "timed_out"
+        failed = process.get("exit_code") not in (None, 0)
+        if not timeout and not failed:
+            return {"status": "not_required", "model_calls": 0}
+        if (process.get("started") is not True or process.get("argv") != plan["command"]
+                or Path(process.get("cwd", "")).resolve(strict=True) != Path(plan["workspace"]).resolve(strict=True)):
+            raise ValueError("STOP_PROCESS_EXECUTION_CHANGED")
+        run_root = Path(plan["run_root"]).absolute()
+        _no_links(run_root)
+        if not run_root.resolve(strict=True).is_relative_to(Path(plan["root"]).resolve(strict=True)):
+            raise ValueError("STOP_RUN_OUTSIDE_ARM")
+        manifest_path = run_root / "run_manifest.json"
+        _no_links(manifest_path)
+        manifest = json.loads(manifest_path.read_bytes())
+        if manifest.get("run_id") != plan["run_id"]:
+            raise ValueError("STOP_RUN_IDENTITY_CHANGED")
+        store = run_root / "a"
+        pointers_root = store / "v2/session-checkpoints"
+        _no_links(pointers_root)
+        pointers = list(pointers_root.glob("*.json"))
+        if len(pointers) != 1:
+            raise ValueError("STOP_CHECKPOINT_MISSING_OR_AMBIGUOUS")
+        _no_links(pointers[0])
+        checkpoint_ref = json.loads(pointers[0].read_bytes())["checkpoint_ref"]
+        checkpoint = load_v2_artifact(store, checkpoint_ref)
+        details = checkpoint["details"]
+        if details.get("run_id") != plan["run_id"] or details.get("request_id") != manifest.get("request_id"):
+            raise ValueError("STOP_CHECKPOINT_IDENTITY_CHANGED")
+        stop = {"schema": "task-agent-process-stop.v1", "checkpoint_ref": checkpoint_ref,
+            "task_contract_ref": checkpoint["task_contract_ref"], "run_id": plan["run_id"],
+            "request_id": manifest["request_id"], "stop_kind": "timed_out" if timeout else "process_failed",
+            "status": process.get("status"), "exit_code": process.get("exit_code"), "source_ref": process_ref,
+            "plan_ref": plan_ref,
+            "model_calls": 0, "resumed": False}
+        stop_path = run_root / "process-stops" / (canonical_hash(stop) + ".json")
+        _no_links(stop_path)
+        stop_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with stop_path.open("x", encoding="utf-8") as stream:
+                json.dump(stop, stream, ensure_ascii=False, indent=2)
+        except FileExistsError:
+            if json.loads(stop_path.read_bytes()) != stop:
+                raise ValueError("STOP_RECORD_CHANGED") from None
+        stop_ref = _ref(stop_path)
+        episode_ref = seal_saved_public_episode(artifact_store_root=store,
+            checkpoint_ref=checkpoint_ref, stop_ref=stop_ref)
+        return {"status": "sealed", "episode_ref": episode_ref, "stop_ref": stop_ref,
+            "model_calls": 0, "resumed": False}
+    except Exception as error:
+        return {"status": "unavailable", "error_type": type(error).__name__, "reason": str(error),
+            "model_calls": 0, "resumed": False}
+
+
 def run(pilot_ref, arm):
     pilot = read_bound_json(pilot_ref)
     plan_ref = pilot["plans"][arm]
@@ -269,10 +470,13 @@ def run(pilot_ref, arm):
     root = Path(plan["root"])
     if (root / "started.json").exists() or source_snapshot(plan["source_root"]) != plan["source_before"]:
         raise ValueError("ALREADY_STARTED_OR_SOURCE_CHANGED")
-    if (arm == ORDER[1] and ORDER[0] in pilot["plans"]
-            and not (Path(pilot["plans"][ORDER[0]]["path"]).parent / "result.json").is_file()):
-        raise ValueError("SERIAL_ARM_ORDER_REQUIRED")
-    if read_ollama_model_identity("http://127.0.0.1:11434", MODEL)["digest"] != DIGEST:
+    for previous in pilot["order"][:pilot["order"].index(arm)]:
+        if not (Path(pilot["plans"][previous]["path"]).parent / "result.json").is_file():
+            raise ValueError("SERIAL_ARM_ORDER_REQUIRED")
+    if pilot.get("mode") == "strategy_pair":
+        verify_strategy_trials(plan["prepared_ref"])
+    model = plan.get("model_endpoint", {"base_url": "http://127.0.0.1:11434", "model": MODEL, "digest": DIGEST})
+    if read_ollama_model_identity(model["base_url"], model["model"])["digest"] != model["digest"]:
         raise ValueError("MODEL_CHANGED")
     if "platform_ref" in plan:
         FrozenExecution(plan["platform_ref"]).verify_files()
@@ -280,28 +484,45 @@ def run(pilot_ref, arm):
             _verify(reference)
     clock, utc = time.monotonic(), time.time()
     deadline, deadline_utc = clock + plan["wall_seconds"], utc + plan["wall_seconds"]
-    _save(root / "started.json", {"plan_ref": plan_ref, "deadline_utc": deadline_utc,
+    for inherited in (os.environ.get("REPOFORGE_TASK_DEADLINE_UTC"),
+            plan["environment"].get("REPOFORGE_TASK_DEADLINE_UTC")):
+        if inherited is not None:
+            value = float(inherited)
+            if not math.isfinite(value):
+                raise ValueError("INHERITED_DEADLINE_INVALID")
+            deadline_utc = min(deadline_utc, value)
+    deadline = clock + (deadline_utc - utc)
+    if deadline <= clock:
+        raise ValueError("INHERITED_DEADLINE_EXHAUSTED")
+    started = {"plan_ref": plan_ref, "deadline_utc": deadline_utc,
         **({"run_id": plan["run_id"]} if "run_id" in plan else {}),
-        "human_active_seconds": None, "technical_hint_or_patch": False, "scope": "one registered attempt; no automatic retry"})
+        "human_active_seconds": None, "technical_hint_or_patch": False, "scope": "one registered attempt; no automatic retry"}
+    # 为什么要有它：同一臂的并发派发也不能通过先检查后覆盖的竞态获得第二次执行。
+    with (root / "started.json").open("x", encoding="utf-8") as stream:
+        json.dump(started, stream, ensure_ascii=False, indent=2)
     environment = {**os.environ, **plan["environment"], "PYTHONUTF8": "1", "DOTNET_CLI_UI_LANGUAGE": "en-US",
                    "REPOFORGE_TASK_DEADLINE_UTC": str(deadline_utc)}
     process = execute(plan["command"], cwd=plan["workspace"], stdin_path=plan.get("prompt_path"),
         output=root / "execution", deadline=deadline, environment=environment)
     delivery_process = None
-    if arm == ORDER[1] and not process.get("timeout") and deadline > time.monotonic():
+    if "platform_ref" in plan and not process.get("timeout") and deadline > time.monotonic():
         delivery_process = execute([sys.executable, "-B", str(Path(plan["platform_ref"]["path"]).parent /
             "scripts/run_repository_product_pilot.py"), "deliver", "--reference", plan_ref["path"], "--sha256", plan_ref["sha256"]],
             cwd=plan["workspace"], stdin_path=None, output=root / "delivery-process", deadline=deadline, environment=environment)
     after = source_snapshot(plan["source_root"])
     changed = sorted(path for path in after.keys() | plan["source_before"].keys() if after.get(path) != plan["source_before"].get(path))
     forbidden = [path for path in changed if path not in plan["allowed_edit_paths"]]
-    facts = {"plan_ref": plan_ref, "process_ref": _ref(root / "execution/process.json"),
+    process_ref = _ref(root / "execution/process.json")
+    facts = {"plan_ref": plan_ref, "process_ref": process_ref,
         "delivery_process": delivery_process, "changed_source_paths": changed, "forbidden_source_changes": forbidden,
         "source_after": after, "task_wall_seconds": time.monotonic() - clock,
         "independent_business_result": None, "correct_delivery": None,
         "scope": "execution facts only; native claims do not prove independent acceptance or same-version delivery"}
     if arm == ORDER[0] and process.get("started"):
         facts["native_events_ref"] = _save(root / "native-events.json", codex_events(process["stdout_ref"]["path"]))
+    # 为什么要有它：先保存已发生的进程与源码事实；经历封存失败不能吞掉本次执行结果。
+    facts["execution_facts_ref"] = _save(root / "execution-facts.json", facts)
+    facts["process_episode"] = seal_stopped_process(plan, process_ref, plan_ref=plan_ref)
     print(json.dumps({"result_ref": _save(root / "result.json", facts)}))
 
 
@@ -310,7 +531,7 @@ def main():
     parser.add_argument("mode", choices=("freeze", "run", "deliver"))
     parser.add_argument("--reference", required=True)
     parser.add_argument("--sha256", required=True)
-    parser.add_argument("--arm", choices=ORDER)
+    parser.add_argument("--arm", choices=(*ORDER, "B", "B+"))
     args = parser.parse_args()
     reference = {"path": args.reference, "sha256": args.sha256}
     if args.mode == "freeze":

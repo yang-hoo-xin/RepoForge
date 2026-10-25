@@ -144,10 +144,14 @@ def validate_task_agent_handoff_v2(outcome, *, store, workspace_root, expected_i
         document = state.validate_candidate(selected)
         _require(document.get("parent_revision_ref") == arguments.get("parent_revision_ref"),
             "V2_PARENT_CHANGED")
-        keys = ("binding_id", "source_view_ref", "before_text", "after_text")
-        _require([{k: edit.get(k) for k in keys} for edit in arguments.get("edits", [])]
-            == [{k: edit.get(k) for k in keys} for edit in document["changes"]]
-            and document.get("model_origin") == {k: row[k] for k in ("call_id", "response_ref", "arguments_ref")},
+        edits = arguments.get("edits")
+        _require(isinstance(edits, list) and len(edits) == len(document["changes"]), "V2_SUBMITTED_BYTES_CHANGED")
+        # 为什么要有它：原子文件编辑的binding由平台生成，验真必须匹配模型实际提交的path而不能补写模型参数。
+        for edit, change in zip(edits, document["changes"], strict=True):
+            _require(isinstance(edit, dict) and ("path" in edit) != ("binding_id" in edit), "V2_SUBMITTED_BYTES_CHANGED")
+            keys = ("path" if "path" in edit else "binding_id", "source_view_ref", "before_text", "after_text")
+            _require(all(edit.get(key) == change.get(key) for key in keys), "V2_SUBMITTED_BYTES_CHANGED")
+        _require(document.get("model_origin") == {k: row[k] for k in ("call_id", "response_ref", "arguments_ref")},
             "V2_SUBMITTED_BYTES_CHANGED")
         selected = document["parent_revision_ref"]
     _require(selected == state.contract["baseline_manifest_ref"], "V2_BASELINE_PARENT_CHANGED")

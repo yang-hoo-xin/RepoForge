@@ -31,6 +31,16 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                                                                  exercise_deadline=False, expect_unsent_deadline=False,
                                                                  exercise_repeat=False, exercise_diagnostics=False):
     short_workspace = repository_workspace
+    if exercise_history:
+        from src.mod_agent import task_agent_v2_context as context_owner
+
+        original_projection = context_owner.project_history
+
+        def force_archive_for_recovery(request, state, **_configuration):
+            # 为什么要有它：此反例主动制造归档以检查回读和恢复，不把旧12KB限制重新放回真实模型配置。
+            return original_projection(request, state, history_bytes=12000)
+
+        monkeypatch.setattr(context_owner, "project_history", force_archive_for_recovery)
     if real_sdk and os.environ.get("REPOFORGE_REAL_REPOSITORY_CLI_INTEGRATION") != "1":
         pytest.skip("Explicit SDK integration; decisions remain scripted.")
     profile, source = _profile(short_workspace, real=real_sdk)

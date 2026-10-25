@@ -136,6 +136,10 @@ v2 中断任务使用 `mod-agent run-request --resume-task-agent <原检查点�
 
 可选的完整工程探针通过仓库配置中的 `probe_runner` 接入：`kind=docker_sdk_project_v1`，指定已在本机可用的官方 SDK 镜像 digest、准确 `sdk_version`、`target_framework` 和被引用的 `.csproj` 路径；需要依赖包时指定离线 `.nupkg` 目录及其清单哈希。平台生成引用所选候选工程的探针项目，分别在受限构建和运行容器中执行，不接受模型提交工程脚本。宿主资格检查未通过时返回能力不可用，不下载镜像、不启动 Docker Desktop、不回退到宿主执行。当前只有受控边界与接入验证，实际 Docker 隔离资格仍待环境成立；它不是独立业务验收。配置字段和受控示例见[探针执行器测试](tests/unit/test_repository_probe_runner.py)。为什么要有它：完整依赖工程的实验、模型自建探针与正式验收用途不同，未验证的执行环境不能被接口存在掩盖。
 
+v2 的候选编辑可以直接提供路径和当前源码视图，由平台在同一事务内核验授权与精确前像并建立 binding；技术计划和单独绑定调用不是编辑前置。当前工作状态保留实际模型陈述、公开观察和失败，历史按模型容量投影，原文仍可按引用读取。恢复继续核验来源、未决操作及累计资源。这些通路已有正常入口与边界验证，但不代表模型一定会据此采取有效行动。为什么要有它：用户应知道工具能执行什么，以及哪些模型效果仍未获证明。
+
+从源码检出目录可通过 `python -m scripts.extract_strategy_experience prepare|preview|execute` 消费显式登记的公开经历输入；先准备冻结集合和零模型容量预检，再按已登记条件执行一次提炼。输入示例与失败处理见[入口测试](tests/unit/test_extract_strategy_experience.py)，数据来源、动作顺序和省略范围见[过程投影测试](tests/unit/test_process_trajectory.py)。这不自动读取任意历史目录，也不自动启用生成的策略。最近一次五来源真实提炼返回证据不足；最新真实修复仍无候选，详见[结果与限制](docs/evidence/continuous-repair-20261025.json)。为什么要有它：真实消费入口、数据使用范围和实验结果需要一起说明，不能把提炼接口存在当作学习有效。
+
 ### Docker 服务演示
 
 环境：Docker Engine / Docker Desktop 与 Compose。将 [`.env.example`](deployment/service/.env.example) 复制为 `deployment/service/.env`，设置两个不同的随机值：`SERVICE_API_TOKEN` 和 `SERVICE_REDIS_PASSWORD`；保留已有配置，凭据不提交 Git。为什么要有它：接口和队列使用独立凭据，公开仓库只保存可共享的模板。

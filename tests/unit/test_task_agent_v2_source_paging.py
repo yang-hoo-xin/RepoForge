@@ -47,11 +47,14 @@ def test_unicode_long_line_paging_reassembles_exact_snapshot(tmp_path):
     assert eof["text"] == "" and eof["next_offset"] is None
 
 
-def test_page_edit_requires_visible_preimage_and_current_parent(tmp_path):
+@pytest.mark.parametrize("target_mode", ["binding_id", "path"])
+def test_page_edit_requires_visible_preimage_and_current_parent(tmp_path, target_mode):
     state, text = large_source(tmp_path)
     first = state.read_source("baseline", "A.cs", offset=0, limit=4000)
-    binding = state.add_binding(state.registry_ref, first["source_view_ref"], "A.cs")
-    edit = {"binding_id": binding["binding_id"], "source_view_ref": first["source_view_ref"],
+    target = {"path": "A.cs"}
+    if target_mode == "binding_id":
+        target = {"binding_id": state.add_binding(state.registry_ref, first["source_view_ref"], "A.cs")["binding_id"]}
+    edit = {**target, "source_view_ref": first["source_view_ref"],
         "before_text": "value = 1", "after_text": "value = 2"}
     with pytest.raises(TaskAgentV2StateError, match="before_text_outside_read_window"):
         state.validate_submission("baseline", [edit])

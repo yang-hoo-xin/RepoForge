@@ -159,3 +159,193 @@ def test_current_plan_is_exact_model_advice_not_inferred_hypothesis(state):
     assert view["technical_plan_ref"] == reference and view["grants_authority"] is False
     assert "Model-stated technical hypothesis" in view["text"]
     assert "private.cs" not in state.contract["allowed_edit_paths"]
+
+
+def configured_request(*, statement_view=None, old_bytes=18000):
+    current = {"current_revision_ref": "current", "working_state": statement_view or {}}
+    return AgentTurnRequest(messages=(AgentMessage("system", "Use evidence"),
+        AgentMessage("user", {"current_task_state": current})),
+        historical_tool_exchanges=(exchange("source_read", "large-old", "o" * old_bytes),
+            exchange("candidate_check", "public-failure", "public counterexample")),
+        tool_results=(AgentToolResult("active", "source_read", {"text": "current page"}),),
+        provider_state={"content": "Current hypothesis remains unconfirmed", "tool_calls": [
+            {"id": "active", "function": {"name": "source_read", "arguments": {"path": "now.cs"}}}]},
+        tool_result_insert_index=2)
+
+
+def current_state(request):
+    return next(row.content["current_task_state"] for row in request.messages
+        if isinstance(row.content, dict) and "current_task_state" in row.content)
+
+
+def test_configured_context_retains_more_than_old_twelve_k_when_real_window_allows(state):
+    original = configured_request()
+    projected, facts = project_history(original, state, context_window=65536, output_budget=4096)
+    assert projected.historical_tool_exchanges == original.historical_tool_exchanges
+    assert facts["archived_exchange_count"] == 0
+    assert current_state(projected)["history_projection"] is None
+    assert current_state(projected)["context_budget"]["configured_num_ctx"] == 65536
+    assert facts["output_token_reserve"] == 4096
+
+
+def test_configured_context_uses_actual_provider_limits_and_preserves_active_pair(state):
+    from types import SimpleNamespace
+    provider = SimpleNamespace(model="same-model", context_window=14000, max_output_tokens=4000, seed=1)
+    original = configured_request()
+    projected, facts = project_history(original, state, context_window=999999, output_budget=1, provider=provider)
+    assert facts["configured_num_ctx"] == 14000 and facts["output_token_reserve"] == 4000
+    assert facts["archived_exchange_count"] == 1
+    assert projected.tool_results == original.tool_results and projected.provider_state == original.provider_state
+    assert projected.historical_tool_exchanges[-1] == original.historical_tool_exchanges[-1]
+    assert "o" * 18000 in history_text(state, facts["history_ref"])
+
+
+def test_context_unknown_or_protected_overflow_is_explicit_and_never_splits_active_pair(state):
+    from src.libs.llm.agent_turn import AgentTurnProviderError
+    original = configured_request()
+    with pytest.raises(AgentTurnProviderError, match="CONTEXT_LIMIT_UNAVAILABLE"):
+        project_history(original, state)
+    huge = replace(original, tool_results=(AgentToolResult("active", "source_read", {"text": "x" * 20000}),))
+    before = deepcopy(asdict(huge))
+    with pytest.raises(AgentTurnProviderError, match="PROTECTED_CONTEXT_EXCEEDS_LIMIT") as caught:
+        project_history(huge, state, context_window=12000, output_budget=4000)
+    assert caught.value.diagnostic["transport_attempted"] is False
+    assert asdict(huge) == before
+
+
+def test_long_working_statements_are_projected_and_originals_remain_publicly_retrievable(state):
+    from src.mod_agent.task_agent_v2_working_state import retain_model_statement, working_state_view
+    working = {"schema": "task-agent-working-state.v1", "boundary": {"current_revision_ref": "current"}}
+    for index in range(12):
+        working = retain_model_statement(working, {"content": f"Claim {index}: " + "evidence " * 500},
+            source_boundary=working["boundary"])
+    archive = state.save("context-archive", {"schema": "task-agent-context-archive.v2",
+        "task_contract_ref": state.contract_ref, "exchanges": [{"model_statement": row} for row in working["model_statements"]]})
+    original = configured_request(statement_view=working_state_view(working, statement_archive_ref=archive), old_bytes=100)
+    projected, facts = project_history(original, state, context_window=22000, output_budget=4000)
+    view = current_state(projected)["working_state"]
+    projection = view["model_statement_projection"]
+    assert projection["omitted_statement_indices"]
+    assert projection["retained_statement_indices"][0] == 0
+    assert projection["retained_statement_indices"][-1] == 11
+    assert projection["semantic_summary_available"] is False
+    assert "Claim 5:" in history_text(state, projection["archive_ref"])
+    assert len(working["model_statements"]) == 12
+    assert facts["model_statement_originals_archived"] is True
+
+
+def test_actual_public_feedback_tool_and_latest_failure_survive_budget_projection(state):
+    original = configured_request()
+    failed = exchange("candidate_check", "failed", "summary")
+    failed.tool_results[0].output.update(execution="executed", value={"status": "behavior_failed", "feedback_ref": "public"})
+    details = exchange("check_feedback_read", "details", "distinct public counterexample details" * 40)
+    passed = exchange("candidate_check", "passed", "success")
+    passed.tool_results[0].output.update(execution="executed", value={"status": "passed"})
+    original = replace(original, historical_tool_exchanges=(original.historical_tool_exchanges[0], failed, details, passed))
+    projected, facts = project_history(original, state, context_window=17000, output_budget=4000)
+    assert facts["archived_exchange_count"] == 1
+    assert projected.historical_tool_exchanges == (failed, details, passed)
+    assert "distinct public counterexample details" in projected.historical_tool_exchanges[1].tool_results[0].output["text"]
+
+
+def test_occurrence_aware_projection_keeps_actual_latest_and_discloses_absent_current_boundary(state):
+    from src.mod_agent.task_agent_v2_context import _omit_oldest_statement
+    from src.mod_agent.task_agent_v2_working_state import retain_model_statement, working_state_view
+    working = {"boundary": {"current_revision_ref": "current"}}
+    for index, text in enumerate(("P", "A", "B", "A"), 1):
+        working = retain_model_statement(working, {"content": text},
+            response_ref={"path": f"response-{index}.json", "sha256": str(index)},
+            source_boundary={"current_revision_ref": "historical"})
+    view = working_state_view(working, statement_archive_ref="public-archive")
+    messages = (AgentMessage("user", {"current_task_state": {"working_state": view}}),)
+    compacted = _omit_oldest_statement(messages)
+    compacted = _omit_oldest_statement(compacted)
+    selected = compacted[0].content["current_task_state"]["working_state"]
+    assert [row["content"] for row in selected["model_statements"]] == ["A"]
+    assert selected["model_statement_projection"]["current_boundary_statement_available"] is False
+    assert "No statement at the current boundary exists" in selected["model_statement_projection"]["selection_basis"]
+
+
+def projected_recovery_documents(state):
+    original = replace(configured_request(), messages=(AgentMessage("system", "Tools"), AgentMessage("user", "Repair")))
+    original = replace(original, historical_tool_exchanges=(*original.historical_tool_exchanges,
+        exchange("source_read", "small-tail", "tail")))
+    current = {"origin": "execution_host", "task_contract_ref": state.contract_ref,
+        "current_revision_ref": state.current_revision_ref, "binding_registry_ref": state.registry_ref,
+        "current_check_ref": None}
+    staged = replace(original, messages=(*original.messages, AgentMessage("user", {"current_task_state": current})))
+    projected, _facts = project_history(staged, state, context_window=14000, output_budget=4000)
+    return json.loads(json.dumps(asdict(original))), json.loads(json.dumps(asdict(projected)))
+
+
+def test_recovery_proves_ordered_exact_projection_and_complete_omitted_archive(state):
+    from src.mod_agent.task_agent_v2_context import validate_projected_request
+    original, prepared = projected_recovery_documents(state)
+    proof = validate_projected_request(original, prepared, state)
+    assert proof["omitted_exchange_count"] == 1
+    assert proof["retained_history_indices"] == [1, 2]
+    assert prepared["provider_state"] == original["provider_state"]
+    assert prepared["tool_results"] == original["tool_results"]
+
+
+@pytest.mark.parametrize("mutation", ["active", "provider", "tools", "temperature", "new_history", "order", "protected", "archive"])
+def test_recovery_projection_proof_rejects_native_changes_and_forged_archives(state, mutation):
+    from src.mod_agent.task_agent_v2_context import validate_projected_request
+    original, prepared = projected_recovery_documents(state)
+    current = prepared["messages"][-1]["content"]["current_task_state"]
+    if mutation == "active":
+        prepared["tool_results"][0]["output"] = {"text": "forged"}
+    elif mutation == "provider":
+        prepared["provider_state"]["content"] = "forged"
+    elif mutation == "tools":
+        prepared["tools"] = [{"name": "unapproved"}]
+    elif mutation == "temperature":
+        prepared["temperature"] = 0.8
+    elif mutation == "new_history":
+        prepared["historical_tool_exchanges"][0]["tool_results"][0]["output"] = {"forged": True}
+    elif mutation == "order":
+        prepared["historical_tool_exchanges"].reverse()
+    elif mutation == "protected":
+        prepared["historical_tool_exchanges"] = []
+    else:
+        archive = state.load(current["history_projection"]["history_ref"])
+        archive["exchanges"][0]["tool_results"][0]["output"] = {"forged": True}
+        current["history_projection"]["history_ref"] = state.save("context-archive", archive)
+    reason = "history_not_ordered_original_subset" if mutation == "order" else "CONTEXT_PROJECTION_INVALID"
+    with pytest.raises(ValueError, match=reason):
+        validate_projected_request(original, prepared, state)
+
+
+def test_recovery_projection_accepts_one_strategy_message_after_current_state(state):
+    from src.mod_agent.task_agent_v2_context import validate_projected_request
+    original, prepared = projected_recovery_documents(state)
+    prepared["messages"].append({"role": "user", "content": {"strategy_experience": {"strategies": []}}})
+    proof = validate_projected_request(original, prepared, state)
+    assert proof["retained_history_indices"] == [1, 2]
+
+
+@pytest.mark.parametrize("mutation", ["extra_user", "extra_assistant", "duplicate_strategy", "strategy_first",
+    "mixed_content_keys", "extra_message_fields", "malformed_strategy_value"])
+def test_recovery_projection_rejects_unregistered_appended_messages(state, mutation):
+    from src.mod_agent.task_agent_v2_context import validate_projected_request
+    original, prepared = projected_recovery_documents(state)
+    strategy = {"role": "user", "content": {"strategy_experience": {"strategies": []}}}
+    if mutation == "extra_user":
+        prepared["messages"].append({"role": "user", "content": {"new_instruction": "unregistered direction"}})
+    elif mutation == "extra_assistant":
+        prepared["messages"].append({"role": "assistant", "content": "unrecorded model statement"})
+    elif mutation == "duplicate_strategy":
+        prepared["messages"].extend([strategy, deepcopy(strategy)])
+    elif mutation == "strategy_first":
+        prepared["messages"].insert(len(original["messages"]), strategy)
+    elif mutation == "mixed_content_keys":
+        strategy["content"]["extra"] = "unregistered direction"
+        prepared["messages"].append(strategy)
+    elif mutation == "extra_message_fields":
+        strategy["name"] = "unregistered-source"
+        prepared["messages"].append(strategy)
+    else:
+        strategy["content"]["strategy_experience"] = "unstructured injected instruction"
+        prepared["messages"].append(strategy)
+    with pytest.raises(ValueError, match="CONTEXT_PROJECTION_INVALID:host_message"):
+        validate_projected_request(original, prepared, state)

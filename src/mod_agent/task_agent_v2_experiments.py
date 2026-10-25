@@ -78,7 +78,7 @@ class CSharpRegisteredTestRunner:
             "owner_sha256": _file_ref(__file__)["sha256"], "profile_ref": self.backend.profile.reference}
 
     def read_public_report(self, report_ref):
-        from src.mod_agent.domain.csharp_repository_backend import _read_tests
+        from src.mod_agent.domain.csharp_repository_backend import read_repository_tests
 
         path = Path(report_ref["path"])
         _no_links(path)
@@ -93,7 +93,7 @@ class CSharpRegisteredTestRunner:
         raw = execution["report_ref"]
         _require(Path(raw["path"]).resolve().is_relative_to(path.parent.resolve())
             and _file_ref(raw["path"]) == raw, "CATALOG_TEST_REPORT_CHANGED")
-        tests = _read_tests(Path(raw["path"]), self.backend.profile.data["test_report"]["format"])
+        tests, _ = read_repository_tests(Path(raw["path"]), self.backend.profile.data, report=report)
         _require(bool(tests) and tests == report.get("checks"), "CATALOG_TEST_RESULTS_CHANGED")
         supported = self.backend.profile.data["test_report"]["format"] == "trx" and self.backend.profile.data["test_command"][0] == "test"
         return {"checks": tests, "report_ref": report_ref, "raw_test_report_ref": raw,
