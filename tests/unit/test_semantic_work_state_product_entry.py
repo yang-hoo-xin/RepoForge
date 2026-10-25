@@ -137,6 +137,35 @@ def test_normal_cli_semantic_state_and_invalid_metadata_preserve_real_action_cha
     assert validation["authority_changed"] is False and validation["model_calls"] == 0
     checkpoint = read_bound_json(validation["source_checkpoint_ref"])
     assert checkpoint["task_contract_ref"] == episode["task_contract_ref"]
+    first = checkpoint["details"]["provider_turns"][0]
+    first_request = read_bound_json(first["request_ref"])
+    first_system = next(row for row in first_request["messages"] if row["role"] == "system" and row["content"])
+    assert "You are the technical agent in one continuous repository task." in first_system["content"]
+    assert "Include working_state with your next normal tool action." in first_system["content"]
+    assert sum(row["role"] == "system" for row in first_request["messages"]) == 1
+    store_root = Path(first["request_ref"]["path"]).parents[1]
+    host_path = store_root / checkpoint["host_config_ref"]
+    host_ref = {"path": str(host_path), "sha256": host_path.stem}
+    host = read_bound_json(host_ref)
+    contract_path = store_root / checkpoint["task_contract_ref"]
+    contract_ref = {"path": str(contract_path), "sha256": contract_path.stem}
+    contract = read_bound_json(contract_ref)
+    assert host["semantic_state_enabled"] is True
+    # 为什么要有它：后续原生协议检查复用明确的受控入口请求及原任务边界，不能用真实业务轨迹或“最新请求”替换。
+    properties = {
+        "first_request_ref": first["request_ref"],
+        "first_provider_request_ref": first["provider_request_ref"],
+        "host_config_ref": host_ref,
+        "model_profile_source": {"source_ref": host_ref, "locator": ["model_profile"]},
+        "repository_profile_ref": contract["execution_profile_ref"],
+        "fixture_original_boundary": {"task_contract_ref": contract_ref,
+            "task_requirements": contract["task_requirements"], "allowed_edit_paths": contract["allowed_edit_paths"],
+            "baseline_manifest_ref": contract["baseline_manifest_ref"],
+            "scope": "Scripted model/build normal-entry fixture; not a real business solver result. Native protocol reuse is input-only.",
+            "observed_boundary": "Actual client request; live server rendered token prompt was not captured."},
+    }
+    for key, value in properties.items():
+        request.node.user_properties.append((key, json.dumps(value)))
     for index, event in enumerate(events, 1):
         actual_response = read_bound_json(event["response_ref"])
         actual_request = read_bound_json(event["request_ref"])

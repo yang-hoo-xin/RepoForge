@@ -78,15 +78,23 @@ class TaskAgentSessionV2:
             evaluator=self.evaluator, policy=self.owner.policy, protocol="v2")
         if not getattr(self.owner, "semantic_state_enabled", True):
             return request
-        # 为什么要有它：工作状态随同一次正常动作表达，缺失或无效的说明不能成为合法动作的新门禁。
-        return replace(request, messages=(*request.messages, AgentMessage("system",
+        # 为什么要有它：官方Ollama v0.40.9 Qwen3CoderRenderer只保留首条非空system；合并原指导以兼容该渲染行为，不增加动作门禁。
+        # Source: ollama/ollama 5e31438d5d2223d8338595b366b7434ef3539708, model/renderers/qwen3coder.go:65-80.
+        # This request placement is not a claim that the live server's final token prompt has been observed.
+        guidance = (
             "Include working_state with your next normal tool action. Maintain concise observations, hypotheses, "
             "open questions and the purpose/expected observation of that action using the semantic contract "
             "and actually seen evidence provided in current_task_state. Use an empty object only when the retained "
             "state still describes the current decision and needs no update; "
             "in a read-only batch include at most one nonempty update. These are your explicit advisory statements, "
             "not hidden reasoning, established truth, new permission or completion. "
-            "Do not invent observations or cite unseen evidence.")))
+            "Do not invent observations or cite unseen evidence.")
+        messages = list(request.messages)
+        for index, message in enumerate(messages):
+            if message.role == "system" and isinstance(message.content, str) and message.content:
+                messages[index] = replace(message, content=message.content + "\n\n" + guidance)
+                return replace(request, messages=tuple(messages))
+        raise ValueError("TASK_V2_BASE_SYSTEM_MESSAGE_REQUIRED")
 
     def response_admission(self, response):
         from src.mod_agent.task_agent_execution import _admitted_response

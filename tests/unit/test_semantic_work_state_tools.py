@@ -19,6 +19,16 @@ from tests.unit.test_task_agent_v2_admission import session as session
 from tests.unit.test_task_agent_v2_state import edit
 from tests.unit.test_task_agent_v2_state import state as state
 
+SEMANTIC_GUIDANCE = (
+    "Include working_state with your next normal tool action. Maintain concise observations, hypotheses, "
+    "open questions and the purpose/expected observation of that action using the semantic contract "
+    "and actually seen evidence provided in current_task_state. Use an empty object only when the retained "
+    "state still describes the current decision and needs no update; "
+    "in a read-only batch include at most one nonempty update. These are your explicit advisory statements, "
+    "not hidden reasoning, established truth, new permission or completion. "
+    "Do not invent observations or cite unseen evidence."
+)
+
 
 def stopped_response():
     return AgentTurnResponse("ollama_chat_local", "local", "", (), stop_reason="refusal", provider_state={})
@@ -33,8 +43,11 @@ def test_enabled_metadata_uses_existing_tools_and_disabled_input_remains_legacy(
     enabled_request = session.initial_request()
     enabled = {row.definition.name: row for row in session.actions()}
     assert enabled.keys() == legacy.keys()
-    assert enabled_request.messages[:-1] == legacy_request.messages
-    assert enabled_request.messages[-1].role == "system"
+    # 为什么要有它：官方Ollama v0.40.9 Qwen3CoderRenderer只采用首条非空system；HTTP中的后置system不证明模型收到它。
+    assert enabled_request.messages[0].role == "system"
+    assert enabled_request.messages[0].content == legacy_request.messages[0].content + "\n\n" + SEMANTIC_GUIDANCE
+    assert enabled_request.messages[1:] == legacy_request.messages[1:]
+    assert sum(message.role == "system" for message in enabled_request.messages) == 1
     for name, row in enabled.items():
         assert row.role == legacy[name].role and row.read_only == legacy[name].read_only
         assert row.definition.parameters["properties"]["working_state"]["type"] == "object"
