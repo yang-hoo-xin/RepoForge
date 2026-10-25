@@ -61,15 +61,63 @@ base64 /work/bundle.tgz | tr -d '\n'
 printf '\n'
 '''
 _QUALIFICATION_SOURCE = r'''using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 class Program {
   [DllImport("libc")] static extern uint getuid();
   static bool Denied(string path) { try { File.WriteAllText(path, "denied"); return false; } catch { return true; } }
+  static string Unescape(string value) => Regex.Replace(value, @"\\([0-7]{3})", m => ((char)Convert.ToInt32(m.Groups[1].Value, 8)).ToString());
+  static void Absolute(string value) {
+    if (!value.StartsWith("/") || value.Split('/').Any(p => p == "." || p == ".."))
+      throw new InvalidDataException("Invalid cgroup path");
+  }
+  static (string directory, string version) Locate(string controller, string membership, string mountinfo) {
+    var entries = membership.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => line.TrimEnd('\r').Split(':', 3)).ToArray();
+    var own = entries.Where(row => row.Length == 3 && row[1].Split(',').Contains(controller)).ToArray();
+    bool unified = own.Length == 0;
+    if (unified) own = entries.Where(row => row.Length == 3 && row[0] == "0" && row[1] == "").ToArray();
+    if (own.Length != 1) throw new InvalidDataException("Missing or ambiguous cgroup membership: " + controller);
+    string group = own[0][2]; Absolute(group);
+    var directories = new HashSet<string>();
+    foreach (string line in mountinfo.Split('\n', StringSplitOptions.RemoveEmptyEntries)) {
+      var sides = line.TrimEnd('\r').Split(" - ", 2, StringSplitOptions.None);
+      if (sides.Length != 2) continue;
+      var left = sides[0].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+      var right = sides[1].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+      if (left.Length < 6 || right.Length < 3 || right[0] != (unified ? "cgroup2" : "cgroup")) continue;
+      if (!unified && !right[2].Split(',').Contains(controller)) continue;
+      string root = Unescape(left[3]), mount = Unescape(left[4]); Absolute(root); Absolute(mount);
+      string relative;
+      if (group == root) relative = "";
+      else if (root == "/") relative = group.Substring(1);
+      else if (group.StartsWith(root.TrimEnd('/') + "/", StringComparison.Ordinal)) relative = group.Substring(root.TrimEnd('/').Length + 1);
+      else continue;
+      directories.Add(mount.TrimEnd('/') + (relative == "" ? "" : "/" + relative));
+    }
+    if (directories.Count != 1) throw new InvalidDataException("Missing or ambiguous cgroup mount: " + controller);
+    return (directories.Single(), unified ? "2" : "1");
+  }
   static async Task<int> Main() {
+    string membership = File.ReadAllText("/proc/self/cgroup"), mountinfo = File.ReadAllText("/proc/self/mountinfo");
+    var versions = new Dictionary<string, string>();
+    var files = new Dictionary<string, string>();
+    string Read(string controller, string v1, string v2) {
+      var located = Locate(controller, membership, mountinfo);
+      versions[controller] = located.version;
+      string path = located.directory + "/" + (located.version == "1" ? v1 : v2);
+      if (!files.ContainsKey(path)) files[path] = File.ReadAllText(path);
+      return files[path].Trim();
+    }
+    string pids = Read("pids", "pids.max", "pids.max");
+    string memory = Read("memory", "memory.limit_in_bytes", "memory.max");
+    string cpu = Read("cpu", "cpu.cfs_quota_us", "cpu.max");
+    if (versions["cpu"] == "1") cpu += " " + Read("cpu", "cpu.cfs_period_us", "cpu.max");
     bool networkDenied = false;
     using(var socket = new TcpClient()) { try { await socket.ConnectAsync("192.0.2.1", 9).WaitAsync(TimeSpan.FromSeconds(2)); }
       catch { networkDenied = true; } }
@@ -80,9 +128,8 @@ class Program {
       root_readonly = Denied("/etc/repoforge-qualification-write"), network_denied = networkDenied,
       host_canary_absent = Environment.GetEnvironmentVariable("REPOFORGE_QUALIFY_HOST_ONLY") == null,
       process_status = File.ReadAllText("/proc/self/status"),
-      pids_max = File.ReadAllText("/sys/fs/cgroup/pids.max").Trim(),
-      memory_max = File.ReadAllText("/sys/fs/cgroup/memory.max").Trim(),
-      cpu_max = File.ReadAllText("/sys/fs/cgroup/cpu.max").Trim()
+      pids_max = pids, memory_max = memory, cpu_max = cpu,
+      cgroup_observation = new { proc_self_cgroup = membership, proc_self_mountinfo = mountinfo, versions, files }
     }));
     return 0;
   }
@@ -92,6 +139,78 @@ class Program {
 def _require(condition, reason):
     if not condition:
         raise ValueError("REPOSITORY_PROBE_" + reason)
+
+
+def _cgroup_location(controller, membership, mountinfo):
+    """Resolve the current process's controller path from kernel proc originals.
+
+    为什么要有它：v1独立层级和v2统一层级不能靠固定目录或Docker配置代替实际内核读取。
+    """
+    def absolute(value):
+        _require(isinstance(value, str) and value.startswith("/")
+            and not any(part in {".", ".."} for part in value.split("/")), "CGROUP_PATH_INVALID")
+        return value
+
+    entries = [line.rstrip("\r").split(":", 2) for line in membership.splitlines() if line]
+    own = [row for row in entries if len(row) == 3 and controller in row[1].split(",")]
+    unified = not own
+    if unified:
+        own = [row for row in entries if len(row) == 3 and row[:2] == ["0", ""]]
+    _require(len(own) == 1, "CGROUP_MEMBERSHIP_INVALID")
+    group = absolute(own[0][2])
+    directories = set()
+    for line in mountinfo.splitlines():
+        sides = line.split(" - ", 1)
+        if len(sides) != 2:
+            continue
+        left, right = sides[0].split(), sides[1].split()
+        if len(left) < 6 or len(right) < 3 or right[0] != ("cgroup2" if unified else "cgroup"):
+            continue
+        if not unified and controller not in right[2].split(","):
+            continue
+        root, mount = (absolute(re.sub(r"\\([0-7]{3})", lambda match: chr(int(match[1], 8)), value))
+            for value in left[3:5])
+        if group == root:
+            relative = ""
+        elif root == "/":
+            relative = group[1:]
+        elif group.startswith(root.rstrip("/") + "/"):
+            relative = group[len(root.rstrip("/")) + 1:]
+        else:
+            continue
+        directories.add(mount.rstrip("/") + ("/" + relative if relative else ""))
+    _require(len(directories) == 1, "CGROUP_MOUNT_INVALID")
+    return directories.pop(), "2" if unified else "1"
+
+
+def _cgroup_control_values(observation):
+    """Recompute limits using the recorded kernel paths and unmodified file values."""
+    _require(isinstance(observation, dict) and set(observation) == {
+        "proc_self_cgroup", "proc_self_mountinfo", "versions", "files"}
+        and isinstance(observation["proc_self_cgroup"], str) and isinstance(observation["proc_self_mountinfo"], str)
+        and isinstance(observation["versions"], dict) and isinstance(observation["files"], dict), "CGROUP_OBSERVATION_INVALID")
+    versions, paths, values = {}, set(), {}
+    for controller, key, v1_names, v2_names in (
+        ("pids", "pids_max", ["pids.max"], ["pids.max"]),
+        ("memory", "memory_max", ["memory.limit_in_bytes"], ["memory.max"]),
+        ("cpu", "cpu_max", ["cpu.cfs_quota_us", "cpu.cfs_period_us"], ["cpu.max"]),
+    ):
+        directory, version = _cgroup_location(controller, observation["proc_self_cgroup"], observation["proc_self_mountinfo"])
+        versions[controller] = version
+        names = v1_names if version == "1" else v2_names
+        selected = [directory + "/" + name for name in names]
+        _require(all(isinstance(observation["files"].get(path), str) for path in selected), "CGROUP_FILE_MISSING")
+        paths.update(selected)
+        values[key] = " ".join(observation["files"][path].strip() for path in selected)
+    _require(observation["versions"] == versions and set(observation["files"]) == paths, "CGROUP_SOURCE_CHANGED")
+    return values
+
+
+def _verify_cgroup_controls(observed):
+    values = _cgroup_control_values(observed.get("cgroup_observation"))
+    _require(all(observed.get(key) == value for key, value in values.items())
+        and values["pids_max"] == "64" and values["memory_max"] == "1073741824"
+        and values["cpu_max"].split() == ["100000", "100000"], "QUALIFICATION_BOUNDARY_FAILED")
 
 
 def _local_docker_endpoint(endpoint):
@@ -421,6 +540,7 @@ class RepositoryProbeRunner:
             and (bundle / "logs/sdk-version.txt").read_text().strip() == result["sdk_version"] == self.config["sdk_version"],
             "QUALIFICATION_BUILD_CHANGED")
         observed = json.loads(runtime_record["stdout"])
+        _verify_cgroup_controls(observed)
         _require(proof["controls"] == observed and observed["candidate_value"] == 7 and observed["uid"] == 65534
             and all(observed[name] is True for name in ("source_readonly", "assembly_readonly", "root_readonly", "network_denied", "host_canary_absent"))
             and re.search(r"NoNewPrivs:\s+1", observed["process_status"])
@@ -549,6 +669,7 @@ class RepositoryProbeRunner:
             "result": result, "qualification_candidate": "trusted_control_fixture"})
         _require(result["passed"] and result["runtime_execution"] is not None, "QUALIFICATION_EXECUTION_FAILED")
         observed = json.loads(result["runtime_execution"]["stdout"])
+        _verify_cgroup_controls(observed)
         _require(observed["candidate_value"] == 7 and observed["uid"] == 65534
             and all(observed[name] is True for name in ("source_readonly", "assembly_readonly", "root_readonly", "network_denied", "host_canary_absent"))
             and re.search(r"NoNewPrivs:\s+1", observed["process_status"])

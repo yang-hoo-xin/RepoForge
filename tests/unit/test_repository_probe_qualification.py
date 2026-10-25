@@ -13,8 +13,29 @@ from src.mod_agent.model_qualification import read_bound_json
 from tests.unit.test_repository_probe_runner import bundle, owner
 
 
-@pytest.fixture
-def qualified(tmp_path, monkeypatch):
+def kernel_observation(version, *, group="/docker/subject", mount_root="/docker/subject", cpu_mount="cpu"):
+    values = {"pids.max": "64\n", "memory.max": "1073741824\n", "memory.limit_in_bytes": "1073741824\n",
+        "cpu.max": "100000 100000\n", "cpu.cfs_quota_us": "100000\n", "cpu.cfs_period_us": "100000\n"}
+    suffix = "" if group in {mount_root, "/"} else group.removeprefix(mount_root).lstrip("/")
+    suffix = "/" + suffix if suffix else ""
+    if version == "2":
+        membership = "0::" + group + "\n"
+        mounts = f"29 23 0:26 {mount_root} /sys/fs/cgroup ro - cgroup2 cgroup rw\n"
+        files = {"/sys/fs/cgroup" + suffix + "/" + name: values[name] for name in ("pids.max", "memory.max", "cpu.max")}
+    else:
+        # 为什么要有它：实际宿主有0::条目却仅挂载v1；必须按controller定位，不能把条目当v2资格。
+        membership = f"12:pids:{group}\n8:memory:{group}\n5:cpu,cpuacct:{group}\n0::{group}\n"
+        mounts, files = "", {}
+        for controller, destination, names in (("pids", "pids", ["pids.max"]),
+            ("memory", "memory", ["memory.limit_in_bytes"]), ("cpu,cpuacct", cpu_mount, ["cpu.cfs_quota_us", "cpu.cfs_period_us"])):
+            mounts += f"29 23 0:26 {mount_root} /sys/fs/cgroup/{destination} ro - cgroup cgroup rw,{controller}\n"
+            files.update({"/sys/fs/cgroup/" + destination + suffix + "/" + name: values[name] for name in names})
+    return {"proc_self_cgroup": membership, "proc_self_mountinfo": mounts,
+        "versions": dict.fromkeys(("pids", "memory", "cpu"), version), "files": files}
+
+
+@pytest.fixture(params=["1", "2"], ids=["cgroup-v1", "cgroup-v2"])
+def qualified(tmp_path, monkeypatch, request):
     selected = owner(tmp_path)
     environment = {"engine_id": "controlled-engine", "server_version": "controlled", "image_id": "controlled-image",
         "image_environment": [], "evidence_refs": []}
@@ -22,7 +43,7 @@ def qualified(tmp_path, monkeypatch):
     observed = {"candidate_value": 7, "uid": 65534, "source_readonly": True, "assembly_readonly": True,
         "root_readonly": True, "network_denied": True, "host_canary_absent": True,
         "process_status": "NoNewPrivs:\t1\nCapEff:\t00000000\n", "pids_max": "64",
-        "memory_max": "1073741824", "cpu_max": "100000 100000"}
+        "memory_max": "1073741824", "cpu_max": "100000 100000", "cgroup_observation": kernel_observation(request.param)}
     files = {"logs/status.json": json.dumps({"restore_exit_code": 0, "publish_exit_code": 0}),
         "logs/sdk-version.txt": "8.0.100", "logs/restore.txt": "controlled restore", "logs/publish.txt": "controlled compile",
         "logs/compile-inputs.txt": "/work/repository/Library/Library.csproj|/work/repository/Library/Value.cs\n",
@@ -128,3 +149,75 @@ def test_cached_qualification_rechecks_immutable_proof(qualified):
     path.write_text("{}")
     assert selected.verify_capability(profile)["status"] == "unavailable"
     assert calls == [False, True]
+
+
+@pytest.mark.parametrize("version,group,mount_root,cpu_mount", [
+    ("1", "/docker/subject", "/docker/subject", "cpu"),
+    ("1", "/docker/subject/child", "/docker/subject", "cpu,cpuacct"),
+    ("1", "/", "/", "cpu"),
+    ("2", "/docker/subject", "/", "unused"),
+    ("2", "/", "/", "unused"),
+])
+def test_kernel_limits_resolve_current_membership_and_mounted_controller(version, group, mount_root, cpu_mount):
+    observation = kernel_observation(version, group=group, mount_root=mount_root, cpu_mount=cpu_mount)
+    observed = {"pids_max": "64", "memory_max": "1073741824", "cpu_max": "100000 100000",
+        "cgroup_observation": observation}
+    module._verify_cgroup_controls(observed)
+    assert module._cgroup_control_values(observation) == {key: observed[key] for key in ("pids_max", "memory_max", "cpu_max")}
+
+
+def test_actual_v1_layout_with_unified_membership_does_not_claim_v2():
+    observation = kernel_observation("1")
+    observation["proc_self_cgroup"] = observation["proc_self_cgroup"].replace("5:cpu,cpuacct:", "2:cpu:") + "3:cpuacct:/docker/subject\n"
+    observation["proc_self_mountinfo"] = observation["proc_self_mountinfo"].replace("rw,cpu,cpuacct", "rw,cpu")
+    values = module._cgroup_control_values(observation)
+    assert values["cpu_max"] == "100000 100000"
+    assert module._cgroup_location("cpu", observation["proc_self_cgroup"], observation["proc_self_mountinfo"]) == (
+        "/sys/fs/cgroup/cpu", "1")
+
+
+@pytest.mark.parametrize("version", ["1", "2"])
+def test_namespace_root_cannot_use_limits_from_an_unrelated_mounted_subtree(version):
+    # 为什么要有它：即使子树限额恰好相同，也不能用它代替当前namespace根的实际资源边界。
+    observation = kernel_observation(version, group="/", mount_root="/docker/unrelated")
+    with pytest.raises(ValueError, match="CGROUP_MOUNT_INVALID"):
+        module._cgroup_control_values(observation)
+
+
+@pytest.mark.parametrize("version", ["1", "2"])
+@pytest.mark.parametrize("fault", ["missing", "malformed", "unlimited", "wrong", "wrong_cpu_period", "reported_value", "version", "unselected_path"])
+def test_kernel_resource_limits_cannot_be_missing_or_replaced_by_claims(version, fault):
+    observation = kernel_observation(version)
+    observed = {"pids_max": "64", "memory_max": "1073741824", "cpu_max": "100000 100000",
+        "cgroup_observation": observation}
+    pids = next(path for path in observation["files"] if path.endswith("pids.max"))
+    if fault == "missing":
+        observation["files"].pop(pids)
+    elif fault in {"malformed", "unlimited", "wrong"}:
+        observation["files"][pids] = {"malformed": "64 garbage", "unlimited": "max", "wrong": "128"}[fault]
+    elif fault == "wrong_cpu_period":
+        cpu = next(path for path in observation["files"] if path.endswith("cpu.cfs_period_us" if version == "1" else "cpu.max"))
+        observation["files"][cpu] = "200000" if version == "1" else "100000 200000"
+    elif fault == "reported_value":
+        observed["pids_max"] = "128"
+    elif fault == "version":
+        observation["versions"]["pids"] = "2" if version == "1" else "1"
+    else:
+        observation["files"]["/unrelated/pids.max"] = "64"
+    with pytest.raises(ValueError, match="CGROUP_|QUALIFICATION_BOUNDARY_FAILED"):
+        module._verify_cgroup_controls(observed)
+
+
+@pytest.mark.parametrize("fault", ["no_membership", "no_mount", "ambiguous", "traversal"])
+def test_unresolved_kernel_hierarchy_is_rejected(fault):
+    observation = kernel_observation("1")
+    if fault == "no_membership":
+        observation["proc_self_cgroup"] = "8:memory:/docker/subject\n"
+    elif fault == "no_mount":
+        observation["proc_self_mountinfo"] = ""
+    elif fault == "ambiguous":
+        observation["proc_self_mountinfo"] += "30 23 0:26 /docker/subject /other ro - cgroup cgroup rw,pids\n"
+    else:
+        observation["proc_self_cgroup"] = observation["proc_self_cgroup"].replace("/docker/subject", "/../subject")
+    with pytest.raises(ValueError, match="CGROUP_"):
+        module._cgroup_control_values(observation)
