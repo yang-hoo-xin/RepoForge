@@ -1,0 +1,3 @@
+# This model-response fixture has a frozen byte fingerprint; preserve its Git blob.
+# 为什么要有它：系统 autocrlf 不能改变冻结样本字节，校验应继续拒绝实际内容或换行变化。
+tests/fixtures/requirement_findings_duplicate_relation_indexes.json -text
