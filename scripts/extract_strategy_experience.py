@@ -34,7 +34,9 @@ from src.mod_agent.model_call_budget import METER_ONLY, validate_budget
 from src.mod_agent.model_qualification import canonical_hash
 from src.mod_agent.patch_transport_bodies import PatchTransportBodyRecorder
 from src.mod_agent.planning import (
+    episode_catalog,
     learning_calibration,
+    learning_context,
     learning_request,
     process_trajectory,
     strategy_experience,
@@ -111,7 +113,7 @@ def owners():
 
     paths = [__file__, sys.modules[ArtifactStore.__module__].__file__,
         _CONTEXT_OWNER_PATH, *[module.__file__ for module in (
-        process_trajectory, strategy_experience, learning_request, learning_calibration, task_memory, execution_trace, agent_turn, transport_observation,
+        process_trajectory, strategy_experience, episode_catalog, learning_request, learning_calibration, learning_context, task_memory, execution_trace, agent_turn, transport_observation,
         interrupted_patch_admission, local_entry, model_admission, model_call_budget, model_qualification,
         patch_transport_bodies, platform_execution_snapshot, task_agent_execution, task_agent_loop,
         task_agent_v2_execution, task_agent_v2_recovery, task_agent_v2_state, dsh_run_request)]]
@@ -132,11 +134,26 @@ def retain_owners(root):
     return records
 
 
+def catalog_input(record):
+    """Resolve an explicitly configured collection, never discover source directories.
+
+    为什么要有它：动态学习可以消费新登记的公开经历，但不能借准备入口扫描其他任务或改变旧冻结输入。
+    """
+    source = record["episode_catalog"]
+    require(isinstance(source, dict) and {"store_root", "catalog_id"} <= set(source)
+        and not set(source) - {"store_root", "catalog_id", "selection"}, "CATALOG_INPUT_INVALID")
+    root = Path(source["store_root"])
+    require(root.is_absolute() and not str(root).startswith(("\\\\", "//")) and root.is_dir(), "CATALOG_STORE_INVALID")
+    _no_links(root)
+    require(isinstance(source["catalog_id"], str) and bool(source["catalog_id"].strip()), "CATALOG_ID_REQUIRED")
+    return source, StrategyExperience(ArtifactStore(root))
+
+
 def prepare(input_ref, output_root):
     record = read_public(input_ref)
     profile = profile_for(record)
     calibration = load_calibration_sources(record.get("context_calibration_sources"), profile, record["digest"])
-    require(sum(key in record for key in ("sources", "episode_ref", "episode_set")) == 1, "EXACTLY_ONE_INPUT_MODE_REQUIRED")
+    require(sum(key in record for key in ("sources", "episode_ref", "episode_set", "episode_catalog")) == 1, "EXACTLY_ONE_INPUT_MODE_REQUIRED")
     protected = [Path(input_ref["path"]).parent]
     protected.extend(row["attempt_root"] for row in record.get("context_calibration_sources", []))
     for source in record.get("sources", []):
@@ -149,9 +166,14 @@ def prepare(input_ref, output_root):
         protected.append(Path(record["episode_ref"]["path"]).parent)
     if "episode_set" in record:
         protected.append(record["episode_set"]["store_root"])
+    source_catalog = None
+    if "episode_catalog" in record:
+        source_catalog, catalog_memory = catalog_input(record)
+        protected.append(source_catalog["store_root"])
     root = fresh_root(output_root, protected)
     memory = StrategyExperience(ArtifactStore(root / "strategy-memory"))
     episode_refs = []
+    catalog_source = None
     learning_ref = deepcopy_json(record.get("learning_request_ref"))
     if "sources" in record:
         require(isinstance(record["sources"], list) and record["sources"], "SOURCES_REQUIRED")
@@ -162,6 +184,18 @@ def prepare(input_ref, output_root):
         selected = memory.freeze_episode_set(episode_refs, applicability=record["applicability"], source_roles=record.get("source_roles"),
             learning_request_ref=learning_ref)
         selection = {"kind": "episode_set", "reference": asdict(selected)}
+    elif source_catalog is not None:
+        # 为什么要有它：本次准备固定所选版本；集合以后增长只能影响新的准备，不能改变已派发的学习请求。
+        original_ref = catalog_memory.freeze_catalog(source_catalog["catalog_id"],
+            applicability=record["applicability"], learning_request_ref=learning_ref,
+            selection=source_catalog.get("selection"))
+        original = catalog_memory.verify_catalog_selection(original_ref)
+        episode_refs = [row["episode_ref"] for row in original["episodes"]]
+        selected = memory.freeze_episode_set(episode_refs, applicability=original["applicability"],
+            source_roles=[row["source_role"] for row in original["episodes"]], learning_request_ref=learning_ref)
+        selection = {"kind": "episode_set", "reference": asdict(selected)}
+        catalog_source = {"store_root": source_catalog["store_root"], "catalog_id": source_catalog["catalog_id"],
+            "frozen_ref": asdict(original_ref), "selection_ref": original["catalog_selection_ref"]}
     elif "episode_set" in record:
         source = record["episode_set"]
         original = StrategyExperience(ArtifactStore(source["store_root"])).read(source["reference"])
@@ -181,6 +215,7 @@ def prepare(input_ref, output_root):
     retained = retain_owners(root)
     return write_once(root / "prepared.json", {"schema_version": "prepared_strategy_extraction_v1", "input_ref": input_ref,
         "profile": profile.to_dict(), "selection": selection, "episode_refs": episode_refs,
+        **({"catalog_source": catalog_source} if catalog_source is not None else {}),
         **({"learning_request_ref": learning_ref, "requested_strategy_scope": deepcopy_json(record.get("applicability"))}
             if learning_ref is not None else {}),
         **({"context_calibration": calibration} if calibration is not None else {}),
@@ -245,6 +280,22 @@ def verify_prepared(prepared_ref):
             source = record["episode_set"]
             original = StrategyExperience(ArtifactStore(source["store_root"])).read(source["reference"])
             require(all(frozen[k] == original[k] for k in ("episodes", "applicability", "authority", "frozen")), "PREPARED_SET_CHANGED")
+        elif "episode_catalog" in record:
+            source, catalog_memory = catalog_input(record)
+            bound = prepared.get("catalog_source")
+            require(isinstance(bound, dict) and bound.get("store_root") == source["store_root"]
+                and bound.get("catalog_id") == source["catalog_id"], "PREPARED_CATALOG_CHANGED")
+            original = catalog_memory.verify_catalog_selection(bound["frozen_ref"])
+            receipt = catalog_memory.read(bound["selection_ref"])
+            require(original.get("catalog_id") == source["catalog_id"]
+                and original.get("catalog_selection_ref") == bound["selection_ref"]
+                and receipt.get("kind") == "episode_catalog_selection"
+                and receipt.get("catalog_id") == source["catalog_id"]
+                and receipt.get("selection") == episode_catalog.normalize_selection(source.get("selection"))
+                and original.get("learning_request_ref") == learning_ref
+                and original["applicability"] == record["applicability"], "PREPARED_CATALOG_SELECTION_CHANGED")
+            require(all(frozen[k] == original[k] for k in ("episodes", "applicability", "authority", "frozen")),
+                "PREPARED_SET_CHANGED")
     else:
         require(selection == {"kind": "episode", "reference": record["episode_ref"]}
             and prepared["episode_refs"] == [record["episode_ref"]], "PREPARED_EPISODE_CHANGED")

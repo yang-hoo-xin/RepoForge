@@ -222,7 +222,64 @@ def _effective_revision(state, failed, passed):
     return False
 
 
-def seal_current_public_episode(owner, session=None):
+def _catalog_configuration(configuration):
+    """Validate an explicitly selected dynamic collection without changing frozen modes.
+
+    为什么要有它：目录更新必须来自宿主明确配置，不能借终态收尾扩充旧冻结集合或策略试验快照。
+    """
+    value = configuration.get("episode_catalog")
+    if value is None:
+        return None
+    _learning_require(isinstance(value, dict) and {"catalog_id"} <= set(value)
+        and not set(value) - {"catalog_id", "selection"}
+        and isinstance(value["catalog_id"], str) and bool(value["catalog_id"].strip()), "CATALOG_CONFIG_INVALID")
+    _learning_require(configuration.get("extraction_episode_set_ref") is None, "CATALOG_AND_FROZEN_SET_CONFLICT")
+    selection = value.get("selection", {})
+    _learning_require(isinstance(selection, dict) and not set(selection) - {"required_episode_refs", "run_choices"},
+        "CATALOG_SELECTION_INVALID")
+    _learning_require(isinstance(selection.get("required_episode_refs", []), list)
+        and isinstance(selection.get("run_choices", {}), dict), "CATALOG_SELECTION_INVALID")
+    if configuration["extract_on_terminal"]:
+        _learning_require(configuration.get("learning_request_ref") is not None
+            and configuration.get("requested_strategy_scope") is not None, "CATALOG_LEARNING_PURPOSE_REQUIRED")
+    return deepcopy(value)
+
+
+def _register_configured_public_episode(owner, episode_ref, configuration_ref):
+    """Register sealed public facts independently of whether extraction is enabled."""
+    if configuration_ref is None or episode_ref is None:
+        return None
+    configuration = read_bound_json(configuration_ref)
+    catalog = _catalog_configuration(configuration)
+    if catalog is None:
+        return None
+    root = Path(configuration["store_root"])
+    _learning_require(root.is_absolute() and not root.is_symlink() and not str(root).startswith(("\\\\", "//")),
+        "CATALOG_STORE_INVALID")
+    value = {"schema": "task-agent-public-episode-registration.v1", "configuration_ref": deepcopy(configuration_ref),
+        "episode_ref": deepcopy(episode_ref), "catalog_id": catalog["catalog_id"], "model_calls": 0,
+        "strategy_activated": False, "frozen_snapshot_modified": False}
+    try:
+        memory = StrategyExperience(ArtifactStore(root))
+        registered = memory.register_public_episode(catalog["catalog_id"], episode_ref)
+        value.update(status="registered", catalog_registration_ref=asdict(registered))
+    except Exception as error:
+        value.update(status="failed", error_type=type(error).__name__, message=str(error))
+    name = "public-episode-registration-" + canonical_hash(value) + ".json"
+    try:
+        try:
+            receipt_ref = owner._save(name, value)
+        except FileExistsError:
+            from src.mod_agent.task_agent_v2_recovery import _ref
+            receipt_ref = _ref(Path(owner.output_root) / name)
+            _learning_require(read_bound_json(receipt_ref) == value, "CATALOG_REGISTRATION_RECEIPT_CHANGED")
+        return {**value, "receipt_ref": receipt_ref}
+    except Exception as error:
+        # 为什么要有它：已封存经历或已成功登记不因派生回执保存失败而消失，也不能把登记失败写成成功。
+        return {**value, "receipt_ref": None, "receipt_error": {"error_type": type(error).__name__, "message": str(error)}}
+
+
+def seal_current_public_episode(owner, session=None, *, configuration_ref=None):
     """Seal a live owner's retained execution even when extraction is not configured.
 
     为什么要有它：公开过程采集不能以经验配置或一次模型调用为前提，调用者可在正常收尾独立保存事实。
@@ -232,7 +289,13 @@ def seal_current_public_episode(owner, session=None):
         return None
     collector = TaskAgentV2Experience.__new__(TaskAgentV2Experience)
     collector.owner = owner
-    return collector._episode(session)
+    episode = collector._episode(session)
+    if configuration_ref is None:
+        configuration_ref = getattr(owner, "_episode_catalog_configuration_ref", None)
+    if configuration_ref is None:
+        configuration_ref = getattr(getattr(owner, "_experience", None), "configuration_ref", None)
+    owner._public_episode_catalog_registration = _register_configured_public_episode(owner, episode, configuration_ref)
+    return episode
 
 
 def _semantic_validation_evidence(owner, session, execution):
@@ -458,7 +521,7 @@ def seal_saved_public_episode(*, artifact_store_root, checkpoint_ref, stop_ref):
         task_agent_v2_state,
     )
     from src.mod_agent.domain import csharp_repository_backend
-    from src.mod_agent.planning import strategy_experience
+    from src.mod_agent.planning import episode_catalog, learning_context, strategy_experience
 
     observation = {"schema": "task-agent-public-process-observation.v1", "status": stop["stop_kind"],
         "run_id": stop["run_id"], "request_id": stop["request_id"], "task_contract_ref": state.contract_ref,
@@ -470,13 +533,14 @@ def seal_saved_public_episode(*, artifact_store_root, checkpoint_ref, stop_ref):
         "collector_scope": "post_process_public_collector",
         "collector_source_refs": [_ref(Path(path)) for path in (__file__, task_agent_execution.__file__,
             task_agent_v2_experiments.__file__, task_agent_v2_recovery.__file__, task_agent_v2_state.__file__,
-            csharp_repository_backend.__file__, strategy_experience.__file__)],
+            csharp_repository_backend.__file__, strategy_experience.__file__, episode_catalog.__file__, learning_context.__file__)],
         "stop_attribution": "host_observed_stop; not model abandonment or hypothesis refutation"}
     if stop.get("plan_ref") is not None:
         observation["plan_ref"] = deepcopy(stop["plan_ref"])
     observation_ref = save("process-observation-" + canonical_hash(observation) + ".json", observation)
     owner = SimpleNamespace(_save=save, profile=SimpleNamespace(to_dict=lambda: checkpoint["details"]["model_profile"]),
         _public_episode_checkpoint_ref=checkpoint_ref,
+        _episode_catalog_configuration_ref=host.get("experience_configuration_ref"),
         execution_receipt=lambda: SimpleNamespace(execution_ref=observation_ref))
     session = SimpleNamespace(state=state, owner=owner,
         actual_calls=deepcopy([call for call in checkpoint["session"]["actual_calls"] if call["call_id"] in completed_ids]),
@@ -490,7 +554,7 @@ class TaskAgentV2Experience:
         self.configuration_ref = deepcopy(configuration_ref)
         self.config = read_bound_json(configuration_ref)
         required = {"schema_version", "store_root", "snapshot_ref", "extract_on_terminal"}
-        if (not required <= set(self.config) or set(self.config) - required - {"trial_binding_ref", "extraction_episode_set_ref", "learning_request_ref", "requested_strategy_scope"}
+        if (not required <= set(self.config) or set(self.config) - required - {"trial_binding_ref", "extraction_episode_set_ref", "learning_request_ref", "requested_strategy_scope", "episode_catalog"}
                 or self.config["schema_version"] != "task_agent_experience_config_v1"
                 or type(self.config["extract_on_terminal"]) is not bool):
             raise ValueError("TASK_V2_EXPERIENCE_CONFIG_INVALID")
@@ -500,6 +564,7 @@ class TaskAgentV2Experience:
         self.memory = StrategyExperience(ArtifactStore(root))
         self.snapshot = self.config["snapshot_ref"]
         self.extraction_episode_set_ref = deepcopy(self.config.get("extraction_episode_set_ref"))
+        self.episode_catalog = _catalog_configuration(self.config)
         self.learning_request_ref = deepcopy(self.config.get("learning_request_ref"))
         self.learning_request = read_learning_request(self.learning_request_ref)
         self.requested_strategy_scope = deepcopy(self.config.get("requested_strategy_scope"))
@@ -507,7 +572,7 @@ class TaskAgentV2Experience:
             from src.mod_agent.planning.strategy_experience import _strategy
             _strategy({"applicability": self.requested_strategy_scope, "suggested_action": "pending",
                 "expected_observation": "unassessed", "counterevidence": ["unassessed"]})
-            _learning_require(self.learning_request is not None or self.extraction_episode_set_ref is not None,
+            _learning_require(self.learning_request is not None or self.extraction_episode_set_ref is not None or self.episode_catalog is not None,
                 "EXPLICIT_LEARNING_REQUEST_REQUIRED")
         self.trial_binding = self._read_trial_binding()
         self._terminal_receipt = None
@@ -750,7 +815,7 @@ class TaskAgentV2Experience:
 
         为什么要有它：保存经历与调用提炼模型是两件事，停用提炼或人工停止不能抹去已经发生的过程。
         """
-        return seal_current_public_episode(self.owner, session)
+        return seal_current_public_episode(self.owner, session, configuration_ref=self.configuration_ref)
 
     def complete_terminal_learning(self):
         if self._terminal_receipt is not None:
@@ -764,8 +829,12 @@ class TaskAgentV2Experience:
             episode = self.seal_public_episode()
             if episode is not None:
                 result["episode_ref"] = episode
+            registration = getattr(owner, "_public_episode_catalog_registration", None)
+            if registration is not None:
+                result["catalog_registration"] = deepcopy(registration)
+                _learning_require(registration["status"] == "registered", "CATALOG_REGISTRATION_FAILED")
             if self.config["extract_on_terminal"]:
-                if episode is None and self.extraction_episode_set_ref is None:
+                if episode is None and self.extraction_episode_set_ref is None and self.episode_catalog is None:
                     result["status"] = "no_information_gain"
                 else:
                     client = owner._v2_client
@@ -809,7 +878,19 @@ class TaskAgentV2Experience:
 
                     extraction = self.memory.propose_from_episode
                     extraction_source = episode
-                    if self.extraction_episode_set_ref is not None:
+                    if self.episode_catalog is not None:
+                        selection = deepcopy(self.episode_catalog.get("selection", {}))
+                        required = selection.setdefault("required_episode_refs", [])
+                        if episode is not None and episode not in required:
+                            required.append(deepcopy(episode))
+                        selected = self.memory.freeze_catalog(self.episode_catalog["catalog_id"],
+                            applicability=self.requested_strategy_scope, learning_request_ref=self.learning_request_ref,
+                            selection=selection)
+                        extraction, extraction_source = self.memory.propose_from_episodes, asdict(selected)
+                        frozen = self.memory.read(selected)
+                        result.update(episode_set_ref=deepcopy(extraction_source),
+                            catalog_selection_ref=deepcopy(frozen["catalog_selection_ref"]))
+                    elif self.extraction_episode_set_ref is not None:
                         extraction, extraction_source = self.memory.propose_from_episodes, self.extraction_episode_set_ref
                         result["episode_set_ref"] = deepcopy(extraction_source)
                     learned = extraction(
