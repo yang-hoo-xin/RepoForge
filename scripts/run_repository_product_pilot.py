@@ -39,6 +39,7 @@ from src.mod_agent.evaluation.trial_comparison_identity import platform_identity
 from src.mod_agent.model_admission import read_ollama_model_identity
 from src.mod_agent.model_qualification import canonical_hash, read_bound_json
 from src.mod_agent.platform_execution_snapshot import FrozenExecution, prepare_snapshot
+from src.mod_agent.task_agent_v2_state import _no_links
 
 REPO = Path(__file__).resolve().parents[1]
 MODEL = "qwen3-coder:30b"
@@ -216,7 +217,14 @@ def freeze(configuration_ref):
 
 
 def _verify(reference):
-    if _ref(reference["path"]) != reference:
+    # 为什么要有它：同一绝对路径的分隔符写法不应改变文件身份；仍拒绝链接、额外字段和实际字节变化。
+    if not isinstance(reference, dict) or set(reference) != {"path", "sha256"}:
+        raise ValueError("BOUND_INPUT_CHANGED")
+    path = Path(reference["path"])
+    if not path.is_absolute():
+        raise ValueError("BOUND_INPUT_CHANGED")
+    _no_links(path)
+    if _ref(path)["sha256"] != reference["sha256"]:
         raise ValueError("BOUND_INPUT_CHANGED")
 
 

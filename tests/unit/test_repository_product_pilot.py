@@ -18,6 +18,24 @@ def test_absolute_real_b_does_not_require_external_product_readiness():
     assert "codex_executable_ref" in pilot.configuration_keys({"mode": "matched_product_pair"})
 
 
+def test_equivalent_absolute_reference_spelling_preserves_content_binding(tmp_path):
+    reference = _save(tmp_path / "reference.json", {"value": "original"})
+    (tmp_path / "detour").mkdir()
+    alias = {**reference, "path": (tmp_path / "detour" / ".." / "reference.json").as_posix()}
+    pilot._verify(alias)
+    pilot._verify({**reference, "path": Path(reference["path"]).as_posix()})
+    Path(reference["path"]).write_text('{"value":"changed"}', encoding="utf-8")
+    with pytest.raises(ValueError, match="BOUND_INPUT_CHANGED"):
+        pilot._verify(alias)
+
+
+def test_reference_path_compatibility_does_not_accept_extra_fields_or_relative_paths(tmp_path):
+    reference = _save(tmp_path / "reference.json", {"value": "original"})
+    for changed in ({**reference, "extra": True}, {**reference, "path": "reference.json"}):
+        with pytest.raises(ValueError, match="BOUND_INPUT_CHANGED"):
+            pilot._verify(changed)
+
+
 @pytest.mark.parametrize("mode", ["absolute_real_B", "matched_product_pair"])
 @pytest.mark.parametrize("selected,with_experience", [(None, False), ("enabled", False), ("disabled", False), ("enabled", True)],
     ids=["default", "enabled", "disabled", "catalog"])
