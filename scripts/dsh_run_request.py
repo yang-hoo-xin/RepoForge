@@ -32,6 +32,7 @@ MAX_RUN_RECORD_BYTES = 8 * 1024 * 1024
 # configuration is administrator-selected and validated by its original owner.
 _SWITCHES = frozenset({
     "--local-ollama", "--defer-approval", "--allow-build", "--confirm-isolated-write",
+    "--allow-source-disclosure",
     "--reuse-query-observations", "--no-reuse-query-observations",
     "--compress-findings-input", "--no-compress-findings-input",
 })
@@ -47,6 +48,7 @@ _VALUES = frozenset({
     "--task-agent-experience-config",
     "--task-agent-semantic-state",
     "--repository-profile",
+    "--external-patch-profile", "--api-key-env", "--base-url-env", "--source-disclosure-approval-id",
 })
 _REQUIRED = {
     "--local-ollama", "--defer-approval", "--allow-build", "--confirm-isolated-write",
@@ -59,6 +61,7 @@ _PATHS = frozenset({
     "--game-folder-build-binding", "--stage-model-call-limits", "--patch-worker-config",
     "--dependency-api-config", "--knowledge-evidence-config",
     "--repository-profile",
+    "--external-patch-profile",
 })
 _STAGES = frozenset({
     "requirement_projection", "requirement_findings", "planning", "initial_patch", "repair",
@@ -71,7 +74,7 @@ def _configuration_arguments(execution_config: str) -> tuple[list[str], dict[str
     if not selected.is_absolute():
         raise ValueError("DSH_RUN_CONFIGURATION_PATH_MUST_BE_ABSOLUTE")
     document = read_json_object(selected)
-    if (not {"arguments"}.issubset(document) or set(document) - {"arguments", "worker_path_bindings", "new_project_binding", "followup_binding", "dependency_api_binding", "knowledge_evidence_binding", "repository_profile_binding"}
+    if (not {"arguments"}.issubset(document) or set(document) - {"arguments", "worker_path_bindings", "new_project_binding", "followup_binding", "dependency_api_binding", "knowledge_evidence_binding", "repository_profile_binding", "external_profile_binding"}
             or not isinstance(document["arguments"], list)):
         raise ValueError("DSH_RUN_CONFIGURATION_SHAPE_INVALID")
     arguments = document["arguments"]
@@ -101,6 +104,15 @@ def _configuration_arguments(execution_config: str) -> tuple[list[str], dict[str
     for name in ("reuse-query-observations", "compress-findings-input"):
         if "--" + name in seen and "--no-" + name in seen:
             raise ValueError("DSH_RUN_CONFIGURATION_OPTION_CONFLICT: " + name)
+    external_options = {"--external-patch-profile", "--allow-source-disclosure", "--api-key-env", "--base-url-env", "--source-disclosure-approval-id"} & seen.keys()
+    if external_options and "--local-ollama" in seen:
+        raise ValueError("DSH_RUN_CONFIGURATION_PROVIDER_CONFLICT")
+    if external_options and "--external-patch-profile" not in seen:
+        raise ValueError("DSH_RUN_CONFIGURATION_EXTERNAL_PROFILE_REQUIRED")
+    # 为什么要有它：已分配身份的外部配置不能删除绑定后伪装成尚未冻结的声明输入。
+    if ("--external-patch-profile" in seen and {"--run-id", "--request-id"} & seen.keys()
+            and "external_profile_binding" not in document):
+        raise ValueError("DSH_EXTERNAL_PROFILE_BINDING_REQUIRED")
     if "dependency_api_binding" in document:
         if document["dependency_api_binding"] != dependency_api_binding(seen):
             raise ValueError("DSH_DEPENDENCY_API_BINDING_CHANGED")
@@ -108,6 +120,8 @@ def _configuration_arguments(execution_config: str) -> tuple[list[str], dict[str
         raise ValueError("DSH_KNOWLEDGE_EVIDENCE_BINDING_CHANGED")
     if "repository_profile_binding" in document and document["repository_profile_binding"] != repository_profile_binding(seen):
         raise ValueError("DSH_REPOSITORY_PROFILE_BINDING_CHANGED")
+    if "external_profile_binding" in document and document["external_profile_binding"] != external_profile_binding(seen):
+        raise ValueError("DSH_EXTERNAL_PROFILE_BINDING_CHANGED")
     return arguments, seen
 
 
@@ -144,6 +158,75 @@ def repository_profile_binding(options):
     return {"configuration_ref": profile.reference, "dotnet_ref": profile.data["dotnet_ref"]}
 
 
+def validate_external_settings_credentials(settings):
+    """Reject embedded credentials before any settings copy or provider access.
+
+    为什么要有它：登记入口与冻结调用者应共用同一凭据边界；只校验已解析数据，不读ENV或回显字段值。
+    """
+    def embedded_secret(value):
+        if isinstance(value, dict):
+            return any((str(key).casefold() in {"api_key", "secret_key", "access_token", "refresh_token", "password", "authorization", "client_secret"}
+                and item not in (None, "")) or embedded_secret(item) for key, item in value.items())
+        return isinstance(value, list) and any(embedded_secret(item) for item in value)
+
+    if embedded_secret(settings):
+        raise ValueError("DSH_EXTERNAL_SETTINGS_EMBEDDED_CREDENTIAL_DENIED")
+
+
+def external_profile_binding(options):
+    """Bind the existing explicit OpenAI v2 profile without reading credentials or sending.
+
+    为什么要有它：注册、选路、派发与查询须指向同一非秘密配置；ENV名称属于合同，值只由运行owner在内存读取。
+    """
+    if not options.get("--external-patch-profile"):
+        return None
+    import yaml
+
+    from src.mod_agent.external_patch import (
+        ExternalOpenAIResponsesProfile,
+        external_profile_from_document,
+    )
+    from src.mod_agent.task_agent_v2_state import _no_links
+
+    required = {"--settings", "--api-key-env", "--base-url-env", "--allow-source-disclosure",
+        "--repository-profile", "--technical-executor", "--task-agent-protocol", "--constraint-policy"}
+    if not required <= options.keys():
+        raise ValueError("DSH_EXTERNAL_PROFILE_REQUIRED_OPTIONS_MISSING")
+    if ("--local-ollama" in options or options["--technical-executor"] != "task_agent"
+            or options["--task-agent-protocol"] != "v2" or options["--constraint-policy"] != "source_priority_v1"
+            or options.get("--model-call-budget-policy", "task_total_only") not in {"task_total_only", "meter_only"}
+            or any(key.startswith("--ollama-") for key in options)):
+        raise ValueError("DSH_EXTERNAL_PROFILE_REQUIRES_OPENAI_V2")
+    paths = [Path(options[name]) for name in ("--external-patch-profile", "--settings")]
+    for path in paths:
+        if not path.is_absolute():
+            raise ValueError("DSH_RUN_CONFIGURATION_PATH_MUST_BE_ABSOLUTE")
+        _no_links(path)
+    try:
+        profile = external_profile_from_document(read_json_object(str(paths[0])))
+    except (TypeError, ValueError, KeyError):
+        raise ValueError("DSH_EXTERNAL_PROFILE_INVALID") from None
+    if not isinstance(profile, ExternalOpenAIResponsesProfile):
+        raise ValueError("DSH_EXTERNAL_PROFILE_REQUIRES_OPENAI_V2")
+    if (options["--api-key-env"] != profile.credential_env
+            or not options["--api-key-env"].isidentifier() or not options["--base-url-env"].isidentifier()):
+        raise ValueError("DSH_EXTERNAL_CREDENTIAL_ENV_MISMATCH")
+    try:
+        settings = yaml.safe_load(paths[1].read_text(encoding="utf-8"))
+    except (ValueError, yaml.YAMLError):
+        raise ValueError("DSH_EXTERNAL_SETTINGS_INVALID") from None
+
+    validate_external_settings_credentials(settings)
+    llm = settings.get("llm") if isinstance(settings, dict) else None
+    if (not isinstance(llm, dict) or llm.get("provider") != "openai"
+            or llm.get("model") != profile.model or llm.get("base_url") != profile.base_url):
+        raise ValueError("DSH_EXTERNAL_SETTINGS_PROFILE_MISMATCH")
+    return {"configuration_ref": _file_ref(paths[0]), "settings_ref": _file_ref(paths[1]),
+        "profile": profile.to_dict(), "api_key_env": options["--api-key-env"], "base_url_env": options["--base-url-env"],
+        "source_disclosure": {"allowed": True, "approval_id": options.get("--source-disclosure-approval-id")},
+        "scope": "declared_configuration_only_not_model_or_account_admission", "credential_values_recorded": False}
+
+
 def prepare_new_task(*, execution_config: str, description: str, project_name: str | None = None,
                      parent_run_id: str | None = None, delivery_root: str | None = None,
                      parent_execution_config: str | None = None) -> str:
@@ -157,6 +240,7 @@ def prepare_new_task(*, execution_config: str, description: str, project_name: s
     api_binding = dependency_api_binding(seen)
     knowledge_binding = knowledge_evidence_binding(seen)
     repository_binding = repository_profile_binding(seen)
+    external_binding = external_profile_binding(seen)
     if repository_binding is not None and project_name is not None:
         raise ValueError("DSH_REPOSITORY_PROFILE_REQUIRES_EXISTING_REPOSITORY")
     if parent_run_id is not None and project_name is not None:
@@ -273,6 +357,7 @@ def prepare_new_task(*, execution_config: str, description: str, project_name: s
         **({"dependency_api_binding": api_binding} if api_binding is not None else {}),
         **({"knowledge_evidence_binding": knowledge_binding} if knowledge_binding is not None else {}),
         **({"repository_profile_binding": repository_binding} if repository_binding is not None else {}),
+        **({"external_profile_binding": external_binding} if external_binding is not None else {}),
         **({"new_project_binding": project_binding} if project_binding is not None else {}),
         **({"followup_binding": followup_binding} if followup_binding is not None else {})},
         ensure_ascii=False, indent=2), encoding="utf-8")
@@ -597,6 +682,9 @@ def validate_product_profile(*, execution_config: str, description: str):
     arguments, seen = _configuration_arguments(execution_config)
     policy = seen.get("--model-call-budget-policy", "task_total_only")
     required = _REQUIRED
+    external = "--external-patch-profile" in seen
+    if external:
+        required = (required - {"--local-ollama", "--ollama-model", "--ollama-context-window"}) | {"--allow-source-disclosure", "--api-key-env", "--base-url-env"}
     if policy in {"task_total_only", "meter_only"}:
         required = required - {"--stage-model-call-limits"}
     if policy == "meter_only":
@@ -614,6 +702,8 @@ def validate_product_profile(*, execution_config: str, description: str):
     dependency_api_binding(seen)
     knowledge_evidence_binding(seen)
     repository_profile_binding(seen)
+    if external:
+        external_profile_binding(seen)
 
     # Use the real parser for option types/choices; '--' keeps all description
     # bytes literal even when they start with a CLI option or shell expression.
@@ -621,13 +711,14 @@ def validate_product_profile(*, execution_config: str, description: str):
         parsed = cli.build_parser().parse_args(["run-request", *arguments, "--", description])
     except SystemExit as exc:
         raise ValueError("DSH_RUN_CONFIGURATION_PARSER_REJECTED") from exc
-    validate_loopback_http_base_url(parsed.ollama_base_url)
+    if not external:
+        validate_loopback_http_base_url(parsed.ollama_base_url)
     cli._task_agent_edit_paths(parsed.task_agent_edit_paths)
     if ((policy != "meter_only" and (parsed.task_model_call_limit is None or parsed.task_model_call_limit < 1))
-            or parsed.ollama_context_window < 1
-            or parsed.ollama_max_output_tokens < 1
-            or parsed.ollama_max_output_tokens >= parsed.ollama_context_window
-            or not parsed.ollama_model.strip()):
+            or not external and (parsed.ollama_context_window < 1
+                or parsed.ollama_max_output_tokens < 1
+                or parsed.ollama_max_output_tokens >= parsed.ollama_context_window
+                or not parsed.ollama_model.strip())):
         raise ValueError("DSH_RUN_CONFIGURATION_MODEL_BUDGET_INVALID")
     if parsed.ollama_timeout_seconds is not None and (
         not math.isfinite(parsed.ollama_timeout_seconds) or parsed.ollama_timeout_seconds <= 0

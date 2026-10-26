@@ -27,7 +27,7 @@ from tests.unit.test_csharp_repository_product_entry import (
 
 @pytest.mark.parametrize("boundary", ["provider_receipt", "tool_receipt"])
 def test_responses_normal_cli_failure_revision_and_receipt_recovery(
-    repository_workspace, monkeypatch, capsys, record_property, boundary,
+    repository_workspace, monkeypatch, capsys, record_property, boundary, registered_entry=False,
 ):
     root = repository_workspace
     profile, source = _profile(root)
@@ -182,8 +182,40 @@ def test_responses_normal_cli_failure_revision_and_receipt_recovery(
         "--technical-executor", "task_agent", "--task-agent-protocol", "v2",
         "--defer-approval", "--confirm-isolated-write", "--allow-build", "--",
         "Make Arithmetic.Double return twice its input. Preserve signatures and tests."]
+    registered = None
+    if registered_entry:
+        import yaml
+
+        from scripts import dsh_run_request as bridge
+
+        # 为什么要有它：注册入口校验磁盘上的实际配置，不能依赖测试进程内替换settings掩盖提供方不一致。
+        document = yaml.safe_load(Path("config/settings.yaml").read_text(encoding="utf-8"))
+        def clear_credentials(value):
+            # 为什么要有它：受控配置不能复制本机其他provider的凭据；模型只用本测试显式注入的虚构ENV值。
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    if str(key).casefold() in {"api_key", "secret_key", "access_token", "refresh_token", "password", "authorization", "client_secret"}:
+                        value[key] = None
+                    else:
+                        clear_credentials(item)
+            elif isinstance(value, list):
+                for item in value:
+                    clear_credentials(item)
+        clear_credentials(document)
+        document["llm"].update(provider="openai", model=model, base_url="https://api.openai.com/v1", max_tokens=4096)
+        settings_path = root / "responses-settings.yaml"
+        settings_path.write_text(yaml.safe_dump(document, allow_unicode=True), encoding="utf-8")
+        arguments[arguments.index("--settings") + 1] = str(settings_path)
+        configuration = root / "registered-input.json"
+        configuration.write_text(json.dumps({"arguments": arguments[1:arguments.index("--")]}), encoding="utf-8")
+        description = arguments[-1]
+        registered = bridge.prepare_new_task(execution_config=str(configuration), description=description)
+        arguments = bridge.build_product_argv(execution_config=registered, description=description)
     with pytest.raises(KeyboardInterrupt):
-        cli.main(arguments)
+        if registered is None:
+            cli.main(arguments)
+        else:
+            bridge._dispatch_product(arguments, execution_config=registered)
     capsys.readouterr()
     assert len(requests) == 1
     store, checkpoint_ref = interruptions[0]
@@ -208,11 +240,30 @@ def test_responses_normal_cli_failure_revision_and_receipt_recovery(
         assert diagnostic["usage_available"] is True
         assert diagnostic["request_identity"]["provider_body_sha256"] == request["sha256"]
     assert result["v2_delivery_checkpoint_ref"]
+    registered_evidence = None
+    if registered is not None:
+        # 为什么要有它：同一registered配置必须能查回原生证据且不触发生成；恢复后的产品结果不能被桥接器补写为成功。
+        run_id = result["run_id"]
+        assert Path(bridge.task_execution_config(execution_config=registered, run_id=run_id)).resolve() == Path(registered).resolve()
+        assert bridge.main(["--execution-config", registered, "--inspect-run", run_id,
+            "--view", "evidence", "--format", "json"]) == 0
+        observed = json.loads(capsys.readouterr().out)
+        assert observed["run_id"] == run_id and observed["read_only"] is True
+        assert len(requests) == 8
+        registered_evidence = _save(root / "responses-registered-evidence.json", observed)
     record_property("responses_entry", json.dumps({
         "scope": "controlled_HTTP_and_SDK_not_autonomous_repair", "interruption": boundary,
         "actual_request_refs": [turn["request_ref"] for turn in turns],
         "initial_checkpoint_ref": checkpoint_ref, "final_checkpoint_ref": owner.v2_checkpoint_ref,
         "public_failure": saved["public_failure"], "candidate_ref": owner._v2_state.current_revision_ref,
         "delivery_checkpoint_ref": result["v2_delivery_checkpoint_ref"], "calls": 8,
+        "registered_configuration": registered, "registered_evidence_ref": registered_evidence,
         "wire_ref": _save(root / "responses-controlled-wire.json", requests),
         "result_ref": _save(root / "responses-product-result.json", result)}))
+
+
+def test_registered_responses_entry_and_read_only_evidence(
+    repository_workspace, monkeypatch, capsys, record_property,
+):
+    test_responses_normal_cli_failure_revision_and_receipt_recovery(
+        repository_workspace, monkeypatch, capsys, record_property, "tool_receipt", registered_entry=True)

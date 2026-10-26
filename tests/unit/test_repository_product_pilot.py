@@ -39,7 +39,7 @@ def test_reference_path_compatibility_does_not_accept_extra_fields_or_relative_p
 @pytest.mark.parametrize("mode", ["absolute_real_B", "matched_product_pair"])
 @pytest.mark.parametrize("selected,with_experience", [(None, False), ("enabled", False), ("disabled", False), ("enabled", True)],
     ids=["default", "enabled", "disabled", "catalog"])
-def test_semantic_state_reaches_generated_configuration_and_product_argv(tmp_path, monkeypatch, capsys, mode, selected, with_experience):
+def test_semantic_state_reaches_generated_configuration_and_product_argv(tmp_path, monkeypatch, capsys, mode, selected, with_experience, external=False):
     from tests.unit.test_csharp_repository_backend import _profile
 
     profile, source = _profile(tmp_path)
@@ -58,6 +58,14 @@ def test_semantic_state_reaches_generated_configuration_and_product_argv(tmp_pat
         config["codex_executable_ref"] = _ref(executable)
     if selected is not None:
         config["task_agent_semantic_state"] = selected
+    if external:
+        config["external_profile_ref"] = _save(tmp_path / "openai-profile.json", {
+            "profile_version": "external_openai_responses_profile_v1", "base_url": "https://api.openai.com/v1",
+            "model": "controlled-reference", "model_catalog_url": "https://api.openai.com/v1/models",
+            "context_window": 65536, "output_budget": 4096, "timeout_seconds": 600,
+            "credential_env": "CONTROLLED_REFERENCE_KEY", "reasoning_effort": "medium"})
+        monkeypatch.setattr(pilot, "external_pilot_identity", lambda profile, expected=None: {
+            "provider": "openai_responses", "model": profile.model, "model_digest": None})
     if with_experience:
         experience = {"schema_version": "task_agent_experience_config_v1", "store_root": str(tmp_path / "experience"),
             "snapshot_ref": None, "extract_on_terminal": False, "episode_catalog": {"catalog_id": "real-runs"}}
@@ -92,6 +100,27 @@ def test_semantic_state_reaches_generated_configuration_and_product_argv(tmp_pat
     assert plan["configuration_ref"] == configuration
     assert configuration in plan["bound_inputs"]
     assert frozen["model_calls"] == 0 and not (Path(plan["root"]) / "started.json").exists()
+    if external:
+        from types import SimpleNamespace
+
+        reference = config["external_profile_ref"]
+        assert plan["external_profile_ref"] == reference and reference in plan["bound_inputs"]
+        assert (reference["path"], reference["sha256"]) in captured[0]["bound_inputs"]
+        assert execution["external_profile_binding"]["configuration_ref"] == reference
+        arguments = captured[0]["business_argv"]
+        assert "--local-ollama" not in arguments and "--allow-source-disclosure" in arguments
+        assert arguments[arguments.index("--external-patch-profile") + 1] == reference["path"]
+        assert arguments[arguments.index("--api-key-env") + 1] == "CONTROLLED_REFERENCE_KEY"
+        monkeypatch.setattr(pilot, "FrozenExecution", lambda _reference: SimpleNamespace(verify_files=lambda: None))
+        monkeypatch.setattr(pilot, "external_pilot_identity", lambda *_args: (_ for _ in ()).throw(ValueError("MODEL_CHANGED")))
+        monkeypatch.setattr(pilot, "execute", lambda *_args, **_kwargs: pytest.fail("Changed model cannot start a process"))
+        with pytest.raises(ValueError, match="MODEL_CHANGED"):
+            pilot.run(pilot_ref, "RepoForge_B")
+        assert not (Path(plan["root"]) / "started.json").exists()
+        Path(reference["path"]).write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(pilot, "external_pilot_identity", lambda *_args: pytest.fail("Changed profile must reject before catalogue"))
+        with pytest.raises(ValueError, match="BOUND_INPUT_CHANGED"):
+            pilot.run(pilot_ref, "RepoForge_B")
     if with_experience:
         reference = config["experience_config_ref"]
         assert plan["experience_config_ref"] == reference and reference in plan["bound_inputs"]
@@ -106,6 +135,44 @@ def test_semantic_state_reaches_generated_configuration_and_product_argv(tmp_pat
     else:
         assert "experience_config_ref" not in plan
         assert "no injected strategy or terminal extraction configured" in plan["configuration_difference"]
+
+
+def test_external_absolute_pilot_uses_registered_profile_and_existing_frozen_runner(tmp_path, monkeypatch, capsys):
+    test_semantic_state_reaches_generated_configuration_and_product_argv(
+        tmp_path, monkeypatch, capsys, "absolute_real_B", "enabled", False, external=True)
+
+
+@pytest.mark.parametrize("mode", ["strategy_pair", "matched_product_pair"])
+def test_external_profile_cannot_relabel_a_different_model_as_a_common_model_pair(tmp_path, mode):
+    with pytest.raises(ValueError, match="EXTERNAL_PROFILE_REQUIRES_ABSOLUTE_TASK_AGENT"):
+        pilot.freeze(_save(tmp_path / "invalid-pair.json", {"mode": mode, "external_profile_ref": None}))
+
+
+def test_external_settings_credentials_reject_before_metadata_or_output(tmp_path, monkeypatch):
+    reference = _save(tmp_path / "profile.json", {
+        "profile_version": "external_openai_responses_profile_v1", "base_url": "https://api.openai.com/v1",
+        "model": "controlled-reference", "model_catalog_url": "https://api.openai.com/v1/models",
+        "context_window": 65536, "output_budget": 4096, "timeout_seconds": 600})
+    settings = tmp_path / "settings.yaml"
+    settings.write_text('llm: {}\nembedding:\n  api_key: "CONTROLLED-FAKE-SECRET"\n', encoding="utf-8")
+    before = settings.read_bytes()
+    root = tmp_path / "pilot"
+    monkeypatch.setattr(pilot, "external_pilot_identity", lambda *_args: pytest.fail("No catalogue call"))
+    with pytest.raises(ValueError, match="EMBEDDED_CREDENTIAL_DENIED"):
+        pilot.freeze(_save(tmp_path / "config.json", {"mode": "absolute_real_B", "root": str(root),
+            "external_profile_ref": reference, "settings_ref": _ref(settings)}))
+    assert not root.exists() and settings.read_bytes() == before
+
+
+@pytest.mark.parametrize("name", ["OPENAI_API_KEY", "openai_api_key"])
+def test_pilot_never_freezes_credential_environment_values(tmp_path, name):
+    reference = _save(tmp_path / "profile.json", {
+        "profile_version": "external_openai_responses_profile_v1", "base_url": "https://api.openai.com/v1",
+        "model": "controlled-reference", "model_catalog_url": "https://api.openai.com/v1/models",
+        "context_window": 65536, "output_budget": 4096, "timeout_seconds": 600})
+    with pytest.raises(ValueError, match="PILOT_CREDENTIAL_VALUE_MUST_NOT_BE_FROZEN"):
+        pilot.external_pilot_profile({"mode": "absolute_real_B", "external_profile_ref": reference,
+            "environment": {name: "CONTROLLED-FAKE-VALUE"}})
 
 
 @pytest.mark.parametrize("value", [None, "not-a-reference", {"path": "relative.json", "sha256": "a" * 64}])

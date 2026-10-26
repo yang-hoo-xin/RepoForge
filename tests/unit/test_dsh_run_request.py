@@ -185,7 +185,10 @@ def test_literal_stdin_cannot_replace_options_and_each_invocation_is_new(executi
 ])
 def test_profile_cannot_expand_execution_boundary(execution_config, option):
     _arguments(execution_config, lambda values: [*values, option])
-    with pytest.raises(ValueError, match="DSH_RUN_CONFIGURATION_OPTION_NOT_ALLOWED"):
+    # 为什么要有它：新增外部选项只属于显式OpenAI v2分支，旧local配置仍必须拒绝混用或缺值。
+    expected = {"--allow-source-disclosure": "DSH_RUN_CONFIGURATION_PROVIDER_CONFLICT",
+        "--external-patch-profile": "DSH_RUN_CONFIGURATION_VALUE_MISSING"}.get(option, "DSH_RUN_CONFIGURATION_OPTION_NOT_ALLOWED")
+    with pytest.raises(ValueError, match=expected):
         bridge.build_product_argv(execution_config=str(execution_config), description="change Load")
 
 

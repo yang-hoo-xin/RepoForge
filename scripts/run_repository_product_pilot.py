@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import time
+from copy import deepcopy
 from pathlib import Path
 
 import yaml
@@ -25,6 +26,7 @@ from scripts.dsh_run_request import (
     build_product_argv,
     evidence_locator,
     prepare_new_task,
+    validate_external_settings_credentials,
 )
 from scripts.run_benchmark_arm import codex_argv, codex_events, execute
 from src.mod_agent.domain.csharp_repository_backend import (
@@ -93,8 +95,48 @@ def local_codex_command(executable, workspace, last_message, deny_roots, dotnet,
     return command
 
 
+def external_pilot_profile(config):
+    """Select the existing external profile only for one absolute TaskAgent attempt.
+
+    为什么要有它：更换模型的参考运行不是同模型经验配对，也不能暗中改变Codex产品对照的共同条件。
+    """
+    reference = config.get("external_profile_ref")
+    if "external_profile_ref" not in config:
+        return None
+    if config.get("mode") != "absolute_real_B":
+        raise ValueError("EXTERNAL_PROFILE_REQUIRES_ABSOLUTE_TASK_AGENT")
+    from src.mod_agent.external_patch import (
+        ExternalOpenAIResponsesProfile,
+        external_profile_from_document,
+    )
+    profile = external_profile_from_document(read_bound_json(reference))
+    if not isinstance(profile, ExternalOpenAIResponsesProfile):
+        raise ValueError("EXTERNAL_PILOT_REQUIRES_RESPONSES_PROFILE")
+    # 为什么要有它：Windows环境变量名不区分大小写，换一种拼写仍不能把当前凭据值保存进计划。
+    if any(str(key).casefold() == profile.credential_env.casefold() for key in config.get("environment", {})):
+        raise ValueError("PILOT_CREDENTIAL_VALUE_MUST_NOT_BE_FROZEN")
+    return profile
+
+
+def external_pilot_identity(profile, expected=None):
+    from src.mod_agent.external_patch import (
+        read_external_openai_model_identity,
+        validate_openai_task_identity,
+    )
+    observed = read_external_openai_model_identity(profile)
+    validate_openai_task_identity(profile, observed, expected)
+    return observed
+
+
 def freeze(configuration_ref):
     config = read_bound_json(configuration_ref)
+    external = external_pilot_profile(config)
+    external_settings = None
+    if external is not None:
+        # 为什么要有它：冻结配置不能复制其他provider凭据，拒绝应早于外部目录查询或文件写出；原用户配置不改写。
+        _verify(config["settings_ref"])
+        external_settings = yaml.safe_load(Path(config["settings_ref"]["path"]).read_text(encoding="utf-8"))
+        validate_external_settings_credentials(external_settings)
     mode = config.get("mode", "matched_product_pair")
     if mode == "strategy_pair":
         return freeze_strategy_pair(configuration_ref, config)
@@ -124,9 +166,12 @@ def freeze(configuration_ref):
         raise ValueError("FRESH_SEPARATE_PILOT_ROOT_REQUIRED")
     profile = CSharpRepositoryProfile(config["public_profile_ref"])
     profile.bind(public)
-    identity = read_ollama_model_identity("http://127.0.0.1:11434", MODEL)
-    if identity["digest"] != DIGEST:
-        raise ValueError("MODEL_CHANGED")
+    if external is None:
+        identity = read_ollama_model_identity("http://127.0.0.1:11434", MODEL)
+        if identity["digest"] != DIGEST:
+            raise ValueError("MODEL_CHANGED")
+    else:
+        identity = external_pilot_identity(external)
     root.mkdir(parents=True)
     public_contract = Path(config["public_contract_ref"]["path"]).read_text(encoding="utf-8")
     common = Path(config["public_problem_ref"]["path"]).read_text(encoding="utf-8") + "\n\n" + public_contract
@@ -154,6 +199,8 @@ def freeze(configuration_ref):
                 "model_identity": identity, "allowed_edit_paths": profile.data["allowed_edit_paths"],
                 "public_profile_ref": profile.reference, "controller_ref": _ref(__file__),
                 "environment": config["environment"], "evaluator_ref": qualification["evaluator_ref"]}
+        if external is not None:
+            base["external_profile_ref"] = config["external_profile_ref"]
         if arm == "Codex_local":
             deny = [REPO, Path.home() / ".codex", Path.home() / ".ssh", Path.home() / ".aws"]
             base["command"] = local_codex_command(config["codex_executable_ref"]["path"], workspace,
@@ -161,17 +208,28 @@ def freeze(configuration_ref):
             base["prompt_path"] = str(common_path)
             base["configuration_difference"] = "native OSS adapter; probe context4096, sampling/output options not independently captured; final wire not instrumented"
         else:
-            settings = yaml.safe_load(Path(config["settings_ref"]["path"]).read_text(encoding="utf-8"))
+            settings = (deepcopy(external_settings) if external is not None else
+                yaml.safe_load(Path(config["settings_ref"]["path"]).read_text(encoding="utf-8")))
             settings["task_memory"] = {"enabled": False, "store_root": None, "max_context_chars": 3000}
-            settings["llm"].update(provider="ollama", model=MODEL, base_url="http://127.0.0.1:11434", max_tokens=4096)
+            if external is None:
+                settings["llm"].update(provider="ollama", model=MODEL, base_url="http://127.0.0.1:11434", max_tokens=4096)
+                model_arguments = ["--local-ollama", "--ollama-model", MODEL, "--ollama-base-url", "http://127.0.0.1:11434",
+                    "--ollama-context-window", "65536", "--ollama-max-output-tokens", "4096", "--ollama-timeout-seconds", "600"]
+                model_description = "explicit context65536/output4096/temperature0/seed0"
+            else:
+                settings["llm"].update(provider="openai", model=external.model,
+                    base_url=external.base_url, max_tokens=external.output_budget)
+                model_arguments = ["--external-patch-profile", config["external_profile_ref"]["path"],
+                    "--api-key-env", external.credential_env, "--base-url-env", "REPOFORGE_OPENAI_BASE_URL",
+                    "--allow-source-disclosure"]
+                model_description = (f"Responses declared context{external.context_window}/output{external.output_budget}"
+                    f"/reasoning {external.reasoning_effort}; remote model ID without binary digest")
             settings_path = arm_root / "settings.yaml"
             with settings_path.open("x", encoding="utf-8") as stream:
                 yaml.safe_dump(settings, stream, allow_unicode=True, sort_keys=False)
             arguments = ["--target-project", str(source), "--workspace-root", str(arm_root / "runs"),
                 "--settings", str(settings_path), "--repository-profile", profile.reference["path"],
-                "--local-ollama", "--ollama-model", MODEL, "--ollama-base-url", "http://127.0.0.1:11434",
-                "--ollama-context-window", "65536", "--ollama-max-output-tokens", "4096",
-                "--ollama-timeout-seconds", "600", "--model-call-budget-policy", "meter_only",
+                *model_arguments, "--model-call-budget-policy", "meter_only",
                 "--source-retrieval", "rg_live", "--confirm-isolated-write", "--allow-build", "--defer-approval",
                 "--technical-executor", "task_agent", "--task-agent-protocol", "v2",
                 "--task-agent-semantic-state", semantic_state,
@@ -184,6 +242,8 @@ def freeze(configuration_ref):
             _, options = _configuration_arguments(selected)
             run_root = arm_root / "runs" / options["--run-id"]
             bound = [_ref(selected), _ref(settings_path), profile.reference, common_ref, configuration_ref, _ref(__file__)]
+            if external is not None:
+                bound.append(config["external_profile_ref"])
             if experience_ref is not None:
                 bound.append(experience_ref)
             platform = prepare_snapshot(source_root=REPO, snapshot_root=root / "platform",
@@ -200,7 +260,7 @@ def freeze(configuration_ref):
                 execution_config_ref=_ref(selected), authorization_ref=authorization, policy_id=policy_id,
                 inspection=evidence_locator(execution_config=selected, run_id=options["--run-id"]),
                 bound_inputs=bound, task_agent_semantic_state=semantic_state,
-                configuration_difference="explicit context65536/output4096/temperature0/seed0; semantic working state="
+                configuration_difference=model_description + "; semantic working state="
                     + semantic_state + ("; host experience policy explicitly bound" if experience_ref is not None
                         else "; no injected strategy or terminal extraction configured"),
                 command=[sys.executable, "-I", "-B", str(root / "platform/scripts/run_frozen_product.py"),
@@ -260,6 +320,8 @@ def configuration_keys(config):
     keys = ("intent_ref", "public_problem_ref", "public_contract_ref", "public_profile_ref", "qualification_ref", "settings_ref")
     if "experience_config_ref" in config:
         keys += ("experience_config_ref",)
+    if "external_profile_ref" in config:
+        keys += ("external_profile_ref",)
     return (*keys, "codex_executable_ref") if config.get("mode", "matched_product_pair") == "matched_product_pair" else keys
 
 
@@ -509,13 +571,21 @@ def run(pilot_ref, arm):
             raise ValueError("SERIAL_ARM_ORDER_REQUIRED")
     if pilot.get("mode") == "strategy_pair":
         verify_strategy_trials(plan["prepared_ref"])
-    model = plan.get("model_endpoint", {"base_url": "http://127.0.0.1:11434", "model": MODEL, "digest": DIGEST})
-    if read_ollama_model_identity(model["base_url"], model["model"])["digest"] != model["digest"]:
-        raise ValueError("MODEL_CHANGED")
     if "platform_ref" in plan:
         FrozenExecution(plan["platform_ref"]).verify_files()
         for reference in plan["bound_inputs"]:
             _verify(reference)
+    external = external_pilot_profile(config)
+    if external is not None:
+        if plan.get("external_profile_ref") != config["external_profile_ref"]:
+            raise ValueError("PILOT_EXTERNAL_PROFILE_BINDING_CHANGED")
+        external_pilot_identity(external, plan["model_identity"])
+    else:
+        if "external_profile_ref" in plan:
+            raise ValueError("PILOT_EXTERNAL_PROFILE_BINDING_CHANGED")
+        model = plan.get("model_endpoint", {"base_url": "http://127.0.0.1:11434", "model": MODEL, "digest": DIGEST})
+        if read_ollama_model_identity(model["base_url"], model["model"])["digest"] != model["digest"]:
+            raise ValueError("MODEL_CHANGED")
     clock, utc = time.monotonic(), time.time()
     deadline, deadline_utc = clock + plan["wall_seconds"], utc + plan["wall_seconds"]
     for inherited in (os.environ.get("REPOFORGE_TASK_DEADLINE_UTC"),
