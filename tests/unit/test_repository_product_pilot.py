@@ -13,9 +13,259 @@ from scripts import run_repository_product_pilot as pilot
 from src.mod_agent.domain.full_project_compilation import _ref, _save
 
 
+def _filesystem(command):
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib
+    value = next((value for value in command if value.startswith("permissions.benchmark.filesystem=")), None)
+    if value is None:
+        name = command[command.index("--profile") + 1]
+        value = (Path(pilot.os.environ["CODEX_HOME"]) / (name + ".config.toml")).read_text(encoding="utf-8")
+    return tomllib.loads(value)["permissions"]["benchmark"]["filesystem"]
+
+
 def test_absolute_real_b_does_not_require_external_product_readiness():
     assert "codex_executable_ref" not in pilot.configuration_keys({"mode": "absolute_real_B"})
     assert "codex_executable_ref" in pilot.configuration_keys({"mode": "matched_product_pair"})
+
+
+def test_native_reference_requires_own_profile_and_no_api_settings():
+    keys = pilot.configuration_keys({"mode": "native_reference"})
+    assert "native_reference_profile_ref" in keys
+    assert "codex_model_availability_ref" in keys
+    assert "codex_executable_ref" in keys
+    assert "settings_ref" not in keys
+
+
+@pytest.fixture
+def native_reference(tmp_path, monkeypatch):
+    from tests.unit.test_csharp_repository_backend import _profile
+
+    repository, source = _profile(tmp_path)
+    fake_home = tmp_path / "controlled-codex-home"
+    fake_home.mkdir()
+    monkeypatch.setenv("CODEX_HOME", str(fake_home))
+    allowed = source / "src/Example/Allowed.cs"
+    allowed.parent.mkdir(parents=True)
+    allowed.write_text("public class Allowed {}", encoding="utf-8")
+    document = {**repository.data, "allowed_edit_paths": ["src/Example/Allowed.cs"]}
+    repository_ref = _save(tmp_path / "native-public-profile.json", document)
+    executable = tmp_path / "codex.exe"
+    executable.write_text("CONTROLLED BINARY IDENTITY; NEVER EXECUTED", encoding="utf-8")
+    problem, contract = tmp_path / "problem.txt", tmp_path / "contract.txt"
+    problem.write_text("Controlled new public task.", encoding="utf-8")
+    contract.write_text("Modify only the registered public source.", encoding="utf-8")
+    profile = {"schema_version": "codex_native_reference_profile_v1", "model": "gpt-6-astra",
+        "reasoning_effort": "high", "authentication": "chatgpt",
+        "codex_home": str(Path(pilot.os.environ.get("CODEX_HOME") or Path.home() / ".codex").resolve())}
+    config = {"mode": "native_reference", "root": str(tmp_path / "pilot"), "public_source_root": str(source),
+        "intent_ref": _save(tmp_path / "intent.json", {"scope": "controlled native reference"}),
+        "public_problem_ref": _ref(problem), "public_contract_ref": _ref(contract), "public_profile_ref": repository_ref,
+        "qualification_ref": _save(tmp_path / "qualification.json", {"qualified": True,
+            "evaluator_ref": _save(tmp_path / "private/evaluator.json", {"controlled": True})}),
+        "codex_executable_ref": _ref(executable), "environment": {},
+        "native_reference_profile_ref": _save(tmp_path / "native-profile.json", profile),
+        "codex_model_availability_ref": _save(tmp_path / "availability.json", {
+            "status": "listed", "binary_ref": _ref(executable), "model_generations": 0, "threads_created": 0,
+            "models": [{"model": "gpt-6-astra", "hidden": False, "supportedReasoningEfforts": [{"reasoningEffort": "high"}]}]})}
+    monkeypatch.setattr(pilot, "validate_frozen_evaluator", lambda _qualification: None)
+    monkeypatch.setattr(pilot, "read_ollama_model_identity", lambda *_args: pytest.fail("Native reference cannot contact Ollama"))
+    monkeypatch.setattr(pilot, "external_pilot_identity", lambda *_args: pytest.fail("Native reference cannot contact API"))
+    monkeypatch.setattr(pilot, "prepare_new_task", lambda **_kwargs: pytest.fail("Native result is not TaskAgent"))
+    return config
+
+
+def test_native_reference_cli_freeze_run_records_native_facts_and_child_only_auth_route(tmp_path, monkeypatch, capsys, native_reference):
+    config = native_reference
+    frozen_ref = _cli(monkeypatch, capsys, "freeze", _save(tmp_path / "config.json", config))["pilot_ref"]
+    frozen = pilot.read_bound_json(frozen_ref)
+    assert frozen["mode"] == "native_reference" and frozen["order"] == [pilot.NATIVE_ARM]
+    assert frozen["model_calls"] == 0
+    plan = pilot.read_bound_json(frozen["plans"][pilot.NATIVE_ARM])
+    assert "platform_ref" not in plan and "execution_config_ref" not in plan and "run_id" not in plan
+    assert plan["product_kind"] == "native_codex_reference"
+    assert plan["evaluator_ref"] == pilot.read_bound_json(config["qualification_ref"])["evaluator_ref"]
+    assert Path(plan["prompt_path"]).read_text(encoding="utf-8") == "Controlled new public task.\n\nModify only the registered public source."
+    command = plan["command"]
+    assert command[command.index("--model") + 1] == "gpt-6-astra"
+    assert 'model_reasoning_effort="high"' in command and 'forced_login_method="chatgpt"' in command
+    assert "--ephemeral" in command and "--ignore-user-config" in command and "--ignore-rules" in command
+    assert command[command.index("--profile") + 1].startswith("repoforge-native-")
+    assert pilot.read_bound_json(config["native_reference_profile_ref"])["codex_home"] == str(Path(plan["native_permission_profile_ref"]["path"]).parent)
+    assert Path(plan["native_permission_profile_ref"]["path"]).read_bytes() == Path(plan["native_permission_profile_archive_ref"]["path"]).read_bytes()
+    assert not any(value.startswith("permissions.benchmark.filesystem=") for value in command)
+    assert "--oss" not in command and "--local-provider" not in command
+    assert 'windows.sandbox="mxc"' in command and 'windows.sandbox="elevated"' not in command
+    assert 'web_search="disabled"' in command and 'mcp_servers={}' in command
+    for feature in ("apps", "plugins", "hooks", "memories", "multi_agent", "browser_use", "computer_use"):
+        assert command[command.index(feature) - 1] == "--disable"
+    filesystem = _filesystem(command)
+    assert filesystem[":root"] == "deny" and filesystem[":minimal"] == "read"
+    assert filesystem[":tmpdir"] == "write" and filesystem[":slash_tmp"] == "deny"
+    assert filesystem[(Path(plan["workspace"]) / ".build/temp").as_posix()] == "write"
+    for name in ("TEMP", "TMP"):
+        if pilot.os.environ.get(name):
+            assert filesystem[Path(pilot.os.environ[name]).resolve().as_posix()] == "deny"
+    assert filesystem[(Path(plan["source_root"]) / "src/Example").as_posix()]["Allowed.cs"] == "write"
+    assert filesystem[(Path(plan["workspace"]) / "materials").as_posix()] == "read"
+    assert filesystem[Path(config["qualification_ref"]["path"]).parent.as_posix()] == "deny"
+    assert 'permissions.benchmark.network.enabled=false' in command
+    assert any(value.startswith("shell_environment_policy.set=") and "NUGET_PACKAGES" in value for value in command)
+    monkeypatch.setenv("OPENAI_API_KEY", "CONTROLLED-DO-NOT-COPY")
+    monkeypatch.setenv("CODEX_API_KEY", "CONTROLLED-DO-NOT-COPY")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "CONTROLLED-DO-NOT-COPY")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://controlled.invalid")
+    calls = []
+
+    def execute(argv, **kwargs):
+        calls.append((argv, kwargs))
+        assert not {key.casefold() for key in kwargs["environment"]} & pilot._NATIVE_CONFLICT_ENV
+        assert kwargs["environment"]["CODEX_HOME"] == pilot.read_bound_json(config["native_reference_profile_ref"])["codex_home"]
+        assert kwargs["environment"]["TEMP"] == kwargs["environment"]["TMP"] == str(Path(plan["workspace"]) / ".build/temp")
+        assert kwargs["stdin_path"] == plan["prompt_path"]
+        output = kwargs["output"]
+        output.mkdir()
+        stdout = output / "stdout.bin"
+        stdout.write_text('\n'.join(json.dumps(event) for event in [
+            {"type": "thread.started", "thread_id": "controlled-ephemeral-native-session"},
+            {"type": "item.completed", "item": {"type": "file_change", "changes": []}},
+            {"type": "turn.completed", "usage": {"input_tokens": 100, "cached_input_tokens": 20, "output_tokens": 50}}]), encoding="utf-8")
+        (Path(plan["source_root"]) / "src/Example/Allowed.cs").write_text("public class Allowed { public int Value => 1; }", encoding="utf-8")
+        receipt = {"started": True, "timeout": False, "exit_code": 0, "stdout_ref": _ref(stdout)}
+        _save(output / "process.json", receipt)
+        return receipt
+
+    monkeypatch.setattr(pilot, "execute", execute)
+    result_ref = _cli(monkeypatch, capsys, "run", frozen_ref, pilot.NATIVE_ARM)["result_ref"]
+    result = pilot.read_bound_json(result_ref)
+    assert len(calls) == 1 and result["changed_source_paths"] == ["src/Example/Allowed.cs"]
+    assert result["forbidden_source_changes"] == []
+    assert result["task_agent_success"] is None and result["independent_business_result"] is None
+    assert result["experience_comparison"] is None and result["delivery_process"] is None
+    events = pilot.read_bound_json(result["native_events_ref"])
+    assert events["usage_totals"] == {"input_tokens": 100, "cached_input_tokens": 20, "output_tokens": 50}
+    assert events["provider_send_count"] is None
+    assert pilot.os.environ["OPENAI_API_KEY"] == "CONTROLLED-DO-NOT-COPY"
+    assert "CONTROLLED-DO-NOT-COPY" not in Path(frozen["plans"][pilot.NATIVE_ARM]["path"]).read_text(encoding="utf-8")
+    with pytest.raises(ValueError, match="ALREADY_STARTED"):
+        _cli(monkeypatch, capsys, "run", frozen_ref, pilot.NATIVE_ARM)
+    assert len(calls) == 1
+
+
+def test_native_reference_freeze_reuses_public_snapshot_preparation_and_protects_copies(tmp_path, monkeypatch, capsys, native_reference):
+    config = native_reference
+    source = Path(config["public_source_root"])
+    expected = source / "tests/Expectations/nested/example.verified.txt"
+    expected.parent.mkdir(parents=True)
+    expected.write_text("frozen public expectation", encoding="utf-8")
+    profile = pilot.read_bound_json(config["public_profile_ref"])
+    profile["diagnostics"] = {"kind": "verify_snapshots_v1", "expectation_root": "tests/Expectations",
+        "compiler_output_roots": ["Library/bin", "Library/obj", "tests/bin", "tests/obj"],
+        "received_markers": [".received.", ".DotNet8_0.received."]}
+    config["public_profile_ref"] = _save(tmp_path / "diagnostic-profile.json", profile)
+    frozen_ref = _cli(monkeypatch, capsys, "freeze", _save(tmp_path / "config.json", config))["pilot_ref"]
+    frozen = pilot.read_bound_json(frozen_ref)
+    plan = pilot.read_bound_json(frozen["plans"][pilot.NATIVE_ARM])
+    assert len(plan["native_expected_refs"]) == 1
+    copy_ref = plan["native_expected_refs"][0]
+    assert copy_ref["sha256"] == _ref(expected)["sha256"]
+    assert Path(copy_ref["path"]).read_text(encoding="utf-8") == "frozen public expectation"
+    assert _ref(expected)["sha256"] == copy_ref["sha256"]
+    assert pilot.source_snapshot(source) == plan["source_before"] == pilot.source_snapshot(plan["source_root"])
+    received = [Path(reference["path"]) for reference in plan["native_received_seed_refs"]]
+    assert {path.name for path in received} == {"example.received.txt", "example.DotNet8_0.received.txt"}
+    assert all(path.read_bytes() == b"" and path.parent.name == "nested" for path in received)
+    assert "known AccessDenied" in plan["native_public_check_environment"]["new_process_recreate_after_delete"]
+    assert all((Path(plan["source_root"]) / "src/Example" / output).is_dir() for output in ("bin", "obj", "TestResults"))
+    filesystem = _filesystem(plan["command"])
+    assert filesystem[(Path(plan["workspace"]) / ".build/diagnostics").as_posix()] == {
+        ".": "read", "nested": "read", "nested/example.received.txt": "write",
+        "nested/example.DotNet8_0.received.txt": "write"}
+    Path(copy_ref["path"]).write_text("tampered expected output", encoding="utf-8")
+    monkeypatch.setattr(pilot, "execute", lambda *_args, **_kwargs: pytest.fail("Changed snapshot cannot run"))
+    with pytest.raises(ValueError, match="BOUND_INPUT_CHANGED"):
+        _cli(monkeypatch, capsys, "run", frozen_ref, pilot.NATIVE_ARM)
+
+
+@pytest.mark.parametrize("failure", [None, "package", "nonpackage"])
+def test_native_reference_readable_dependency_directory_is_manifest_bound(tmp_path, native_reference, failure):
+    from src.mod_agent.domain.repository_probe_runner import offline_package_manifest
+
+    config = native_reference
+    profile = pilot.read_bound_json(config["public_profile_ref"])
+    feed = tmp_path / "public-packages"
+    feed.mkdir()
+    package = feed / "controlled.1.0.0.nupkg"
+    package.write_bytes(b"CONTROLLED PACKAGE; NO SDK EXECUTION")
+    profile["probe_runner"] = {"offline_packages": {"path": str(feed), "manifest_sha256": pilot.canonical_hash(offline_package_manifest(feed))}}
+    if failure == "package":
+        package.write_bytes(b"changed")
+    elif failure == "nonpackage":
+        (feed / "unregistered.txt").write_text("NONSECRET CANARY", encoding="utf-8")
+    args = (config["codex_executable_ref"]["path"], tmp_path / "workspace", tmp_path / "last.txt", [],
+        profile, pilot.read_bound_json(config["native_reference_profile_ref"]))
+    if failure:
+        with pytest.raises(ValueError, match="NATIVE_REFERENCE_"):
+            pilot.native_codex_command(*args)
+    else:
+        command = pilot.native_codex_command(*args)
+        assert _filesystem(command)[feed.as_posix()] == "read"
+
+
+def test_native_permission_literal_encoding_roundtrips_quote_and_control_paths(tmp_path):
+    denied = [tmp_path / "literal", tmp_path / "apostrophe'name", tmp_path / "control\nname"]
+    command = pilot.local_codex_command("codex.exe", tmp_path / "workspace", tmp_path / "last.txt", denied,
+        tmp_path / "sdk/dotnet.exe", ["src/Example/Allowed.cs"], native=True)
+    filesystem = _filesystem(command)
+    for path in denied:
+        assert filesystem[path.resolve().as_posix()] == "deny"
+
+
+@pytest.mark.parametrize("failure", ["binary", "availability", "profile", "public_material", "permissions", "permission_archive", "command"])
+def test_native_reference_changed_input_never_starts(tmp_path, monkeypatch, capsys, native_reference, failure):
+    config = native_reference
+    frozen_ref = _cli(monkeypatch, capsys, "freeze", _save(tmp_path / "config.json", config))["pilot_ref"]
+    frozen = pilot.read_bound_json(frozen_ref)
+    plan = pilot.read_bound_json(frozen["plans"][pilot.NATIVE_ARM])
+    if failure == "command":
+        plan["command"] += ["--dangerously-bypass-approvals-and-sandbox"]
+        frozen["plans"][pilot.NATIVE_ARM] = _save(tmp_path / "changed-plan.json", plan)
+        frozen_ref = _save(tmp_path / "changed-pilot.json", frozen)
+    else:
+        reference = (plan["public_material_refs"][0] if failure == "public_material" else
+            plan["native_permission_profile_archive_ref"] if failure == "permission_archive" else
+            plan["native_permission_profile_ref"] if failure == "permissions" else config[{
+            "binary": "codex_executable_ref", "availability": "codex_model_availability_ref", "profile": "native_reference_profile_ref"}[failure]])
+        Path(reference["path"]).write_text("changed", encoding="utf-8")
+    monkeypatch.setattr(pilot, "execute", lambda *_args, **_kwargs: pytest.fail("Changed input cannot execute"))
+    with pytest.raises(ValueError):
+        _cli(monkeypatch, capsys, "run", frozen_ref, pilot.NATIVE_ARM)
+    assert not (Path(plan["root"]) / "started.json").exists()
+
+
+@pytest.mark.parametrize("failure", ["mode", "model", "effort", "authentication", "home", "metadata", "api_settings", "credential_environment"])
+def test_native_reference_invalid_route_rejects_before_copy(tmp_path, monkeypatch, native_reference, failure):
+    config = native_reference
+    profile = pilot.read_bound_json(config["native_reference_profile_ref"])
+    if failure == "mode":
+        config["mode"] = "matched_product_pair"
+    elif failure in {"model", "effort", "authentication", "home"}:
+        profile[{"model": "model", "effort": "reasoning_effort", "authentication": "authentication", "home": "codex_home"}[failure]] = (
+            str(tmp_path / "other-auth") if failure == "home" else "unexpected")
+        config["native_reference_profile_ref"] = _save(tmp_path / "wrong-profile.json", profile)
+    elif failure == "metadata":
+        observed = pilot.read_bound_json(config["codex_model_availability_ref"])
+        observed["models"][0]["supportedReasoningEfforts"] = []
+        config["codex_model_availability_ref"] = _save(tmp_path / "wrong-availability.json", observed)
+    elif failure == "api_settings":
+        config["settings_ref"] = {"path": "not-read", "sha256": "not-read"}
+    else:
+        config["environment"]["oPeNaI_aPi_KeY"] = "CONTROLLED-NEVER-FROZEN"
+    monkeypatch.setattr(pilot, "validate_frozen_evaluator", lambda _value: pytest.fail("Reject before preparation"))
+    with pytest.raises(ValueError):
+        pilot.freeze(_save(tmp_path / "invalid-native-config.json", config))
+    assert not Path(config["root"]).exists()
 
 
 def test_equivalent_absolute_reference_spelling_preserves_content_binding(tmp_path):
@@ -205,6 +455,7 @@ def test_local_command_preserves_native_provider_and_private_boundaries(tmp_path
     assert command[command.index("--model") + 1] == pilot.MODEL
     assert command[command.index("--local-provider") + 1] == "ollama"
     assert "--oss" in command and "unbounded_connection_retries" in command
+    assert 'windows.sandbox="elevated"' in command and 'windows.sandbox="mxc"' not in command
     assert not any("model_reasoning_effort" in part for part in command)
     filesystem = next(part for part in command if part.startswith("permissions.benchmark.filesystem="))
     assert json.dumps(denied.resolve().as_posix()) + '="deny"' in filesystem
@@ -247,6 +498,14 @@ def test_frozen_qualification_uses_exact_original_adapter(tmp_path, monkeypatch,
         "    assert value['adoption_adapter_ref']['path'] == str(Path(__file__).resolve())\n"
         "    assert value['qualified']\n", encoding="utf-8")
     calls = []
+    timeouts = []
+    original_run = pilot.subprocess.run
+
+    def run(*args, **kwargs):
+        timeouts.append(kwargs["timeout"])
+        return original_run(*args, **kwargs)
+
+    monkeypatch.setattr(pilot.subprocess, "run", run)
 
     class Frozen:
         def __init__(self, reference):
@@ -273,6 +532,7 @@ def test_frozen_qualification_uses_exact_original_adapter(tmp_path, monkeypatch,
         pilot.validate_frozen_evaluator(qualification)
         assert calls == ["verified", "verified"]
     assert not list(root.rglob("*.pyc"))
+    assert timeouts == ([] if failure == "adapter_path" else [300])
 
 
 def test_delivery_without_native_result_does_not_apply_or_build(tmp_path, monkeypatch):

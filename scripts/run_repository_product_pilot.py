@@ -6,6 +6,7 @@ No solver actions, repair hints or acceptance answers are selected here.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -47,13 +48,19 @@ REPO = Path(__file__).resolve().parents[1]
 MODEL = "qwen3-coder:30b"
 DIGEST = "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca"
 ORDER = ("Codex_local", "RepoForge_B")
+NATIVE_ARM = "Codex_reference"
+_NATIVE_CONFLICT_ENV = frozenset({
+    "openai_api_key", "codex_api_key", "dashscope_api_key", "openai_base_url", "dashscope_base_url",
+    "openai_api_base", "dashscope_api_base", "repoforge_openai_base_url",
+})
 
 
 def source_snapshot(root):
     return {row["path"]: row["sha256"] for row in _snapshot(root)}
 
 
-def local_codex_command(executable, workspace, last_message, deny_roots, dotnet, allowed_edit_paths):
+def local_codex_command(executable, workspace, last_message, deny_roots, dotnet, allowed_edit_paths, *,
+        native=False, dependency_root=None, received_markers=()):
     command = codex_argv(executable, workspace, last_message, deny_roots)
     command[command.index("--model") + 1] = MODEL
     index = command.index('model_reasoning_effort="medium"')
@@ -62,6 +69,19 @@ def local_codex_command(executable, workspace, last_message, deny_roots, dotnet,
     filesystem = {":root": "read", ":workspace_roots": "read", "C:/tmp": "deny",
                   Path(workspace).resolve().as_posix(): "write",
                   Path(dotnet).resolve().parent.as_posix(): "read"}
+    if native:
+        # 为什么要有它：原生参考只读取本任务公开材料与运行依赖，不能沿用旧参考臂的系统根目录可读策略。
+        filesystem.update({":root": "deny", ":minimal": "read", ":tmpdir": "write", ":slash_tmp": "deny",
+            Path(workspace).resolve().as_posix(): "read"})
+        # 为什么要有它：MXC将:tmpdir解析为子进程TEMP；该进程和shell均绑定任务temp，原宿主temp仍明确拒绝。
+        for name in ("TEMP", "TMP"):
+            if os.environ.get(name):
+                filesystem[Path(os.environ[name]).resolve().as_posix()] = "deny"
+        for output in (".build", ".checks"):
+            filesystem[(Path(workspace) / output).resolve().as_posix()] = "write"
+        filesystem[(Path(workspace) / ".build/temp").resolve().as_posix()] = "write"
+        if dependency_root is not None:
+            filesystem[Path(dependency_root).resolve().as_posix()] = "read"
     filesystem.update({Path(path).resolve().as_posix(): "deny" for path in deny_roots})
     source = Path(workspace) / "source"
     filesystem[source.resolve().as_posix()] = "read"
@@ -73,26 +93,170 @@ def local_codex_command(executable, workspace, last_message, deny_roots, dotnet,
         group = source.joinpath(*parts[:2]).resolve().as_posix()
         filesystem.setdefault(group, {".": "read"})[Path(*parts[2:]).as_posix()] = "write"
     filesystem[(Path(workspace) / "materials").resolve().as_posix()] = "read"
+    if native:
+        # 为什么要有它：预期文件只读仍可被可写父目录整体搬走；诊断树默认只读，仅精确received输出可写。
+        protected = {".": "read"}
+        diagnostic_root = Path(workspace) / ".build/diagnostics"
+        for expected in diagnostic_root.rglob("*.verified.*"):
+            relative = expected.relative_to(diagnostic_root)
+            for parent in relative.parents:
+                if str(parent) != ".":
+                    protected[parent.as_posix()] = "read"
+            for marker in received_markers:
+                protected[relative.with_name(expected.name.replace(".verified.", marker)).as_posix()] = "write"
+        filesystem[diagnostic_root.resolve().as_posix()] = protected
     # Test files are read-only; generated build outputs remain writable.
     # 为什么要有它：公开测试允许执行，不允许改写测试答案；编译输出不是业务源码授权。
     for relative in ("test", "src"):
         for project in (source / relative).glob("*"):
             if project.is_dir():
                 for output in ("bin", "obj", "TestResults"):
-                    filesystem[(project / output).resolve().as_posix()] = "write"
+                    if native:
+                        filesystem.setdefault(project.resolve().as_posix(), {".": "read"})[output] = "write"
+                    else:
+                        filesystem[(project / output).resolve().as_posix()] = "write"
     for project in source.rglob("*.csproj"):
-        filesystem[project.resolve().as_posix()] = "read"
+        if native:
+            # 为什么要有它：项目文件继承source只读；仅覆盖冲突的显式编辑项，避免重复绝对路径突破Windows命令长度。
+            if project.relative_to(source).as_posix() in allowed_edit_paths:
+                filesystem.setdefault(project.parent.resolve().as_posix(), {".": "read"})[project.name] = "read"
+        else:
+            filesystem[project.resolve().as_posix()] = "read"
+    def string(value):
+        if native and "'" not in value and all(ord(character) >= 32 and ord(character) != 127 for character in value):
+            return "'" + value + "'"
+        return json.dumps(value)
     def toml(value):
         if isinstance(value, dict):
-            return "{" + ",".join(json.dumps(k) + "=" + toml(v) for k, v in value.items()) + "}"
-        return json.dumps(value)
+            return "{" + ",".join(string(k) + "=" + toml(v) for k, v in value.items()) + "}"
+        return string(value)
     table = toml(filesystem)
     index = next(i for i, value in enumerate(command) if value.startswith("permissions.benchmark.filesystem="))
     command[index] = "permissions.benchmark.filesystem=" + table
     command[-1:-1] = ["--oss", "--local-provider", "ollama", "--disable", "unbounded_connection_retries"]
-    if len(subprocess.list2cmdline(command)) >= 32767:
+    if not native and len(subprocess.list2cmdline(command)) >= 32767:
         raise ValueError("EXACT_PERMISSION_COMMAND_EXCEEDS_WINDOWS_LIMIT")
     return command
+
+
+def native_reference_profile(config):
+    """Bind the already observed ChatGPT route without reading authentication data.
+
+    为什么要有它：原生参考是独立产品配置，不能把账号元数据当真实生成，也不能借此改写旧配对。
+    """
+    if config.get("mode") != "native_reference":
+        if "native_reference_profile_ref" in config or "codex_model_availability_ref" in config:
+            raise ValueError("NATIVE_PROFILE_REQUIRES_NATIVE_REFERENCE_MODE")
+        return None
+    if any(key in config for key in ("external_profile_ref", "settings_ref", "experience_config_ref", "task_agent_semantic_state")):
+        raise ValueError("NATIVE_REFERENCE_PRODUCT_CONFIGURATION_CONFLICT")
+    if any(str(key).casefold() in _NATIVE_CONFLICT_ENV for key in config.get("environment", {})):
+        raise ValueError("PILOT_CREDENTIAL_VALUE_MUST_NOT_BE_FROZEN")
+    profile = read_bound_json(config["native_reference_profile_ref"])
+    if (set(profile) != {"schema_version", "model", "reasoning_effort", "authentication", "codex_home"}
+            or profile.get("schema_version") != "codex_native_reference_profile_v1"
+            or profile.get("model") != "gpt-6-astra" or profile.get("reasoning_effort") != "high"
+            or profile.get("authentication") != "chatgpt"
+            or not isinstance(profile.get("codex_home"), str) or not Path(profile["codex_home"]).is_absolute()):
+        raise ValueError("NATIVE_REFERENCE_PROFILE_INVALID")
+    current_home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex").resolve()
+    if Path(profile["codex_home"]).resolve() != current_home:
+        raise ValueError("NATIVE_REFERENCE_MUST_REUSE_CURRENT_CODEX_HOME")
+    if any(str(key).casefold() == "codex_home" for key in config.get("environment", {})):
+        raise ValueError("NATIVE_REFERENCE_HOME_OVERRIDE_DENIED")
+    availability = read_bound_json(config["codex_model_availability_ref"])
+    rows = [row for row in availability.get("models", []) if row.get("model") == profile["model"]]
+    if (availability.get("status") != "listed" or availability.get("binary_ref") != config["codex_executable_ref"]
+            or availability.get("model_generations") != 0 or availability.get("threads_created") != 0
+            or len(rows) != 1 or rows[0].get("hidden") is not False
+            or profile["reasoning_effort"] not in {row.get("reasoningEffort") for row in rows[0].get("supportedReasoningEfforts", [])}):
+        raise ValueError("NATIVE_REFERENCE_MODEL_AVAILABILITY_INVALID")
+    return profile
+
+
+def native_reference_environment(environment, profile, *, workspace):
+    # 为什么要有它：API变量只从本次子进程副本删除，既有ChatGPT凭据位置与用户全局设置保持不变。
+    result = {key: value for key, value in environment.items() if str(key).casefold() not in _NATIVE_CONFLICT_ENV}
+    result = {key: value for key, value in result.items() if str(key).casefold() not in {"codex_home", "temp", "tmp"}}
+    result["CODEX_HOME"] = profile["codex_home"]
+    result["TEMP"] = result["TMP"] = str(Path(workspace).resolve() / ".build/temp")
+    return result
+
+
+def native_denied_roots(config, profile, root, qualification):
+    return [REPO, Path.home() / ".codex", Path(profile["codex_home"]), Path.home() / ".ssh", Path.home() / ".aws", root,
+        Path(config["qualification_ref"]["path"]).parent, Path(qualification["evaluator_ref"]["path"]).parent]
+
+
+def native_codex_command(executable, workspace, last_message, deny_roots, repository_profile, native_profile, *,
+        enforce_command_limit=True):
+    dependency_root = repository_profile.get("probe_runner", {}).get("offline_packages")
+    if dependency_root is not None:
+        from src.mod_agent.domain.repository_probe_runner import offline_package_manifest
+        # 为什么要有它：只读包目录也是模型可见输入，须复用已登记manifest并拒绝夹带目录外文件或非包材料。
+        package_root = Path(dependency_root["path"])
+        package_rows = offline_package_manifest(package_root)
+        if canonical_hash(package_rows) != dependency_root["manifest_sha256"]:
+            raise ValueError("NATIVE_REFERENCE_DEPENDENCIES_CHANGED")
+        for path in package_root.rglob("*"):
+            _no_links(path)
+            if path.is_file() and path.suffix != ".nupkg":
+                raise ValueError("NATIVE_REFERENCE_NON_PACKAGE_MATERIAL_DENIED")
+    command = local_codex_command(executable, workspace, last_message, deny_roots,
+        repository_profile["dotnet_ref"]["path"], repository_profile["allowed_edit_paths"], native=True,
+        dependency_root=dependency_root["path"] if dependency_root is not None else None,
+        received_markers=repository_profile.get("diagnostics", {}).get("received_markers", ()))
+    command[command.index("--model") + 1] = native_profile["model"]
+    command[command.index('windows.sandbox="elevated"')] = 'windows.sandbox="mxc"'
+    command.remove("--oss")
+    index = command.index("--local-provider")
+    del command[index:index + 2]
+    command[-1:-1] = ["--ephemeral", "-c", 'model_provider="openai"',
+        "-c", 'forced_login_method="chatgpt"', "-c", 'model_reasoning_effort="high"']
+    # 为什么要有它：shell只继承核心系统变量；构建缓存和诊断输出须显式指向本任务可写目录，不能回写用户缓存。
+    build = Path(workspace) / ".build"
+    shell_environment = {"DOTNET_ROOT": str(Path(repository_profile["dotnet_ref"]["path"]).parent),
+        "DOTNET_CLI_HOME": str(build / "dotnet-home"), "DOTNET_NOLOGO": "1",
+        "DOTNET_CLI_TELEMETRY_OPTOUT": "1", "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+        "NUGET_PACKAGES": str(build / "packages"), "NUGET_HTTP_CACHE_PATH": str(build / "http-cache"),
+        "NUGET_SCRATCH": str(build / "nuget-scratch"), "NUGET_PLUGINS_CACHE_PATH": str(build / "plugins-cache"),
+        "TEMP": str(build / "temp"), "TMP": str(build / "temp"), "DOTNET_CLI_UI_LANGUAGE": "en-US",
+        "REPOFORGE_DIAGNOSTIC_ROOT": str(build / "diagnostics"),
+        "REPOFORGE_EXPECTATION_ROOT": str(Path(workspace) / "source" / repository_profile.get("diagnostics", {}).get("expectation_root", "test"))}
+    table = "{" + ",".join(json.dumps(key) + "=" + json.dumps(value) for key, value in shell_environment.items()) + "}"
+    command[-1:-1] = ["-c", "shell_environment_policy.set=" + table]
+    if enforce_command_limit and len(subprocess.list2cmdline(command)) >= 32767:
+        raise ValueError("EXACT_PERMISSION_COMMAND_EXCEEDS_WINDOWS_LIMIT")
+    return command
+
+
+def native_permission_profile(command, native_profile, *, create=False, reference=None):
+    """Move the same permission table into the supported explicitly selected named profile.
+
+    为什么要有它：Windows命令长度不能迫使放宽权限；独立命名文件只保存本任务权限，不改默认配置或登录凭据。
+    """
+    index = next(i for i, value in enumerate(command) if value.startswith("permissions.benchmark.filesystem="))
+    document = command[index] + "\n"
+    name = "repoforge-native-" + hashlib.sha256(document.encode("utf-8")).hexdigest()[:20]
+    path = Path(native_profile["codex_home"]).resolve() / (name + ".config.toml")
+    if create:
+        _no_links(path.parent)
+        with path.open("x", encoding="utf-8", newline="\n") as stream:
+            stream.write(document)
+        reference = _ref(path)
+    if not isinstance(reference, dict) or Path(reference.get("path", "")).resolve() != path:
+        raise ValueError("NATIVE_REFERENCE_PERMISSION_PROFILE_CHANGED")
+    _verify(reference)
+    if path.read_text(encoding="utf-8") != document:
+        raise ValueError("NATIVE_REFERENCE_PERMISSION_PROFILE_CHANGED")
+    result = list(command)
+    if result[index - 1] != "-c":
+        raise ValueError("NATIVE_REFERENCE_PERMISSION_ARGUMENT_INVALID")
+    del result[index - 1:index + 1]
+    result[-1:-1] = ["--profile", name]
+    if len(subprocess.list2cmdline(result)) >= 32767:
+        raise ValueError("EXACT_PERMISSION_COMMAND_EXCEEDS_WINDOWS_LIMIT")
+    return result, reference
 
 
 def external_pilot_profile(config):
@@ -130,6 +294,7 @@ def external_pilot_identity(profile, expected=None):
 
 def freeze(configuration_ref):
     config = read_bound_json(configuration_ref)
+    native = native_reference_profile(config)
     external = external_pilot_profile(config)
     external_settings = None
     if external is not None:
@@ -140,7 +305,7 @@ def freeze(configuration_ref):
     mode = config.get("mode", "matched_product_pair")
     if mode == "strategy_pair":
         return freeze_strategy_pair(configuration_ref, config)
-    if mode not in {"matched_product_pair", "absolute_real_B"}:
+    if mode not in {"matched_product_pair", "absolute_real_B", "native_reference"}:
         raise ValueError("EXPLICIT_PILOT_MODE_REQUIRED")
     semantic_state = config.get("task_agent_semantic_state", "enabled")
     if type(semantic_state) is not str or semantic_state not in {"enabled", "disabled"}:
@@ -166,7 +331,11 @@ def freeze(configuration_ref):
         raise ValueError("FRESH_SEPARATE_PILOT_ROOT_REQUIRED")
     profile = CSharpRepositoryProfile(config["public_profile_ref"])
     profile.bind(public)
-    if external is None:
+    if native is not None:
+        identity = {"provider": "codex_chatgpt", "model": native["model"], "reasoning_effort": native["reasoning_effort"],
+            "model_digest": None, "availability_ref": config["codex_model_availability_ref"],
+            "binary_ref": config["codex_executable_ref"], "scope": "listed availability; generation and model weights not independently verified"}
+    elif external is None:
         identity = read_ollama_model_identity("http://127.0.0.1:11434", MODEL)
         if identity["digest"] != DIGEST:
             raise ValueError("MODEL_CHANGED")
@@ -181,7 +350,7 @@ def freeze(configuration_ref):
     common_ref = _ref(common_path)
     original = source_snapshot(public)
     plans = {}
-    arms = ORDER if mode == "matched_product_pair" else (ORDER[1],)
+    arms = (NATIVE_ARM,) if native is not None else ORDER if mode == "matched_product_pair" else (ORDER[1],)
     for arm in arms:
         arm_root = root / arm
         workspace = arm_root / "workspace"
@@ -201,7 +370,60 @@ def freeze(configuration_ref):
                 "environment": config["environment"], "evaluator_ref": qualification["evaluator_ref"]}
         if external is not None:
             base["external_profile_ref"] = config["external_profile_ref"]
-        if arm == "Codex_local":
+        if native is not None:
+            deny = native_denied_roots(config, native, root, qualification)
+            for output in (".build/temp", ".checks"):
+                (workspace / output).mkdir(parents=True)
+            # 为什么要有它：MXC只读父目录下不能首次创建授权子路径；先建立已有权限中的构建目录，不修改源码文件。
+            for relative in ("test", "src"):
+                for project in (source / relative).glob("*"):
+                    if project.is_dir():
+                        for output in ("bin", "obj", "TestResults"):
+                            (project / output).mkdir(exist_ok=True)
+            if "diagnostics" in profile.data:
+                from src.mod_agent.domain.repository_diagnostics import prepare
+                preparation_ref, _ = prepare(source, workspace / ".build", profile.data["diagnostics"], {
+                    "source_root": str(source), "profile_ref": profile.reference, "source_inputs": _snapshot(source)})
+                preparation = read_bound_json(preparation_ref)
+                received_refs = []
+                for relative in preparation["allowed_received"]:
+                    path = workspace / ".build/diagnostics" / relative
+                    with path.open("xb"):
+                        pass
+                    received_refs.append(_ref(path))
+                base.update(native_diagnostic_preparation_ref=preparation_ref,
+                    native_expected_refs=[pair["copy_ref"] for pair in preparation["expected_copies"].values()],
+                    native_received_seed_refs=received_refs,
+                    native_public_check_environment={
+                        "received_initial_state": "precreated empty files at exact registered marker paths",
+                        "initial_process_received_write_delete_recreate": "verified by zero-model MXC canary",
+                        "new_process_recreate_after_delete": "known AccessDenied in zero-model MXC canary",
+                        "classification": "repeated public-check output refusal is an environment limitation, not business failure",
+                        "independent_acceptance": "unchanged fixed judge; no acceptance relaxation",
+                        "why": "为什么要有它：先兑现真实候选实验，已证明的原生输出限制单列，不能伪称完整反馈通路或误归模型业务能力。"})
+            else:
+                (workspace / ".build/diagnostics").mkdir()
+            public_profile_path = materials / "public-profile.json"
+            shutil.copyfile(profile.reference["path"], public_profile_path)
+            command = native_codex_command(config["codex_executable_ref"]["path"], workspace,
+                arm_root / "last-message.txt", deny, profile.data, native, enforce_command_limit=False)
+            command, permission_ref = native_permission_profile(command, native, create=True)
+            permission_archive = arm_root / "native-permission-profile.config.toml"
+            with permission_archive.open("xb") as stream:
+                stream.write(Path(permission_ref["path"]).read_bytes())
+            archive_ref = _ref(permission_archive)
+            if archive_ref["sha256"] != permission_ref["sha256"]:
+                raise ValueError("NATIVE_REFERENCE_PERMISSION_ARCHIVE_CHANGED")
+            base.update(command=command, native_permission_profile_ref=permission_ref,
+                native_permission_profile_archive_ref=archive_ref,
+                native_permission_profile_cleanup="after independent result, remove only the exact hash-matched named profile; retain task archive",
+                prompt_path=str(common_path),
+                native_reference_profile_ref=config["native_reference_profile_ref"], native_denied_roots=[str(path) for path in deny],
+                product_kind="native_codex_reference", public_material_refs=[_ref(materials / "request.txt"), _ref(public_profile_path)],
+                native_runtime_refs=[_ref(REPO / "scripts/run_benchmark_arm.py"), profile.data["dotnet_ref"]],
+                configuration_difference="Native Codex with existing ChatGPT login, gpt-6-astra/high; ephemeral session; "
+                    "native context/output policy; exact provider wire and send count not instrumented; not RepoForge TaskAgent or B/B+")
+        elif arm == "Codex_local":
             deny = [REPO, Path.home() / ".codex", Path.home() / ".ssh", Path.home() / ".aws"]
             base["command"] = local_codex_command(config["codex_executable_ref"]["path"], workspace,
                 arm_root / "last-message.txt", deny, profile.data["dotnet_ref"]["path"], profile.data["allowed_edit_paths"])
@@ -272,7 +494,8 @@ def freeze(configuration_ref):
         plans[arm] = _save(arm_root / "frozen-plan.json", base)
     result = _save(root / "frozen-pilot.json", {"configuration_ref": configuration_ref, "common_request_ref": common_ref,
         "order": list(arms), "plans": plans, "model_calls": 0, "mode": mode,
-        "scope": "whole product configurations" if mode == "matched_product_pair" else "absolute real B result; product comparison not covered"})
+        "scope": "native Codex reference; not RepoForge TaskAgent or B/B+" if native is not None else
+            "whole product configurations" if mode == "matched_product_pair" else "absolute real B result; product comparison not covered"})
     print(json.dumps({"pilot_ref": result, "arms_started": 0}))
 
 
@@ -309,12 +532,16 @@ def validate_frozen_evaluator(qualification):
         "from src.mod_agent.evaluation.strategy_repository_evaluator import _configuration; "
         "_configuration(json.loads(sys.argv[2]))"
     )
+    # 为什么要有它：完整只读身份核验可能超过60秒；放宽到300秒仍保留原hash检查与执行失败，不替代或跳过核验。
     subprocess.run([sys.executable, "-I", "-B", "-c", code, str(frozen.root), json.dumps(reference)],
-        cwd=frozen.root, check=True, timeout=60, capture_output=True)
+        cwd=frozen.root, check=True, timeout=300, capture_output=True)
     frozen.verify_files()
 
 
 def configuration_keys(config):
+    if config.get("mode") == "native_reference":
+        return ("intent_ref", "public_problem_ref", "public_contract_ref", "public_profile_ref", "qualification_ref",
+            "codex_executable_ref", "codex_model_availability_ref", "native_reference_profile_ref")
     if config.get("mode") == "strategy_pair":
         return ("intent_ref", "prepared_ref", "public_profile_ref", "qualification_ref")
     keys = ("intent_ref", "public_problem_ref", "public_contract_ref", "public_profile_ref", "qualification_ref", "settings_ref")
@@ -563,6 +790,7 @@ def run(pilot_ref, arm):
     config = read_bound_json(plan["configuration_ref"])
     for key in configuration_keys(config):
         _verify(config[key])
+    native = native_reference_profile(config)
     root = Path(plan["root"])
     if (root / "started.json").exists() or source_snapshot(plan["source_root"]) != plan["source_before"]:
         raise ValueError("ALREADY_STARTED_OR_SOURCE_CHANGED")
@@ -576,7 +804,33 @@ def run(pilot_ref, arm):
         for reference in plan["bound_inputs"]:
             _verify(reference)
     external = external_pilot_profile(config)
-    if external is not None:
+    if native is not None:
+        # 为什么要有它：实际派发须复核冻结的权限、二进制及公开输入；元数据验证不派发模型，也不从环境继承另一提供方。
+        if pilot.get("mode") != "native_reference" or arm != NATIVE_ARM or plan.get("native_reference_profile_ref") != config["native_reference_profile_ref"]:
+            raise ValueError("NATIVE_REFERENCE_PLAN_CHANGED")
+        profile = CSharpRepositoryProfile(config["public_profile_ref"])
+        profile.bind(plan["source_root"])
+        qualification = read_bound_json(config["qualification_ref"])
+        deny = native_denied_roots(config, native, Path(config["root"]).resolve(), qualification)
+        expected_command = native_codex_command(config["codex_executable_ref"]["path"], plan["workspace"],
+            root / "last-message.txt", deny, profile.data, native, enforce_command_limit=False)
+        expected_command, _ = native_permission_profile(expected_command, native, reference=plan.get("native_permission_profile_ref"))
+        _verify(plan["native_permission_profile_archive_ref"])
+        if plan["native_permission_profile_archive_ref"]["sha256"] != plan["native_permission_profile_ref"]["sha256"]:
+            raise ValueError("NATIVE_REFERENCE_PERMISSION_ARCHIVE_CHANGED")
+        if (plan["command"] != expected_command or plan["allowed_edit_paths"] != profile.data["allowed_edit_paths"]
+                or plan.get("product_kind") != "native_codex_reference" or plan["environment"] != config["environment"]
+                or plan.get("native_runtime_refs") != [_ref(REPO / "scripts/run_benchmark_arm.py"), profile.data["dotnet_ref"]]):
+            raise ValueError("NATIVE_REFERENCE_PLAN_CHANGED")
+        for reference in [plan["common_request_ref"], *plan["public_material_refs"], *plan["native_runtime_refs"]]:
+            _verify(reference)
+        if "native_diagnostic_preparation_ref" in plan:
+            _verify(plan["native_diagnostic_preparation_ref"])
+            for reference in [*plan["native_expected_refs"], *plan.get("native_received_seed_refs", [])]:
+                _verify(reference)
+        if Path(plan["prompt_path"]).resolve() != Path(plan["common_request_ref"]["path"]).resolve():
+            raise ValueError("NATIVE_REFERENCE_PROMPT_CHANGED")
+    elif external is not None:
         if plan.get("external_profile_ref") != config["external_profile_ref"]:
             raise ValueError("PILOT_EXTERNAL_PROFILE_BINDING_CHANGED")
         external_pilot_identity(external, plan["model_identity"])
@@ -606,6 +860,8 @@ def run(pilot_ref, arm):
         json.dump(started, stream, ensure_ascii=False, indent=2)
     environment = {**os.environ, **plan["environment"], "PYTHONUTF8": "1", "DOTNET_CLI_UI_LANGUAGE": "en-US",
                    "REPOFORGE_TASK_DEADLINE_UTC": str(deadline_utc)}
+    if native is not None:
+        environment = native_reference_environment(environment, native, workspace=plan["workspace"])
     process = execute(plan["command"], cwd=plan["workspace"], stdin_path=plan.get("prompt_path"),
         output=root / "execution", deadline=deadline, environment=environment)
     delivery_process = None
@@ -622,8 +878,19 @@ def run(pilot_ref, arm):
         "source_after": after, "task_wall_seconds": time.monotonic() - clock,
         "independent_business_result": None, "correct_delivery": None,
         "scope": "execution facts only; native claims do not prove independent acceptance or same-version delivery"}
-    if arm == ORDER[0] and process.get("started"):
+    if arm in {ORDER[0], NATIVE_ARM} and process.get("started"):
         facts["native_events_ref"] = _save(root / "native-events.json", codex_events(process["stdout_ref"]["path"]))
+    if native is not None:
+        facts.update(product_kind="native_codex_reference", task_agent_success=None, experience_comparison=None,
+            credential_values_recorded=False, authentication="existing ChatGPT login",
+            provider_send_count=None, scope="native Codex reference execution; independent judge remains required; not RepoForge TaskAgent or B/B+")
+        changed_expected = []
+        for reference in plan.get("native_expected_refs", []):
+            try:
+                _verify(reference)
+            except (ValueError, OSError):
+                changed_expected.append(reference)
+        facts["native_expected_copy_changes"] = changed_expected
     # 为什么要有它：先保存已发生的进程与源码事实；经历封存失败不能吞掉本次执行结果。
     facts["execution_facts_ref"] = _save(root / "execution-facts.json", facts)
     facts["process_episode"] = seal_stopped_process(plan, process_ref, plan_ref=plan_ref)
@@ -635,7 +902,7 @@ def main():
     parser.add_argument("mode", choices=("freeze", "run", "deliver"))
     parser.add_argument("--reference", required=True)
     parser.add_argument("--sha256", required=True)
-    parser.add_argument("--arm", choices=(*ORDER, "B", "B+"))
+    parser.add_argument("--arm", choices=(*ORDER, NATIVE_ARM, "B", "B+"))
     args = parser.parse_args()
     reference = {"path": args.reference, "sha256": args.sha256}
     if args.mode == "freeze":
