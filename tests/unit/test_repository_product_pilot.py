@@ -35,6 +35,7 @@ def test_native_reference_requires_own_profile_and_no_api_settings():
     assert "native_reference_profile_ref" in keys
     assert "codex_model_availability_ref" in keys
     assert "codex_executable_ref" in keys
+    assert "native_user_config_ref" in keys and "native_shell_ref" in keys
     assert "settings_ref" not in keys
 
 
@@ -46,6 +47,13 @@ def native_reference(tmp_path, monkeypatch):
     fake_home = tmp_path / "controlled-codex-home"
     fake_home.mkdir()
     monkeypatch.setenv("CODEX_HOME", str(fake_home))
+    user_config = fake_home / "config.toml"
+    user_config.write_text('model_context_window=1000000\nmodel_auto_compact_token_limit=900000\n'
+        'personality="pragmatic"\nservice_tier="priority"\nnotify=["CONTROLLED_PRIVATE_NOTIFY_ARGUMENT"]\n'
+        '[mcp_servers.openaiDeveloperDocs]\nenabled=true\n[mcp_servers.node_repl]\nenabled=true\n', encoding="utf-8")
+    shell = tmp_path / "native-powershell/pwsh.exe"
+    shell.parent.mkdir()
+    shell.write_bytes(b"CONTROLLED SHELL IDENTITY; NEVER EXECUTED")
     allowed = source / "src/Example/Allowed.cs"
     allowed.parent.mkdir(parents=True)
     allowed.write_text("public class Allowed {}", encoding="utf-8")
@@ -65,6 +73,7 @@ def native_reference(tmp_path, monkeypatch):
         "qualification_ref": _save(tmp_path / "qualification.json", {"qualified": True,
             "evaluator_ref": _save(tmp_path / "private/evaluator.json", {"controlled": True})}),
         "codex_executable_ref": _ref(executable), "environment": {},
+        "native_user_config_ref": _ref(user_config), "native_shell_ref": _ref(shell),
         "native_reference_profile_ref": _save(tmp_path / "native-profile.json", profile),
         "codex_model_availability_ref": _save(tmp_path / "availability.json", {
             "status": "listed", "binary_ref": _ref(executable), "model_generations": 0, "threads_created": 0,
@@ -90,7 +99,14 @@ def test_native_reference_cli_freeze_run_records_native_facts_and_child_only_aut
     command = plan["command"]
     assert command[command.index("--model") + 1] == "gpt-6-astra"
     assert 'model_reasoning_effort="high"' in command and 'forced_login_method="chatgpt"' in command
-    assert "--ephemeral" in command and "--ignore-user-config" in command and "--ignore-rules" in command
+    assert "--ephemeral" in command and "--ignore-user-config" not in command and "--ignore-rules" in command
+    assert "mcp_servers.openaiDeveloperDocs.enabled=false" in command and "mcp_servers.node_repl.enabled=false" in command
+    assert "notify=[]" in command
+    assert plan["native_user_configuration"]["retained_settings"] == {
+        "model_context_window": 1000000, "model_auto_compact_token_limit": 900000,
+        "personality": "pragmatic", "service_tier": "priority"}
+    assert plan["native_user_configuration"]["user_config_ref"] == config["native_user_config_ref"]
+    assert "CONTROLLED_PRIVATE_NOTIFY_ARGUMENT" not in json.dumps(plan)
     assert command[command.index("--profile") + 1].startswith("repoforge-native-")
     assert pilot.read_bound_json(config["native_reference_profile_ref"])["codex_home"] == str(Path(plan["native_permission_profile_ref"]["path"]).parent)
     assert Path(plan["native_permission_profile_ref"]["path"]).read_bytes() == Path(plan["native_permission_profile_archive_ref"]["path"]).read_bytes()
@@ -110,6 +126,8 @@ def test_native_reference_cli_freeze_run_records_native_facts_and_child_only_aut
     assert filesystem[(Path(plan["source_root"]) / "src/Example").as_posix()]["Allowed.cs"] == "write"
     assert filesystem[(Path(plan["workspace"]) / "materials").as_posix()] == "read"
     assert filesystem[Path(config["qualification_ref"]["path"]).parent.as_posix()] == "deny"
+    assert filesystem[Path(config["native_shell_ref"]["path"]).parent.as_posix()] == {
+        ".": "read", "profile.ps1": "deny", "Microsoft.PowerShell_profile.ps1": "deny"}
     assert 'permissions.benchmark.network.enabled=false' in command
     assert any(value.startswith("shell_environment_policy.set=") and "NUGET_PACKAGES" in value for value in command)
     monkeypatch.setenv("OPENAI_API_KEY", "CONTROLLED-DO-NOT-COPY")
@@ -207,9 +225,9 @@ def test_native_reference_readable_dependency_directory_is_manifest_bound(tmp_pa
         profile, pilot.read_bound_json(config["native_reference_profile_ref"]))
     if failure:
         with pytest.raises(ValueError, match="NATIVE_REFERENCE_"):
-            pilot.native_codex_command(*args)
+            pilot.native_codex_command(*args, native_user_config_ref=config["native_user_config_ref"], native_shell_ref=config["native_shell_ref"])
     else:
-        command = pilot.native_codex_command(*args)
+        command = pilot.native_codex_command(*args, native_user_config_ref=config["native_user_config_ref"], native_shell_ref=config["native_shell_ref"])
         assert _filesystem(command)[feed.as_posix()] == "read"
 
 
@@ -222,7 +240,7 @@ def test_native_permission_literal_encoding_roundtrips_quote_and_control_paths(t
         assert filesystem[path.resolve().as_posix()] == "deny"
 
 
-@pytest.mark.parametrize("failure", ["binary", "availability", "profile", "public_material", "permissions", "permission_archive", "command"])
+@pytest.mark.parametrize("failure", ["binary", "availability", "profile", "user_config", "shell", "public_material", "permissions", "permission_archive", "command"])
 def test_native_reference_changed_input_never_starts(tmp_path, monkeypatch, capsys, native_reference, failure):
     config = native_reference
     frozen_ref = _cli(monkeypatch, capsys, "freeze", _save(tmp_path / "config.json", config))["pilot_ref"]
@@ -236,7 +254,8 @@ def test_native_reference_changed_input_never_starts(tmp_path, monkeypatch, caps
         reference = (plan["public_material_refs"][0] if failure == "public_material" else
             plan["native_permission_profile_archive_ref"] if failure == "permission_archive" else
             plan["native_permission_profile_ref"] if failure == "permissions" else config[{
-            "binary": "codex_executable_ref", "availability": "codex_model_availability_ref", "profile": "native_reference_profile_ref"}[failure]])
+            "binary": "codex_executable_ref", "availability": "codex_model_availability_ref", "profile": "native_reference_profile_ref",
+            "user_config": "native_user_config_ref", "shell": "native_shell_ref"}[failure]])
         Path(reference["path"]).write_text("changed", encoding="utf-8")
     monkeypatch.setattr(pilot, "execute", lambda *_args, **_kwargs: pytest.fail("Changed input cannot execute"))
     with pytest.raises(ValueError):
@@ -265,6 +284,21 @@ def test_native_reference_invalid_route_rejects_before_copy(tmp_path, monkeypatc
     monkeypatch.setattr(pilot, "validate_frozen_evaluator", lambda _value: pytest.fail("Reject before preparation"))
     with pytest.raises(ValueError):
         pilot.freeze(_save(tmp_path / "invalid-native-config.json", config))
+    assert not Path(config["root"]).exists()
+
+
+@pytest.mark.parametrize("override", [
+    'developer_instructions="UNREGISTERED_PROMPT"\n',
+    '[model_providers.unregistered]\nname="UNREGISTERED_PROVIDER"\n',
+    '[mcp_servers.unregistered]\nenabled=true\n',
+    '[shell_environment_policy.set]\nOPENAI_API_KEY="CONTROLLED_NEVER_RECORDED"\n'])
+def test_native_user_configuration_rejects_unregistered_overrides_even_with_new_hash(tmp_path, native_reference, override):
+    config = native_reference
+    path = Path(config["native_user_config_ref"]["path"])
+    path.write_text(override, encoding="utf-8")
+    config["native_user_config_ref"] = _ref(path)
+    with pytest.raises(ValueError, match="UNREGISTERED_USER_CONFIG_OVERRIDE"):
+        pilot.freeze(_save(tmp_path / "invalid-config.json", config))
     assert not Path(config["root"]).exists()
 
 

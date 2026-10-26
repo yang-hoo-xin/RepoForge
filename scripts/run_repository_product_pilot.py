@@ -60,7 +60,7 @@ def source_snapshot(root):
 
 
 def local_codex_command(executable, workspace, last_message, deny_roots, dotnet, allowed_edit_paths, *,
-        native=False, dependency_root=None, received_markers=()):
+        native=False, dependency_root=None, received_markers=(), shell_runtime_root=None):
     command = codex_argv(executable, workspace, last_message, deny_roots)
     command[command.index("--model") + 1] = MODEL
     index = command.index('model_reasoning_effort="medium"')
@@ -82,6 +82,9 @@ def local_codex_command(executable, workspace, last_message, deny_roots, dotnet,
         filesystem[(Path(workspace) / ".build/temp").resolve().as_posix()] = "write"
         if dependency_root is not None:
             filesystem[Path(dependency_root).resolve().as_posix()] = "read"
+        if shell_runtime_root is not None:
+            filesystem[Path(shell_runtime_root).resolve().as_posix()] = {
+                ".": "read", "profile.ps1": "deny", "Microsoft.PowerShell_profile.ps1": "deny"}
     filesystem.update({Path(path).resolve().as_posix(): "deny" for path in deny_roots})
     source = Path(workspace) / "source"
     filesystem[source.resolve().as_posix()] = "read"
@@ -174,6 +177,40 @@ def native_reference_profile(config):
     return profile
 
 
+def native_user_configuration(reference, native_profile):
+    """Inspect only the registered configuration; persist hashes and selected public settings.
+
+    为什么要有它：加载命名权限层也会加载用户层，必须固定实际输入并拒绝未登记的提示或提供方覆盖，不能复制配置正文或凭据。
+    """
+    if not isinstance(reference, dict):
+        raise ValueError("NATIVE_REFERENCE_USER_CONFIG_REQUIRED")
+    _verify(reference)
+    if Path(reference["path"]).resolve() != Path(native_profile["codex_home"]).resolve() / "config.toml":
+        raise ValueError("NATIVE_REFERENCE_USER_CONFIG_LOCATION_INVALID")
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib
+    data = tomllib.loads(Path(reference["path"]).read_text(encoding="utf-8"))
+    allowed = {"desktop", "features", "marketplaces", "mcp_servers", "memories", "model",
+        "model_auto_compact_token_limit", "model_context_window", "model_reasoning_effort", "notify",
+        "personality", "plugins", "projects", "service_tier", "shell_environment_policy", "windows"}
+    if set(data) - allowed:
+        raise ValueError("NATIVE_REFERENCE_UNREGISTERED_USER_CONFIG_OVERRIDE")
+    servers = data.get("mcp_servers", {})
+    shell = data.get("shell_environment_policy", {})
+    if (not isinstance(servers, dict) or set(servers) - {"openaiDeveloperDocs", "node_repl"}
+            or not isinstance(shell, dict) or set(shell) - {"set"}
+            or not isinstance(shell.get("set", {}), dict)
+            or set(shell.get("set", {})) - {"NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S"}):
+        raise ValueError("NATIVE_REFERENCE_UNREGISTERED_USER_CONFIG_OVERRIDE")
+    return {"user_config_ref": reference, "configuration_body_recorded": False,
+        "retained_settings": {key: data[key] for key in ("model_context_window", "model_auto_compact_token_limit",
+            "personality", "service_tier") if key in data},
+        "disabled_mcp_servers": ["openaiDeveloperDocs", "node_repl"], "notify_disabled": True,
+        "scope": "whole native configuration; retained context, compaction, personality and service tier are configuration differences"}
+
+
 def native_reference_environment(environment, profile, *, workspace):
     # 为什么要有它：API变量只从本次子进程副本删除，既有ChatGPT凭据位置与用户全局设置保持不变。
     result = {key: value for key, value in environment.items() if str(key).casefold() not in _NATIVE_CONFLICT_ENV}
@@ -189,7 +226,13 @@ def native_denied_roots(config, profile, root, qualification):
 
 
 def native_codex_command(executable, workspace, last_message, deny_roots, repository_profile, native_profile, *,
-        enforce_command_limit=True):
+        native_user_config_ref=None, native_shell_ref=None, enforce_command_limit=True):
+    native_user_configuration(native_user_config_ref, native_profile)
+    if not isinstance(native_shell_ref, dict):
+        raise ValueError("NATIVE_REFERENCE_SHELL_IDENTITY_REQUIRED")
+    _verify(native_shell_ref)
+    if Path(native_shell_ref["path"]).name.casefold() != "pwsh.exe":
+        raise ValueError("NATIVE_REFERENCE_SHELL_IDENTITY_INVALID")
     dependency_root = repository_profile.get("probe_runner", {}).get("offline_packages")
     if dependency_root is not None:
         from src.mod_agent.domain.repository_probe_runner import offline_package_manifest
@@ -205,14 +248,18 @@ def native_codex_command(executable, workspace, last_message, deny_roots, reposi
     command = local_codex_command(executable, workspace, last_message, deny_roots,
         repository_profile["dotnet_ref"]["path"], repository_profile["allowed_edit_paths"], native=True,
         dependency_root=dependency_root["path"] if dependency_root is not None else None,
-        received_markers=repository_profile.get("diagnostics", {}).get("received_markers", ()))
+        received_markers=repository_profile.get("diagnostics", {}).get("received_markers", ()),
+        shell_runtime_root=Path(native_shell_ref["path"]).parent)
     command[command.index("--model") + 1] = native_profile["model"]
     command[command.index('windows.sandbox="elevated"')] = 'windows.sandbox="mxc"'
     command.remove("--oss")
+    command.remove("--ignore-user-config")
     index = command.index("--local-provider")
     del command[index:index + 2]
     command[-1:-1] = ["--ephemeral", "-c", 'model_provider="openai"',
-        "-c", 'forced_login_method="chatgpt"', "-c", 'model_reasoning_effort="high"']
+        "-c", 'forced_login_method="chatgpt"', "-c", 'model_reasoning_effort="high"',
+        "-c", "mcp_servers.openaiDeveloperDocs.enabled=false",
+        "-c", "mcp_servers.node_repl.enabled=false", "-c", "notify=[]"]
     # 为什么要有它：shell只继承核心系统变量；构建缓存和诊断输出须显式指向本任务可写目录，不能回写用户缓存。
     build = Path(workspace) / ".build"
     shell_environment = {"DOTNET_ROOT": str(Path(repository_profile["dotnet_ref"]["path"]).parent),
@@ -295,6 +342,7 @@ def external_pilot_identity(profile, expected=None):
 def freeze(configuration_ref):
     config = read_bound_json(configuration_ref)
     native = native_reference_profile(config)
+    native_user = native_user_configuration(config.get("native_user_config_ref"), native) if native is not None else None
     external = external_pilot_profile(config)
     external_settings = None
     if external is not None:
@@ -406,7 +454,9 @@ def freeze(configuration_ref):
             public_profile_path = materials / "public-profile.json"
             shutil.copyfile(profile.reference["path"], public_profile_path)
             command = native_codex_command(config["codex_executable_ref"]["path"], workspace,
-                arm_root / "last-message.txt", deny, profile.data, native, enforce_command_limit=False)
+                arm_root / "last-message.txt", deny, profile.data, native,
+                native_user_config_ref=config["native_user_config_ref"], native_shell_ref=config["native_shell_ref"],
+                enforce_command_limit=False)
             command, permission_ref = native_permission_profile(command, native, create=True)
             permission_archive = arm_root / "native-permission-profile.config.toml"
             with permission_archive.open("xb") as stream:
@@ -419,8 +469,9 @@ def freeze(configuration_ref):
                 native_permission_profile_cleanup="after independent result, remove only the exact hash-matched named profile; retain task archive",
                 prompt_path=str(common_path),
                 native_reference_profile_ref=config["native_reference_profile_ref"], native_denied_roots=[str(path) for path in deny],
+                native_user_configuration=native_user, native_shell_ref=config["native_shell_ref"],
                 product_kind="native_codex_reference", public_material_refs=[_ref(materials / "request.txt"), _ref(public_profile_path)],
-                native_runtime_refs=[_ref(REPO / "scripts/run_benchmark_arm.py"), profile.data["dotnet_ref"]],
+                native_runtime_refs=[_ref(REPO / "scripts/run_benchmark_arm.py"), profile.data["dotnet_ref"], config["native_shell_ref"]],
                 configuration_difference="Native Codex with existing ChatGPT login, gpt-6-astra/high; ephemeral session; "
                     "native context/output policy; exact provider wire and send count not instrumented; not RepoForge TaskAgent or B/B+")
         elif arm == "Codex_local":
@@ -541,7 +592,8 @@ def validate_frozen_evaluator(qualification):
 def configuration_keys(config):
     if config.get("mode") == "native_reference":
         return ("intent_ref", "public_problem_ref", "public_contract_ref", "public_profile_ref", "qualification_ref",
-            "codex_executable_ref", "codex_model_availability_ref", "native_reference_profile_ref")
+            "codex_executable_ref", "codex_model_availability_ref", "native_reference_profile_ref",
+            "native_user_config_ref", "native_shell_ref")
     if config.get("mode") == "strategy_pair":
         return ("intent_ref", "prepared_ref", "public_profile_ref", "qualification_ref")
     keys = ("intent_ref", "public_problem_ref", "public_contract_ref", "public_profile_ref", "qualification_ref", "settings_ref")
@@ -813,14 +865,18 @@ def run(pilot_ref, arm):
         qualification = read_bound_json(config["qualification_ref"])
         deny = native_denied_roots(config, native, Path(config["root"]).resolve(), qualification)
         expected_command = native_codex_command(config["codex_executable_ref"]["path"], plan["workspace"],
-            root / "last-message.txt", deny, profile.data, native, enforce_command_limit=False)
+            root / "last-message.txt", deny, profile.data, native,
+            native_user_config_ref=config["native_user_config_ref"], native_shell_ref=config["native_shell_ref"],
+            enforce_command_limit=False)
         expected_command, _ = native_permission_profile(expected_command, native, reference=plan.get("native_permission_profile_ref"))
         _verify(plan["native_permission_profile_archive_ref"])
         if plan["native_permission_profile_archive_ref"]["sha256"] != plan["native_permission_profile_ref"]["sha256"]:
             raise ValueError("NATIVE_REFERENCE_PERMISSION_ARCHIVE_CHANGED")
         if (plan["command"] != expected_command or plan["allowed_edit_paths"] != profile.data["allowed_edit_paths"]
                 or plan.get("product_kind") != "native_codex_reference" or plan["environment"] != config["environment"]
-                or plan.get("native_runtime_refs") != [_ref(REPO / "scripts/run_benchmark_arm.py"), profile.data["dotnet_ref"]]):
+                or plan.get("native_user_configuration") != native_user_configuration(config["native_user_config_ref"], native)
+                or plan.get("native_shell_ref") != config["native_shell_ref"]
+                or plan.get("native_runtime_refs") != [_ref(REPO / "scripts/run_benchmark_arm.py"), profile.data["dotnet_ref"], config["native_shell_ref"]]):
             raise ValueError("NATIVE_REFERENCE_PLAN_CHANGED")
         for reference in [plan["common_request_ref"], *plan["public_material_refs"], *plan["native_runtime_refs"]]:
             _verify(reference)
