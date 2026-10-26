@@ -437,7 +437,8 @@ class StrategyExperience(TaskMemory):
                 raise
             response_ref = self._write(feature + "_response", "response", {"response": asdict(response),
                 "request_ref": asdict(request_ref)})
-            receipt = {"model_calls": 1, "usage": response.usage.to_dict(), "response_ref": asdict(response_ref)}
+            from src.mod_agent.task_agent_loop import measured_turn_usage
+            receipt = {"model_calls": 1, "usage": measured_turn_usage(response), "response_ref": asdict(response_ref)}
             # 为什么要有它：取得响应是执行事实，计量或语义核验失败不能让重放退回“仅开始派发”。
             received = {**base, **receipt, "response_received": True}
             self._write(feature, "extraction", {**received, "status": "response_received"})
@@ -449,7 +450,7 @@ class StrategyExperience(TaskMemory):
                 raise
             try:
                 _require(response.provider == admitted_client.provider and response.model == admitted_client.model
-                    and not response.tool_calls and response.stop_reason not in {"length", "incomplete", "refusal", "content_filter"},
+                    and not response.tool_calls and response.stop_reason not in {"length", "max_tokens", "max_output_tokens", "incomplete", "refusal", "content_filter", "failed", "cancelled"},
                     "RESPONSE_NOT_COMPLETE")
                 proposed_output = json.loads(response.content)
                 feedback = {}

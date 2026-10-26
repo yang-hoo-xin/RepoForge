@@ -16,10 +16,12 @@ from src.mod_agent.upstream_model_trace import _local_body
 class PatchTransportBodyRecorder:
     """Add optional local refs without changing Patch persistence or exceptions."""
 
-    def __init__(self, *, record, observation, body_root):
+    def __init__(self, *, record, observation, body_root, provider=None):
         self.record = record
         self.observation = observation
         self.body_root = body_root
+        self.capture_boundary = "https_httpx_request_event" if provider == "openai_responses" else "loopback_httpx_request_event"
+        self.reference_scope = "actual_https_httpx_request_content" if provider == "openai_responses" else "actual_loopback_httpx_request_content"
         record["provider_request_ref_scope"] = "unknown_not_observed_this_turn"
         record["provider_request_local_body_status"] = "not_observed"
         self.publish_refs()
@@ -45,7 +47,7 @@ class PatchTransportBodyRecorder:
         try:
             digest = hashlib.sha256(raw).hexdigest()
             facts = {"provider_request_sha256": digest, "provider_request_bytes": len(raw),
-                     "provider_request_capture_boundary": "loopback_httpx_request_event"}
+                     "provider_request_capture_boundary": self.capture_boundary}
             self.record.update(facts)
             self.record.pop("provider_request_ref", None)
             try:
@@ -53,7 +55,7 @@ class PatchTransportBodyRecorder:
                                         "provider_request.json", raw)
                 if reference is not None:
                     self.record["provider_request_ref"] = reference
-                    self.record["provider_request_ref_scope"] = "actual_loopback_httpx_request_content"
+                    self.record["provider_request_ref_scope"] = self.reference_scope
                     status = "saved"
                 else:
                     self.record["provider_request_ref_scope"] = "unknown_body_destination_unavailable"

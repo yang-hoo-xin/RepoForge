@@ -6897,12 +6897,16 @@ def _request_technical_execution_selection(*, technical_executor, constraint_pol
         task_agent_allowed_edit_paths, local_ollama, defer_approval, run_gtfo_runtime,
         source_retrieval_mode, model_call_budget_policy, patch_worker_configuration,
         planning_target_evidence_ids, repair_ollama_model, task_agent_candidate_mode="baseline",
-        repository_profile=None, task_agent_protocol="v1"):
+        repository_profile=None, task_agent_protocol="v1", external_patch_profile=None):
     """Validate an operator-selected experimental executor before any run effects."""
     from pathlib import PurePosixPath
     from src.mod_agent.planning.constraint_context import validate_constraint_policy
 
     policy = validate_constraint_policy(constraint_policy)
+    from src.mod_agent.external_patch import ExternalOpenAIResponsesProfile
+    openai_task = isinstance(external_patch_profile, ExternalOpenAIResponsesProfile)
+    if openai_task and (local_ollama or technical_executor != "task_agent" or task_agent_protocol != "v2"):
+        raise LocalEntryError("RUN_REQUEST_OPENAI_REQUIRES_EXTERNAL_TASK_AGENT_V2")
     if technical_executor not in {"workflow", "task_agent"}:
         raise LocalEntryError("RUN_REQUEST_TECHNICAL_EXECUTOR_INVALID")
     if task_agent_protocol not in {"v1", "v2"}:
@@ -6936,7 +6940,7 @@ def _request_technical_execution_selection(*, technical_executor, constraint_pol
                 if policy is not None else None)
     # Scope: the first task-agent product comparison is local, new-task and deferred compile-only.
     # 为什么要有它：已验证的候选循环不自动授予外部披露、游戏启动或历史恢复能力，未实现的组合应在运行前拒绝。
-    if (not local_ollama or not defer_approval or run_gtfo_runtime or repair_ollama_model is not None
+    if (not (local_ollama or openai_task) or not defer_approval or run_gtfo_runtime or repair_ollama_model is not None
             or source_retrieval_mode != "rg_live" or model_call_budget_policy not in {"task_total_only", "meter_only"}
             or policy != "source_priority_v1" or not paths
             or patch_worker_configuration is None and repository_profile is None):
@@ -7064,6 +7068,12 @@ def run_local_request(
         experience_path = Path(task_agent_experience_config).resolve(strict=True)
         experience_configuration_ref = {"path": str(experience_path),
             "sha256": hashlib.sha256(experience_path.read_bytes()).hexdigest()}
+        from src.mod_agent.external_patch import (
+            ExternalOpenAIResponsesProfile,
+            validate_openai_experience_configuration,
+        )
+        if isinstance(external_patch_profile, ExternalOpenAIResponsesProfile):
+            validate_openai_experience_configuration(experience_configuration_ref)
     if repository_profile_path is not None:
         from src.mod_agent.domain.csharp_repository import CSharpRepositoryAdapter
         from src.mod_agent.domain.csharp_repository_backend import CSharpRepositoryProfile
@@ -7087,6 +7097,7 @@ def run_local_request(
         source_retrieval_mode=source_retrieval_mode, model_call_budget_policy=model_call_budget_policy,
         patch_worker_configuration=patch_worker_configuration,
         repository_profile=repository_profile,
+        external_patch_profile=external_patch_profile,
         planning_target_evidence_ids=planning_target_evidence_ids, repair_ollama_model=repair_ollama_model)
     evidence_optimization = optimization_policy(reuse_query_observations=reuse_query_observations,
         compress_findings_input=compress_findings_input)
@@ -7407,8 +7418,12 @@ def run_local_request(
                     approved_at=started_at,
                     approval_id=source_disclosure_approval_id or "source_disclosure_" + uuid4().hex,
                     provider_adapter=f"{type(llm).__module__}.{type(llm).__qualname__}",
+                    # 为什么要有它：当前外部v2任务的公开修订/检查反馈通过同一正式披露构造器登记，不能事后补写批准。
+                    requested_data_classes=(*SOURCE_DISCLOSURE_DATA_CLASSES, "generated_patch", "verification_feedback")
+                        if external_patch_profile.to_dict()["provider"] == "openai_responses" else SOURCE_DISCLOSURE_DATA_CLASSES,
                     destination_url=(
-                        f"{str(getattr(llm, 'base_url')).rstrip('/')}/chat/completions"
+                        f"{str(getattr(llm, 'base_url')).rstrip('/')}"
+                        + ("/responses" if external_patch_profile.to_dict()["provider"] == "openai_responses" else "/chat/completions")
                         if getattr(llm, "base_url", None)
                         else None
                     ),
@@ -8396,7 +8411,10 @@ def run_local_request(
                    if task_agent_protocol == "v2" else {}),
                 artifact_store=artifact_store, workspace_root=run_root, profile=worker_profile,
                 policy=worker_policy, behavior_evaluator=patch_worker_configuration.behavior_evaluator(),
-                worker_configuration_ref=bound_worker_ref, expected_model_identity=local_model_identity,
+                worker_configuration_ref=bound_worker_ref,
+                expected_model_identity=external_assembly.identity if external_assembly is not None else local_model_identity,
+                **({"source_disclosure": source_disclosure, "client_factory": external_assembly.task_agent_client}
+                   if external_assembly is not None and worker_profile.to_dict()["provider"] == "openai_responses" else {}),
                 identity_reader=admitted_worker_identity, providers=providers,
                 validate_providers=validate_task_providers, reserve_model_call=reserve_model_call,
                 budget_snapshot=model_budget_snapshot,

@@ -63,6 +63,9 @@ SOURCE_DISCLOSURE_DATA_CLASSES = (
     "feature_runtime_verification_plan",
 )
 
+# 为什么要有它：识别公开补丁和反馈类型不自动批准它们；默认披露请求仍是原来的SOURCE集合。
+SOURCE_DISCLOSURE_ALLOWED_DATA_CLASSES = (*SOURCE_DISCLOSURE_DATA_CLASSES, "generated_patch", "verification_feedback")
+
 
 PATCH_PROVIDER_PAYLOAD_DISCLOSURE_BINDINGS = (
     (("request",), "request", ("natural_language_request",)),
@@ -427,7 +430,7 @@ def _validated_disclosure_data_classes(
             f"Source disclosure {field_name} contains duplicate data classes."
         )
     unknown = [
-        item for item in values if item not in SOURCE_DISCLOSURE_DATA_CLASSES
+        item for item in values if item not in SOURCE_DISCLOSURE_ALLOWED_DATA_CLASSES
     ]
     if unknown:
         raise LocalEntryError(
@@ -435,7 +438,7 @@ def _validated_disclosure_data_classes(
             + ", ".join(unknown)
         )
     canonical = tuple(
-        item for item in SOURCE_DISCLOSURE_DATA_CLASSES if item in values
+        item for item in SOURCE_DISCLOSURE_ALLOWED_DATA_CLASSES if item in values
     )
     if values != canonical:
         raise LocalEntryError(
@@ -689,12 +692,29 @@ class ProductExecutionAdaptersV1:
                         raise ValueError("Task edit scope escapes the isolated target.")
                 binding = next(ProductExecutionInputBindingV1.from_dict(item.to_dict()).canonical_payload
                     for item in request.input_bindings if item.binding_kind == "model_admission")
-                validate_ollama_model_identity(owner.expected_model_identity,
-                    expected_base_url=owner.profile.base_url, expected_model=owner.profile.model)
-                validate_ollama_context_window(owner.expected_model_identity, requested_context_window=owner.profile.context_window)
-                if binding != local_model_admission_record(model_identity=owner.expected_model_identity,
-                        provider_adapter=binding.get("provider_adapter", "")):
-                    raise ValueError("Task model differs from the admitted Product model.")
+                from src.mod_agent.external_patch import (
+                    PATCH_FEEDBACK_DATA_CLASSES,
+                    ExternalOpenAIResponsesProfile,
+                    _validate_external_disclosure,
+                    validate_openai_task_identity,
+                )
+                if isinstance(owner.profile, ExternalOpenAIResponsesProfile):
+                    if getattr(owner, "protocol", None) != "v2":
+                        raise ValueError("External task execution requires the admitted v2 owner.")
+                    validate_openai_task_identity(owner.profile, owner.expected_model_identity)
+                    disclosure = next(ProductExecutionInputBindingV1.from_dict(item.to_dict()).canonical_payload
+                        for item in request.input_bindings if item.binding_kind == "source_disclosure")
+                    if disclosure != owner.source_disclosure or binding != _external_model_admission_record(disclosure):
+                        raise ValueError("Task model or disclosure differs from the admitted Product input.")
+                    _validate_external_disclosure(owner.profile, disclosure,
+                        (*SOURCE_DISCLOSURE_DATA_CLASSES, *PATCH_FEEDBACK_DATA_CLASSES))
+                else:
+                    validate_ollama_model_identity(owner.expected_model_identity,
+                        expected_base_url=owner.profile.base_url, expected_model=owner.profile.model)
+                    validate_ollama_context_window(owner.expected_model_identity, requested_context_window=owner.profile.context_window)
+                    if binding != local_model_admission_record(model_identity=owner.expected_model_identity,
+                            provider_adapter=binding.get("provider_adapter", "")):
+                        raise ValueError("Task model differs from the admitted Product model.")
             except (ValueError, TypeError, KeyError, OSError, AttributeError, ModelAdmissionError) as error:
                 raise ProductExecutionContractError("Task execution input admission failed: " + str(error),
                     side_effects_may_have_started=False) from error

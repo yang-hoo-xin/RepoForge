@@ -99,9 +99,14 @@ def _source_facts(roots):
 
 
 def _admitted_response(value, profile):
-    _require(value.get("provider") == "ollama_chat_local" and value.get("model") == profile["model"]
+    provider = "openai_responses" if profile.get("profile_version") == "external_openai_responses_profile_v1" else "ollama_chat_local"
+    _require(value.get("provider") == provider and value.get("model") == profile["model"]
         and value.get("provider_state") is not None and value.get("stop_reason") not in {
-            "length", "max_tokens", "max_output_tokens", "incomplete", "content_filter", "refusal"}, "RESPONSE_IDENTITY_CHANGED")
+            "length", "max_tokens", "max_output_tokens", "incomplete", "content_filter", "refusal", "failed", "cancelled"}, "RESPONSE_IDENTITY_CHANGED")
+    if provider == "openai_responses":
+        raw = value.get("raw_response")
+        _require(isinstance(raw, dict) and raw.get("model") == profile["model"] and raw.get("status") == "completed"
+            and isinstance(value["provider_state"], list), "RESPONSE_NATIVE_IDENTITY_CHANGED")
 
 
 def prepare_task_agent_contract(documents, *, workspace_root, evaluator, policy, documentation_holder=None,
@@ -474,9 +479,11 @@ class TaskAgentExecution:
             worker_configuration_ref, expected_model_identity, identity_reader, providers, validate_providers,
             reserve_model_call, budget_snapshot, allowed_edit_paths, allowed_read_roots, output_root,
             record_event=None, client_factory=None, deadline=None, candidate_mode="baseline"):
+        from src.mod_agent.external_patch import ExternalOpenAIResponsesProfile
         from src.mod_agent.local_entry import LocalOllamaInitialPatchProfileV1
 
-        _require(isinstance(profile, LocalOllamaInitialPatchProfileV1), "LOCAL_OLLAMA_REQUIRED")
+        _require(isinstance(profile, LocalOllamaInitialPatchProfileV1)
+            or getattr(self, "protocol", None) == "v2" and isinstance(profile, ExternalOpenAIResponsesProfile), "LOCAL_OLLAMA_REQUIRED")
         _require(isinstance(policy, PatchAgentLoopPolicy) and all(callable(value) for value in (
             identity_reader, validate_providers, reserve_model_call, budget_snapshot)), "OWNERS_REQUIRED")
         _require(deadline is None or type(deadline) in {int, float} and math.isfinite(deadline), "DEADLINE_INVALID")

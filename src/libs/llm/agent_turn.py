@@ -164,11 +164,13 @@ class AgentTurnProviderError(RuntimeError):
 
 
 class _HttpJsonSender:
-    def __init__(self, *, api_key: str, timeout_seconds: float = 60.0) -> None:
+    def __init__(self, *, api_key: str, timeout_seconds: float = 60.0,
+                 proxy_url: str | None = None, trust_env: bool = True) -> None:
         if not api_key:
             raise ValueError("Agent provider API key is required.")
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
+        self.proxy_url, self.trust_env = proxy_url, trust_env
 
     def __call__(
         self,
@@ -179,7 +181,9 @@ class _HttpJsonSender:
         import httpx
 
         try:
-            with httpx.Client(timeout=self.timeout_seconds) as client:
+            with httpx.Client(timeout=self.timeout_seconds, follow_redirects=False,
+                              proxy=self.proxy_url, trust_env=self.trust_env,
+                              event_hooks={"request": [transport_local_request_body]}) as client:
                 transport_started()
                 response = client.post(url, json=payload, headers=headers)
                 transport_response_received(http_status=response.status_code, response_complete=True)
@@ -191,17 +195,31 @@ class _HttpJsonSender:
             raise AgentTurnProviderError(
                 f"Agent provider connection failed: {type(exc).__name__}: {exc}"
             ) from exc
+
+        def invalid_response(message):
+            # 为什么要有它：成功HTTP也可能不是合法协议，保留原字节身份及有界脱敏正文，不能记成没有响应或打印凭据。
+            raw = response.content
+            redacted = raw.replace(self.api_key.encode("utf-8"), b"[redacted]")
+            preview_limit = 8192
+            request_id = response.headers.get("x-request-id")
+            diagnostic = {"http_status": response.status_code, "response_received": True,
+                "provider_http_request_id": request_id.replace(self.api_key, "[redacted]")[:256] if request_id else None,
+                "measured_usage": None, "usage_available": False,
+                "raw_response_body_sha256": sha256(raw).hexdigest(), "raw_response_body_bytes": len(raw),
+                "response_body_preview": redacted[:preview_limit].decode("utf-8", "replace"),
+                "response_body_preview_limit_bytes": preview_limit,
+                "response_body_preview_truncated": len(redacted) > preview_limit,
+                "response_body_preview_encoding": "utf-8-replace_after_credential_redaction"}
+            raise AgentTurnProviderError(message, diagnostic=diagnostic)
+
         if response.status_code != 200:
-            try:
-                error = response.json()
-            except Exception:
-                error = response.text
-            raise AgentTurnProviderError(
-                f"Agent provider HTTP {response.status_code}: {error}"
-            )
-        data = response.json()
+            invalid_response(f"Agent provider HTTP {response.status_code}")
+        try:
+            data = response.json()
+        except ValueError:
+            invalid_response("Agent provider response is not valid JSON.")
         if not isinstance(data, dict):
-            raise AgentTurnProviderError("Agent provider response must be an object.")
+            invalid_response("Agent provider response must be an object.")
         return data
 
 
@@ -821,26 +839,61 @@ class OpenAIResponsesAgentAdapter:
         base_url: str = "https://api.openai.com/v1",
         model: str,
         max_output_tokens: int,
+        context_window: int | None = None,
+        timeout_seconds: float = 60.0,
+        reasoning_effort: str | None = None,
+        strict_tools: bool | None = None,
+        store: bool = False,
+        proxy_url: str | None = None,
         request_sender: JsonRequestSender | None = None,
     ) -> None:
-        if not base_url or not model or max_output_tokens <= 0:
+        if (not base_url or not model or type(max_output_tokens) is not int or max_output_tokens <= 0
+                or context_window is not None and (type(context_window) is not int or context_window <= 0)
+                or type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds) or timeout_seconds <= 0
+                or strict_tools is not None and type(strict_tools) is not bool or type(store) is not bool
+                or reasoning_effort is not None and (not isinstance(reasoning_effort, str) or not reasoning_effort)):
             raise ValueError("OpenAI Responses Agent adapter configuration is invalid.")
+        if proxy_url is not None:
+            proxy = urlsplit(proxy_url)
+            if (proxy.scheme not in {"http", "https"} or not proxy.hostname or proxy.username is not None
+                    or proxy.password is not None or proxy.path not in {"", "/"} or proxy.query or proxy.fragment):
+                raise ValueError("OpenAI Responses explicit proxy URL is invalid.")
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.max_output_tokens = max_output_tokens
-        self._send = request_sender or _HttpJsonSender(api_key=api_key)
+        self.context_window, self.timeout_seconds = context_window, timeout_seconds
+        self.reasoning_effort, self.strict_tools, self.store = reasoning_effort, strict_tools, store
+        self.proxy_url = proxy_url
+        self._send = request_sender or _HttpJsonSender(api_key=api_key, timeout_seconds=timeout_seconds,
+            proxy_url=proxy_url, trust_env=False)
 
-    def complete_turn(self, request: AgentTurnRequest) -> AgentTurnResponse:
+    def _request_payload(self, request: AgentTurnRequest) -> dict[str, object]:
+        """Build the same native payload for context inspection and actual dispatch.
+
+        为什么要有它：显式non-strict只改变provider生成约束，不改宿主schema、原参数或工具授权。
+        """
         input_items: list[dict[str, object]] = [
             {"role": item.role, "content": _json_text(item.content)}
             for item in request.messages
         ]
-        for recorded_exchange in _tool_exchanges(request, len(input_items)):
+        for recorded_exchange in _tool_exchanges(request, len(input_items), allow_responses_continuation=True):
             state = recorded_exchange.provider_state
             if not isinstance(state, list):
                 raise AgentTurnProviderError("OPENAI_TOOL_RESULT_STATE_MISSING")
-            exchange = [dict(item) for item in state if isinstance(item, dict)]
+            if not all(isinstance(item, dict) for item in state):
+                raise AgentTurnProviderError("OPENAI_TOOL_RESULT_STATE_INVALID")
+            exchange = deepcopy(state)
+            calls = [item for item in exchange if item.get("type") == "function_call"]
+            results = recorded_exchange.tool_results
+            if (any(not isinstance(item.get("call_id"), str) or not item["call_id"].strip()
+                    or not isinstance(item.get("name"), str) or not item["name"].strip() for item in calls)
+                    or any(not isinstance(result.call_id, str) or not result.call_id.strip()
+                        or not isinstance(result.name, str) or not result.name.strip() for result in results)
+                    or len({item["call_id"] for item in calls}) != len(calls)
+                    or len({result.call_id for result in results}) != len(results)
+                    or {(item["call_id"], item["name"]) for item in calls} != {(result.call_id, result.name) for result in results}):
+                raise AgentTurnProviderError("OPENAI_TOOL_RESULT_CALL_ID_MISMATCH")
             exchange.extend(
                 {
                     "type": "function_call_output",
@@ -850,15 +903,32 @@ class OpenAIResponsesAgentAdapter:
                 for result in recorded_exchange.tool_results
             )
             insert_at = recorded_exchange.insert_index
+            if not results and insert_at < len(input_items) and input_items[insert_at].get("role") == "assistant":
+                # 为什么要有它：纠正记录仍保留显式assistant原文，wire用同字节原生items替换双表示，不能重复或猜测文本。
+                native_text = "".join(part["text"] for item in exchange if item.get("type") == "message"
+                    for part in item.get("content", [])
+                    if isinstance(part, dict) and part.get("type") == "output_text" and isinstance(part.get("text"), str))
+                if input_items[insert_at].get("content") != native_text:
+                    raise AgentTurnProviderError("OPENAI_NATIVE_ASSISTANT_TEXT_MISMATCH")
+                del input_items[insert_at]
             input_items[insert_at:insert_at] = exchange
         payload: dict[str, object] = {
             "model": self.model,
             "input": input_items,
             "max_output_tokens": self.max_output_tokens,
             "parallel_tool_calls": request.parallel_tool_calls,
+            "store": self.store,
+            "truncation": "disabled",
         }
+        if not self.store:
+            payload["include"] = ["reasoning.encrypted_content"]
+        if self.reasoning_effort is not None:
+            payload["reasoning"] = {"effort": self.reasoning_effort}
         if request.tools:
-            payload["tools"] = [_responses_tool(tool) for tool in request.tools]
+            payload["tools"] = [deepcopy(_responses_tool(tool)) for tool in request.tools]
+            if self.strict_tools is not None:
+                for tool in payload["tools"]:
+                    tool["strict"] = self.strict_tools
             payload["tool_choice"] = request.tool_choice
         elif request.tool_choice == "none":
             payload["tool_choice"] = "none"
@@ -869,56 +939,98 @@ class OpenAIResponsesAgentAdapter:
                     "type": "json_schema",
                     "name": fmt.name,
                     "description": fmt.description,
-                    "schema": fmt.schema,
+                    "schema": deepcopy(fmt.schema),
                     "strict": fmt.strict,
                 }
             }
-        data = self._send(
-            f"{self.base_url}/responses",
-            payload,
-            {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-        )
+        return payload
+
+    def _context_admission(self, payload: Mapping[str, object]) -> dict[str, Any]:
+        return build_ollama_context_admission(payload=payload, configured_num_ctx=self.context_window,
+            num_predict=self.max_output_tokens)
+
+    def complete_turn(self, request: AgentTurnRequest) -> AgentTurnResponse:
+        payload = self._request_payload(request)
+        url = f"{self.base_url}/responses"
+        identity = _httpx_json_body_identity(url, payload)
+        admission = self._context_admission(payload)
+        transport_request_prepared(request_identity=identity, context_admission=admission)
+        if admission["admitted"] is False:
+            raise AgentTurnProviderError("OPENAI_RESPONSES_CONTEXT_BUDGET_EXCEEDED", diagnostic={
+                "request_identity": identity, "context_admission": admission,
+                "failure_boundary": "provider_request_gate", "failure_classification": "provider_request_context_budget_exceeded",
+                "measured_usage": None, "usage_available": False})
+        try:
+            data = self._send(url, payload, {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"})
+        except AgentTurnProviderError as error:
+            raise AgentTurnProviderError(str(error), diagnostic={"request_identity": identity,
+                "context_admission": admission, **error.diagnostic}) from error
+        if not isinstance(data, dict):
+            raise AgentTurnProviderError("OPENAI_RESPONSES_OBJECT_REQUIRED", diagnostic={
+                "request_identity": identity, "context_admission": admission, "measured_usage": None,
+                "usage_available": False, "raw_response": deepcopy(data)})
+        measured = _measured_responses_usage(data)
+        diagnostic = {"request_identity": identity, "context_admission": admission, "measured_usage": measured,
+            "usage_available": measured is not None, "native_status": data.get("status"),
+            "native_incomplete_reason": (data.get("incomplete_details") or {}).get("reason")
+                if isinstance(data.get("incomplete_details"), dict) else None,
+            "response_id": data.get("id"), "raw_response_sha256": sha256(_json_text(data).encode()).hexdigest()}
+
+        def invalid(code):
+            # 为什么要有它：HTTP已经返回的用量不能因后续参数解析失败丢失；原响应交给调用者保留且绝不补发。
+            raise AgentTurnProviderError(code, diagnostic={**deepcopy(diagnostic), "raw_response": deepcopy(data)})
+
         output = data.get("output")
         if not isinstance(output, list):
-            raise AgentTurnProviderError("OPENAI_RESPONSES_OUTPUT_INVALID")
+            invalid("OPENAI_RESPONSES_OUTPUT_INVALID")
+        if not all(isinstance(item, dict) for item in output):
+            invalid("OPENAI_RESPONSES_ITEM_INVALID")
+        status = data.get("status")
+        if status is not None and (not isinstance(status, str)
+                or status not in {"completed", "incomplete", "failed", "cancelled", "queued", "in_progress"}):
+            invalid("OPENAI_RESPONSES_STATUS_INVALID")
+        refusal = any(part.get("type") == "refusal" for item in output if item.get("type") == "message"
+            for part in (item.get("content") if isinstance(item.get("content"), list) else []) if isinstance(part, dict))
+        stopped = (status in {"incomplete", "failed", "cancelled", "queued", "in_progress"} or refusal
+            or any(item.get("status") == "incomplete" for item in output))
+        stop_reason = status
+        if status == "incomplete":
+            reason = diagnostic["native_incomplete_reason"]
+            stop_reason = reason if isinstance(reason, str) and reason in {"max_output_tokens", "content_filter"} else "incomplete"
+        if refusal:
+            stop_reason = "refusal"
+        elif status in {"queued", "in_progress"} or stopped and status in {None, "completed"}:
+            stop_reason = "incomplete"
         tool_calls: list[AgentToolCall] = []
         text_parts: list[str] = []
-        continuation: list[dict[str, object]] = []
+        continuation = deepcopy(output)
+        seen_ids = set()
         for item in output:
-            if not isinstance(item, dict):
-                raise AgentTurnProviderError("OPENAI_RESPONSES_ITEM_INVALID")
             item_type = item.get("type")
-            if item_type == "function_call":
+            if item_type == "function_call" and not stopped:
+                call_id, name = item.get("call_id"), item.get("name")
+                if (not isinstance(call_id, str) or not call_id.strip() or call_id in seen_ids
+                        or not isinstance(name, str) or not name.strip()):
+                    invalid("OPENAI_RESPONSES_FUNCTION_ID_INVALID")
+                if not isinstance(item.get("arguments"), str):
+                    invalid("OPENAI_RESPONSES_ARGUMENTS_NOT_STRING")
+                try:
+                    arguments = _parse_arguments(item["arguments"])
+                except AgentTurnProviderError as error:
+                    invalid(str(error))
+                seen_ids.add(call_id)
                 tool_calls.append(
                     AgentToolCall(
-                        call_id=str(item.get("call_id") or item.get("id") or ""),
-                        name=str(item.get("name") or ""),
-                        arguments=_parse_arguments(item.get("arguments")),
+                        call_id=call_id, name=name, arguments=arguments,
                     )
                 )
-                continuation.append(dict(item))
-            elif item_type == "reasoning":
-                continuation.append(dict(item))
             elif item_type == "message":
                 content = item.get("content") or []
                 if isinstance(content, list):
                     for part in content:
                         if isinstance(part, dict) and part.get("type") == "output_text":
                             text_parts.append(str(part.get("text") or ""))
-        usage_data = data.get("usage") or {}
-        output_details = usage_data.get("output_tokens_details") or {}
-        input_details = usage_data.get("input_tokens_details") or {}
-        usage = AgentUsage(
-            input_tokens=_int_value(usage_data.get("input_tokens")),
-            output_tokens=_int_value(usage_data.get("output_tokens")),
-            reasoning_tokens=_int_value(output_details.get("reasoning_tokens")),
-            cached_input_tokens=_cached_detail_count(input_details),
-        )
-        incomplete = data.get("incomplete_details") or {}
-        stop_reason = incomplete.get("reason") or data.get("status")
+        usage = AgentUsage(**(measured or {}))
         return AgentTurnResponse(
             provider=self.provider,
             model=str(data.get("model") or self.model),
@@ -928,6 +1040,7 @@ class OpenAIResponsesAgentAdapter:
             request_id=str(data.get("id") or "") or None,
             usage=usage,
             provider_state=continuation,
+            provider_diagnostic=diagnostic,
             raw_response=data,
         )
 
@@ -955,6 +1068,25 @@ def _responses_tool(tool: AgentToolDefinition) -> dict[str, object]:
         "parameters": tool.parameters,
         "strict": tool.strict,
     }
+
+
+def _measured_responses_usage(data):
+    """Retain native token counts without converting absent usage into measured zero.
+
+    为什么要有它：reasoning和cached分别包含在output/input中；中断或缺测不能被累计为免费成功。
+    """
+    raw = data.get("usage")
+    if not isinstance(raw, dict):
+        return None
+    measured = {"input_tokens": raw.get("input_tokens"), "output_tokens": raw.get("output_tokens")}
+    if any(type(value) is not int or value < 0 for value in measured.values()):
+        return None
+    for group, key, target, total in (("input_tokens_details", "cached_tokens", "cached_input_tokens", "input_tokens"),
+                                     ("output_tokens_details", "reasoning_tokens", "reasoning_tokens", "output_tokens")):
+        details = raw.get(group)
+        if isinstance(details, dict) and type(details.get(key)) is int and 0 <= details[key] <= measured[total]:
+            measured[target] = details[key]
+    return measured
 
 
 def _measured_chat_usage(data):
@@ -1206,16 +1338,27 @@ def _cached_detail_count(details: object) -> int | None:
     return nonnegative_token_count(details.get("cached_tokens")) if isinstance(details, Mapping) else None
 
 
-def _tool_exchanges(request: AgentTurnRequest, message_count: int) -> tuple[AgentToolExchange, ...]:
+def _tool_exchanges(request: AgentTurnRequest, message_count: int, *,
+                    allow_responses_continuation: bool = False) -> tuple[AgentToolExchange, ...]:
     """Render later boundaries first so native exchanges do not shift earlier indexes."""
 
     exchanges = list(request.historical_tool_exchanges)
-    if any(not isinstance(item, AgentToolExchange) or not item.tool_results
+    def native_text(state):
+        # 为什么要有它：Responses纯文字纠正也需要原生reasoning连续性，不能伪造tool output或放宽其他provider历史规则。
+        return (allow_responses_continuation and isinstance(state, list) and bool(state)
+            and all(isinstance(item, dict) and item.get("type") in {"message", "reasoning"} for item in state))
+
+    if any(not isinstance(item, AgentToolExchange) or not item.tool_results and not native_text(item.provider_state)
            or type(item.insert_index) is not int or not 0 <= item.insert_index <= message_count
            for item in exchanges):
         raise AgentTurnProviderError("AGENT_TOOL_HISTORY_INVALID")
     if request.tool_results:
         exchanges.append(AgentToolExchange(request.tool_results, request.provider_state,
+            _insert_index(request.tool_result_insert_index, message_count)))
+    elif allow_responses_continuation and request.provider_state:
+        if not native_text(request.provider_state):
+            raise AgentTurnProviderError("OPENAI_NATIVE_CONTINUATION_WITHOUT_OUTPUTS_INVALID")
+        exchanges.append(AgentToolExchange((), request.provider_state,
             _insert_index(request.tool_result_insert_index, message_count)))
     return tuple(item for _, item in sorted(enumerate(exchanges),
         key=lambda pair: (pair[1].insert_index, pair[0]), reverse=True))

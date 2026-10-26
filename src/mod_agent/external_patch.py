@@ -25,6 +25,7 @@ import httpx
 from src.libs.llm.agent_turn import (
     AgentResponseFormat,
     AgentTurnProviderError,
+    OpenAIResponsesAgentAdapter,
     QwenChatAgentAdapter,
 )
 from src.mod_agent.fresh_planning_continuation import (
@@ -38,12 +39,14 @@ from src.mod_agent.local_entry import (
     _write_local_patch_response_sidecar,
     make_exact_no_write_dry_run_factory,
 )
+from src.mod_agent.model_qualification import read_bound_json
 from src.mod_agent.product_executor import (
     SOURCE_DISCLOSURE_DATA_CLASSES,
     _external_model_admission_record,
 )
 
 EXTERNAL_PATCH_PROFILE_VERSION = "external_qwen_patch_profile_v1"
+OPENAI_TASK_PROFILE_VERSION = "external_openai_responses_profile_v1"
 PATCH_FEEDBACK_DATA_CLASSES = ("generated_patch", "verification_feedback")
 PATCH_OUTPUT_FORMAT_POLICIES = ("follow_request", "json_when_patch_submission_allowed")
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
@@ -107,13 +110,113 @@ class ExternalQwenPatchProfile:
         return result
 
 
+@dataclass(frozen=True)
+class ExternalOpenAIResponsesProfile:
+    """Concrete Responses configuration for the existing v2 task owner.
+
+    为什么要有它：提供方配置固定目的地、模型和资源条件，不能通过更换client绕过原执行与披露边界。
+    """
+    base_url: str
+    model: str
+    model_catalog_url: str
+    context_window: int
+    output_budget: int
+    timeout_seconds: float
+    credential_env: str = "OPENAI_API_KEY"
+    reasoning_effort: str = "medium"
+    proxy_url: str | None = None
+    profile_version: str = OPENAI_TASK_PROFILE_VERSION
+
+    def __post_init__(self):
+        endpoint, catalog = _https_url(self.base_url), _https_url(self.model_catalog_url)
+        if (endpoint.hostname != "api.openai.com" or endpoint.port not in (None, 443)
+                or endpoint.path != "/v1" or self.model_catalog_url != self.base_url + "/models"
+                or catalog.hostname != endpoint.hostname or self.profile_version != OPENAI_TASK_PROFILE_VERSION
+                or not isinstance(self.model, str) or not self.model.strip()
+                or type(self.context_window) is not int or type(self.output_budget) is not int
+                or not 0 < self.output_budget < self.context_window
+                or type(self.timeout_seconds) not in (int, float) or not math.isfinite(self.timeout_seconds)
+                or self.timeout_seconds <= 0 or not isinstance(self.credential_env, str) or not self.credential_env.isidentifier()
+                or self.reasoning_effort not in {"low", "medium", "high", "xhigh"}):
+            raise ExternalPatchError("OPENAI_TASK_PROFILE_INVALID")
+        if self.proxy_url is not None:
+            proxy = urlsplit(self.proxy_url)
+            if (proxy.scheme != "http" or proxy.hostname not in {"127.0.0.1", "::1"} or proxy.port is None
+                    or proxy.username or proxy.password or proxy.query or proxy.fragment or proxy.path not in {"", "/"}):
+                raise ExternalPatchError("OPENAI_TASK_PROXY_INVALID")
+
+    def to_dict(self):
+        return {"profile_version": self.profile_version, "provider": "openai_responses", "execution_locality": "external",
+            "base_url": self.base_url, "model": self.model, "model_catalog_url": self.model_catalog_url,
+            "context_window": self.context_window, "context_limit_source": "operator_budget_not_provider_capacity",
+            "output_budget": self.output_budget, "timeout_seconds": float(self.timeout_seconds),
+            "credential_env": self.credential_env, "reasoning_effort": self.reasoning_effort, "proxy_url": self.proxy_url,
+            "native_json_schema": False, "local_schema_admission": True, "strict_tools": False, "store": False,
+            "automatic_provider_fallback": False, "automatic_retry": False}
+
+
+def external_profile_from_document(document):
+    cls = ExternalOpenAIResponsesProfile if document.get("profile_version") == OPENAI_TASK_PROFILE_VERSION else ExternalQwenPatchProfile
+    return cls(**document)
+
+
+def validate_openai_experience_configuration(reference):
+    if reference is None:
+        return
+    value = read_bound_json(reference)
+    # 为什么要有它：当前run源码披露不授权跨任务策略/经历外发；仅本地封存登记不产生这类外部请求。
+    if (value.get("snapshot_ref") is not None or value.get("extract_on_terminal") is not False
+            or value.get("extraction_episode_set_ref") is not None):
+        raise ExternalPatchError("OPENAI_TASK_CROSS_TASK_EXPERIENCE_DISCLOSURE_UNSUPPORTED")
+
+
+def validate_openai_task_identity(profile, observed, expected=None):
+    required = {"provider": "openai_responses", "model": profile.model, "base_url": profile.base_url,
+        "catalog_model_id": profile.model, "catalogue_url": profile.model_catalog_url}
+    if (not isinstance(observed, dict) or any(observed.get(key) != value for key, value in required.items())
+            or not isinstance(observed.get("catalog_model_sha256"), str)
+            or expected is not None and any(observed.get(key) != expected.get(key)
+                for key in (*required, "catalog_model_sha256"))):
+        raise ExternalPatchError("OPENAI_TASK_MODEL_IDENTITY_CHANGED")
+
+
+def read_external_openai_model_identity(profile):
+    """Read only the exact configured official catalogue; never retry or generate."""
+    key = os.environ.get(profile.credential_env)
+    if not key:
+        raise ExternalPatchError("EXTERNAL_PATCH_CREDENTIAL_UNAVAILABLE")
+    try:
+        with httpx.Client(timeout=profile.timeout_seconds, proxy=profile.proxy_url,
+                trust_env=False, follow_redirects=False) as client:
+            response = client.get(profile.model_catalog_url, headers={"Authorization": "Bearer " + key})
+        if response.status_code != 200 or len(response.content) > MAX_RESPONSE_BYTES:
+            raise ExternalPatchError("OPENAI_TASK_MODEL_CATALOG_UNAVAILABLE")
+        payload = response.json()
+        rows = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(rows, list):
+            raise ExternalPatchError("OPENAI_TASK_MODEL_CATALOG_INVALID")
+        matches = [row for row in rows if isinstance(row, dict) and row.get("id") == profile.model]
+        if len(matches) != 1:
+            raise ExternalPatchError("OPENAI_TASK_MODEL_NOT_UNIQUELY_LISTED")
+        return {"provider": "openai_responses", "base_url": profile.base_url, "model": profile.model,
+            "model_digest": None, "catalog_model_id": profile.model,
+            "catalog_model_sha256": _canonical_sha256(matches[0]), "catalogue_url": profile.model_catalog_url,
+            "availability": "catalogue_listing_not_generation_acceptance", "execution_locality": "external",
+            "observed_at": datetime.now(timezone.utc).isoformat()}
+    except (httpx.HTTPError, ValueError) as error:
+        if isinstance(error, ExternalPatchError):
+            raise
+        raise ExternalPatchError("OPENAI_TASK_MODEL_CATALOG_UNAVAILABLE") from None
+
+
 def _validate_external_disclosure(profile, record, requested):
     if not isinstance(record, dict) or record.get("scope") != "this_run_only" or not record.get("approval_id"):
         raise ExternalPatchError("EXTERNAL_PATCH_CURRENT_RUN_DISCLOSURE_REQUIRED")
     destination = record.get("destination") or {}
-    if (destination.get("provider") != "qwen_chat" or destination.get("model") != profile.model
+    openai = isinstance(profile, ExternalOpenAIResponsesProfile)
+    if (destination.get("provider") != ("openai_responses" if openai else "qwen_chat") or destination.get("model") != profile.model
             or destination.get("base_url") != profile.base_url
-            or destination.get("request_url") != profile.base_url + "/chat/completions"):
+            or destination.get("request_url") != profile.base_url + ("/responses" if openai else "/chat/completions")):
         raise ExternalPatchError("EXTERNAL_PATCH_DISCLOSURE_DESTINATION_MISMATCH")
     allowed = (*SOURCE_DISCLOSURE_DATA_CLASSES, *PATCH_FEEDBACK_DATA_CLASSES)
     classes = record.get("approved_data_classes")
@@ -439,7 +542,7 @@ class ExternalQwenPatchAdapter(LocalOllamaInitialPatchAdapter):
 
 def validate_run_request_external_profile(profile, *, model, base_url, credential_env):
     """Admit operator-supplied facts before run-request can call any upstream model."""
-    if not isinstance(profile, ExternalQwenPatchProfile):
+    if not isinstance(profile, (ExternalQwenPatchProfile, ExternalOpenAIResponsesProfile)):
         raise ExternalPatchError("EXTERNAL_PATCH_RUN_REQUEST_PROFILE_REQUIRED")
     if (profile.model != model or profile.base_url != base_url or profile.credential_env != credential_env):
         raise ExternalPatchError("EXTERNAL_PATCH_RUN_REQUEST_PROFILE_MISMATCH")
@@ -455,17 +558,42 @@ class RunRequestExternalAssembly:
         _validate_external_disclosure(profile, self.disclosure, SOURCE_DISCLOSURE_DATA_CLASSES)
         # This reads catalogue metadata only, before any source-bearing upstream
         # request. Listing is never reported as generation acceptance.
-        self.identity = read_external_qwen_model_identity(profile)
+        self.identity = (read_external_openai_model_identity(profile) if isinstance(profile, ExternalOpenAIResponsesProfile)
+                         else read_external_qwen_model_identity(profile))
 
     def read_identity(self, base_url, model):
         if (base_url, model) != (self.profile.base_url, self.profile.model):
             raise ExternalPatchError("EXTERNAL_PATCH_RUN_REQUEST_PROFILE_MISMATCH")
-        return read_external_qwen_model_identity(self.profile)
+        return (deepcopy(self.identity) if isinstance(self.profile, ExternalOpenAIResponsesProfile)
+                else read_external_qwen_model_identity(self.profile))
+
+    def task_agent_client(self, profile):
+        if not isinstance(profile, ExternalOpenAIResponsesProfile) or profile != self.profile:
+            raise ExternalPatchError("OPENAI_TASK_PROFILE_CHANGED")
+        key = os.environ.get(profile.credential_env)
+        if not key:
+            raise ExternalPatchError("EXTERNAL_PATCH_CREDENTIAL_UNAVAILABLE")
+        client = OpenAIResponsesAgentAdapter(api_key=key, base_url=profile.base_url, model=profile.model,
+            max_output_tokens=profile.output_budget, context_window=profile.context_window,
+            timeout_seconds=profile.timeout_seconds, reasoning_effort=profile.reasoning_effort,
+            strict_tools=False, store=False, proxy_url=profile.proxy_url)
+        native_send = client._send
+
+        def send(url, payload, headers):
+            if url != profile.base_url + "/responses" or payload.get("model") != profile.model:
+                raise ExternalPatchError("EXTERNAL_PATCH_SEND_ENDPOINT_MISMATCH")
+            _validate_external_disclosure(profile, self.disclosure, (*SOURCE_DISCLOSURE_DATA_CLASSES, *PATCH_FEEDBACK_DATA_CLASSES))
+            return native_send(url, payload, headers)
+
+        client._send = send
+        return client
 
     def make_worker(self, *, profile, artifact_store, workspace_root, patch_agent_loop_policy,
                     identity_reader, behavior_evaluator, enable_recovery_loop):
         if profile != self.profile:
             raise ExternalPatchError("EXTERNAL_PATCH_RUN_REQUEST_PROFILE_MISMATCH")
+        if isinstance(profile, ExternalOpenAIResponsesProfile):
+            raise ExternalPatchError("OPENAI_RESPONSES_REQUIRES_TASK_AGENT_V2")
         root = Path(workspace_root).resolve(strict=True)
         sources = {path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
                    for path in root.rglob("*.cs")}
@@ -476,6 +604,8 @@ class RunRequestExternalAssembly:
 
     def planning_client(self):
         profile = self.profile
+        if isinstance(profile, ExternalOpenAIResponsesProfile):
+            return self.task_agent_client(profile)
         key = os.environ.get(profile.credential_env)
         if not key:
             raise ExternalPatchError("EXTERNAL_PATCH_CREDENTIAL_UNAVAILABLE")

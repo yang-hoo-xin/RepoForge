@@ -6,10 +6,12 @@ from copy import deepcopy
 from dataclasses import asdict, replace
 
 from src.libs.llm.agent_turn import (
+    AgentToolCall,
     AgentTurnProviderError,
     _chat_message,
     _chat_tool,
     _json_text,
+    _parse_arguments,
     _parse_ollama_tool_call,
     _tool_exchanges,
 )
@@ -19,6 +21,53 @@ from src.mod_agent.task_agent_v2_state import TaskAgentV2StateError
 
 def _text(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+def native_tool_calls(native):
+    """Read actual native call identities without rewriting the retained provider state.
+
+    为什么要有它：Responses用有序output items，Ollama用message对象；统一观察不能补造call_id或把原生历史改成另一协议。
+    """
+    if native is None:
+        return ()
+    if isinstance(native, dict):
+        raw = native.get("tool_calls", [])
+        if not isinstance(raw, list):
+            raise AgentTurnProviderError("TASK_AGENT_NATIVE_CALLS_INVALID")
+        calls = tuple(_parse_ollama_tool_call(item) for item in raw)
+    elif isinstance(native, list):
+        if not all(isinstance(item, dict) for item in native):
+            raise AgentTurnProviderError("TASK_AGENT_NATIVE_ITEMS_INVALID")
+        calls = []
+        for item in native:
+            if item.get("type") != "function_call":
+                continue
+            call_id, name = item.get("call_id"), item.get("name")
+            if (not isinstance(call_id, str) or not call_id.strip() or not isinstance(name, str) or not name.strip()
+                    or not isinstance(item.get("arguments"), str)):
+                raise AgentTurnProviderError("TASK_AGENT_NATIVE_CALL_INVALID")
+            calls.append(AgentToolCall(call_id, name, _parse_arguments(item["arguments"])))
+        calls = tuple(calls)
+    else:
+        raise AgentTurnProviderError("TASK_AGENT_NATIVE_STATE_INVALID")
+    if len({call.call_id for call in calls}) != len(calls):
+        raise AgentTurnProviderError("TASK_AGENT_NATIVE_CALL_ID_DUPLICATED")
+    return calls
+
+
+def native_assistant_text(native):
+    """Extract public output text only; reasoning and encrypted items remain opaque.
+
+    为什么要有它：保持原生continuation不等于公开隐藏推理，工作陈述只来自模型实际输出的文字。
+    """
+    if isinstance(native, dict):
+        return native.get("content") if isinstance(native.get("content"), str) else None
+    if not isinstance(native, list):
+        return None
+    parts = [str(part.get("text") or "") for item in native
+        if isinstance(item, dict) and item.get("type") == "message" and isinstance(item.get("content"), list)
+        for part in item["content"] if isinstance(part, dict) and part.get("type") == "output_text"]
+    return "".join(parts) or None
 
 
 def investigation_observations(request, current_revision_ref, *, max_views=8):
@@ -68,13 +117,10 @@ def _action_facts(exchanges):
     total = sum(len(exchange["tool_results"]) for exchange in exchanges)
     for exchange_index in range(len(exchanges) - 1, -1, -1):
         exchange = exchanges[exchange_index]
-        calls = {}
-        for raw in (exchange.get("provider_state") or {}).get("tool_calls", []):
-            try:
-                call = _parse_ollama_tool_call(raw)
-                calls[call.call_id] = call
-            except (AgentTurnProviderError, ValueError):
-                continue
+        try:
+            calls = {call.call_id: call for call in native_tool_calls(exchange.get("provider_state"))}
+        except (AgentTurnProviderError, ValueError):
+            calls = {}
         for result_index in range(len(exchange["tool_results"]) - 1, -1, -1):
             result = exchange["tool_results"][result_index]
             output = result["output"] if isinstance(result["output"], dict) else {}
@@ -112,11 +158,9 @@ def project_history(request, state, *, history_bytes=None, context_window=None, 
     history = request.historical_tool_exchanges
     latest_check = next((index for index in range(len(history) - 1, -1, -1)
         if any(row.name == "candidate_check" for row in history[index].tool_results)), None)
-    retained = set()
+    retained = protected_history_indices(history)
     used = len(_text([asdict(row) for row in request.tool_results]).encode("utf-8"))
-    if latest_check is not None:
-        retained.add(latest_check)
-        used += len(_text(asdict(history[latest_check])).encode("utf-8"))
+    used += sum(len(_text(asdict(history[index])).encode("utf-8")) for index in retained)
     # Always retain the active exchange; never synthesize its provider state or tool result.
     for index in range(len(history) - 1, -1, -1):
         if index in retained:
@@ -169,6 +213,14 @@ def model_plan_view(state):
 
 def _provider_payload(request, *, context_window, output_budget, provider):
     """Use the adapter's native message helpers for the same pre-call budget projection."""
+    builder = getattr(provider, "_request_payload", None)
+    if callable(builder):
+        payload = builder(request)
+        if not isinstance(payload, dict):
+            raise AgentTurnProviderError("TASK_AGENT_NATIVE_PAYLOAD_INVALID")
+        return payload
+    if getattr(provider, "provider", "ollama_chat_local") != "ollama_chat_local":
+        raise AgentTurnProviderError("TASK_AGENT_NATIVE_PAYLOAD_UNAVAILABLE")
     messages = [_chat_message(row) for row in request.messages]
     for recorded in _tool_exchanges(request, len(messages)):
         native = recorded.provider_state
@@ -226,10 +278,8 @@ def protected_history_indices(history):
             protected.add(index)
             break
     for index, exchange in enumerate(history):
-        native = exchange.provider_state
-        raw = native.get("tool_calls", []) if isinstance(native, dict) else []
         try:
-            expected = {_parse_ollama_tool_call(call).call_id for call in raw}
+            expected = {call.call_id for call in native_tool_calls(exchange.provider_state)}
         except (AgentTurnProviderError, ValueError):
             protected.add(index)
             continue

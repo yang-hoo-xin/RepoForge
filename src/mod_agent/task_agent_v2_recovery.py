@@ -82,7 +82,10 @@ def restore_session(session, snapshot):
 
 class TaskAgentRecoveryJournal:
     def __init__(self, owner, session, graph_state, original_budget, details, *, host_config_ref=None):
+        from src.libs.llm import agent_turn
         from src.mod_agent import (
+            external_patch,
+            patch_transport_bodies,
             public_failure_feedback,
             task_agent_execution,
             task_agent_loop,
@@ -115,6 +118,7 @@ class TaskAgentRecoveryJournal:
                 "original_output_root": str(owner.output_root), "model_profile": asdict(owner.profile),
                 "policy": asdict(owner.policy), "worker_configuration_ref": owner.worker_configuration_ref,
                 "expected_model_identity": owner.expected_model_identity,
+                "source_disclosure": deepcopy(getattr(owner, "source_disclosure", None)),
                 "allowed_edit_paths": list(owner.allowed_edit_paths), "allowed_read_roots": [str(path) for path in owner.allowed_read_roots],
                 "source_facts": _source_facts(owner.allowed_read_roots), "verification_identity": owner.expected_verification_identity,
                 "graph_state": deepcopy(graph_state), "original_budget_before": validate_budget(original_budget),
@@ -129,7 +133,8 @@ class TaskAgentRecoveryJournal:
                     task_agent_v2_state, task_agent_v2_experience, task_agent_v2_experiments,
                     task_agent_v2_experiment_tools, task_agent_v2_context, task_agent_v2_working_state,
                     task_agent_v2_semantic_state, public_failure_feedback,
-                    strategy_experience, learning_request, episode_catalog, learning_context)] + [_ref(__file__)]}
+                    strategy_experience, learning_request, episode_catalog, learning_context,
+                    external_patch, agent_turn, patch_transport_bodies)] + [_ref(__file__)]}
             self.host_config_ref = self.state.save("host-recovery-config", host)
             with self.state._transaction("host-recovery-config", {"kind": "host_recovery_config", "host_config_ref": self.host_config_ref}) as (_head, result, _replay):
                 result["host_config_ref"] = self.host_config_ref
@@ -264,7 +269,22 @@ def _validate_completed(checkpoint, store_root, host=None):
         _require(corrected == checkpoint["loop"]["output_correction_used"], "OUTPUT_CORRECTION_CHANGED")
         if len(ordinary_messages) > len(initial["messages"]):
             _require(corrected and len(ordinary_messages) == len(initial["messages"]) + 2, "UNRECORDED_REQUEST_MESSAGE")
+        native_text_positions = set()
         for exchange in [*request["historical_tool_exchanges"], {"tool_results": request["tool_results"], "provider_state": request["provider_state"]}]:
+            if not exchange["tool_results"] and exchange["provider_state"] is not None:
+                # 为什么要有它：纯文字纠正的opaque续接也必须来自真实响应，不能利用无工具结果的空隙注入历史。
+                native = exchange["provider_state"]
+                matches = [_trusted_read(event["response_ref"], store_root)
+                    for event in checkpoint["details"]["provider_turns"] if event.get("response_ref")]
+                position = exchange.get("insert_index")
+                _require(isinstance(native, list) and native and type(position) is int
+                    and 0 <= position < len(request["messages"]) and position not in native_text_positions
+                    and request["messages"][position].get("role") == "assistant"
+                    and any(reply.get("provider") == "openai_responses" and not reply.get("tool_calls")
+                        and reply.get("provider_state") == native
+                        and reply.get("content") == request["messages"][position].get("content") for reply in matches),
+                    "REQUEST_NATIVE_TEXT_HISTORY_CHANGED")
+                native_text_positions.add(position)
             for result in exchange["tool_results"]:
                 _require(result == checkpoint["loop"]["call_records"].get(result["call_id"], {}).get("result"), "REQUEST_TOOL_RESULT_CHANGED")
                 source = calls.get(result["call_id"])
@@ -324,9 +344,29 @@ def _validate_resource_chain(state, checkpoint, host):
 
 def _validate_host_binding(state, checkpoint, host):
     from src.mod_agent.artifacts import ArtifactRef, ArtifactStore
+    from src.mod_agent.external_patch import (
+        OPENAI_TASK_PROFILE_VERSION,
+        PATCH_FEEDBACK_DATA_CLASSES,
+        _validate_external_disclosure,
+        external_profile_from_document,
+    )
+    from src.mod_agent.product_executor import SOURCE_DISCLOSURE_DATA_CLASSES
 
     registered = state.head["operations"].get("host-recovery-config", {})
     _require(registered.get("result", {}).get("host_config_ref") == checkpoint["host_config_ref"], "HOST_CONFIG_NOT_REGISTERED")
+    if host["model_profile"].get("profile_version") == OPENAI_TASK_PROFILE_VERSION:
+        # 为什么要有它：恢复授权来自原合同绑定的披露原件，不能从新环境或模型响应补写外发权限。
+        profile = external_profile_from_document(host["model_profile"])
+        reference = state.contract.get("source_disclosure_ref")
+        _require(isinstance(reference, str) and bool(reference), "SOURCE_DISCLOSURE_BINDING_REQUIRED")
+        original = state.load(reference)
+        _require(original.get("schema") == "task-agent-source-disclosure.v2"
+            and original.get("record") == host.get("source_disclosure")
+            and original.get("model_profile") == host["model_profile"], "SOURCE_DISCLOSURE_CHANGED")
+        _validate_external_disclosure(profile, host["source_disclosure"],
+            (*SOURCE_DISCLOSURE_DATA_CLASSES, *PATCH_FEEDBACK_DATA_CLASSES))
+    else:
+        _require(host.get("source_disclosure") is None, "UNEXPECTED_EXTERNAL_DISCLOSURE")
     if "deadline_utc" in checkpoint["owner"]:
         from src.mod_agent.task_agent_v2_execution import earliest_task_deadline_utc
 
@@ -496,8 +536,8 @@ def _validate_probe_receipt(state, origin, output, *, receipt_ref, model_profile
 
 
 def _reconcile_checkpoint(state, checkpoint_ref, checkpoint, latest_path):
-    from src.libs.llm.agent_turn import AgentUsage
     from src.mod_agent.task_agent_execution import _admitted_response
+    from src.mod_agent.task_agent_loop import measured_turn_usage
 
     value = deepcopy(checkpoint)
     loop, owner = value["loop"], value["owner"]
@@ -541,7 +581,8 @@ def _reconcile_checkpoint(state, checkpoint_ref, checkpoint, latest_path):
             owner["working_state"] = record_semantic_state(owner["working_state"], response,
                 actual_request=effective, request_ref=event["request_ref"], response_ref=event["response_ref"])
         owner["context_projection"] = deepcopy(current.get("context_budget"))
-        usage = AgentUsage(**response["usage"]).to_dict()
+        measured = measured_turn_usage(response)
+        usage = measured if measured is not None else {"unknown_usage_calls": 1}
         old_head, new_head = value["task_head"], state.head
         operation_id = "model-usage:" + reservation["reservation_id"]
         _require(set(new_head["operations"]) == set(old_head["operations"]) | {operation_id}
@@ -555,7 +596,8 @@ def _reconcile_checkpoint(state, checkpoint_ref, checkpoint, latest_path):
             value["session"]["actual_calls"].append({**call, "response_ref": event["response_ref"], "arguments_ref": arguments_ref})
         value["details"]["provider_turns"].append(event)
         loop["usage_by_turn"].append({"turn": loop["model_turns"], "provider": response["provider"], "model": response["model"],
-            "request_id": response.get("request_id"), "stop_reason": response.get("stop_reason"), "usage": usage, "usage_available": True})
+            "request_id": response.get("request_id"), "stop_reason": response.get("stop_reason"),
+            "usage": measured, "usage_available": measured is not None})
         loop.update(phase="response_ready", pending_response=response, terminal=None)
         owner["reservation"].update(request_ref=event["request_ref"], response_ref=event["response_ref"],
             call_ids=[call["call_id"] for call in response["tool_calls"]])
@@ -811,6 +853,12 @@ def _resume_v2_task_agent(*, artifact_store_root, checkpoint_ref):
     为什么要有它：CLI恢复必须消耗原合同、原模型和原累计账本，而不是暗中重开一次尝试。
     """
     from src.mod_agent.artifacts import ArtifactStore
+    from src.mod_agent.external_patch import (
+        OPENAI_TASK_PROFILE_VERSION,
+        RunRequestExternalAssembly,
+        external_profile_from_document,
+        validate_openai_task_identity,
+    )
     from src.mod_agent.local_entry import (
         LocalOllamaInitialPatchProfileV1,
         _reserve_request_model_call,
@@ -853,11 +901,19 @@ def _resume_v2_task_agent(*, artifact_store_root, checkpoint_ref):
         _require(worker.reference == host["worker_configuration_ref"], "WORKER_CHANGED")
         evaluator = worker.behavior_evaluator()
         _require(evaluator.verification_identity() == host["verification_identity"], "VERIFIER_CHANGED")
-        observed = read_ollama_model_identity(host["model_profile"]["base_url"], host["model_profile"]["model"])
-        validate_ollama_model_identity(observed, expected_base_url=host["model_profile"]["base_url"],
-            expected_model=host["model_profile"]["model"])
-        assert_ollama_model_identity_stable(expected=host["expected_model_identity"], observed=observed)
-        validate_ollama_context_window(observed, requested_context_window=host["model_profile"]["context_window"])
+        external = None
+        if host["model_profile"].get("profile_version") == OPENAI_TASK_PROFILE_VERSION:
+            profile = external_profile_from_document(host["model_profile"])
+            external = RunRequestExternalAssembly(profile=profile, source_disclosure=host["source_disclosure"])
+            validate_openai_task_identity(profile, external.identity, host["expected_model_identity"])
+            identity_reader = external.read_identity
+        else:
+            profile = LocalOllamaInitialPatchProfileV1(**host["model_profile"])
+            observed = read_ollama_model_identity(profile.base_url, profile.model)
+            validate_ollama_model_identity(observed, expected_base_url=profile.base_url, expected_model=profile.model)
+            assert_ollama_model_identity_stable(expected=host["expected_model_identity"], observed=observed)
+            validate_ollama_context_window(observed, requested_context_window=profile.context_window)
+            identity_reader = read_ollama_model_identity
         budget = validate_budget(checkpoint["loop"]["model_budget"])
 
         def reserve(role):
@@ -871,9 +927,11 @@ def _resume_v2_task_agent(*, artifact_store_root, checkpoint_ref):
 
         output = Path(host["original_output_root"]) / ("resume-" + uuid4().hex)
         owner = TaskAgentExecutionV2(artifact_store=ArtifactStore(artifact_store_root), workspace_root=host["workspace_root"],
-            profile=LocalOllamaInitialPatchProfileV1(**host["model_profile"]), policy=worker.policy,
+            profile=profile, policy=worker.policy,
             behavior_evaluator=evaluator, worker_configuration_ref=worker.reference,
-            expected_model_identity=host["expected_model_identity"], identity_reader=read_ollama_model_identity,
+            expected_model_identity=host["expected_model_identity"], identity_reader=identity_reader,
+            client_factory=external.task_agent_client if external is not None else None,
+            source_disclosure=deepcopy(host.get("source_disclosure")),
             providers={}, validate_providers=validate_providers, reserve_model_call=reserve,
             budget_snapshot=lambda: deepcopy(budget), allowed_edit_paths=tuple(host["allowed_edit_paths"]),
             allowed_read_roots=tuple(host["allowed_read_roots"]), output_root=output,

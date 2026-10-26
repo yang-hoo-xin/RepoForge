@@ -1253,7 +1253,8 @@ def build_parser(
         action="store_true",
         help=(
             "Explicitly allow this run to send retrieved local source excerpts "
-            "and binding context to the configured external LLM."
+            "and binding context to the configured external LLM. OpenAI Task Agent runs also send "
+            "their generated patches and public verification feedback."
         ),
     )
     run_parser.add_argument("--confirm-isolated-write", action="store_true")
@@ -2772,8 +2773,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 dependency_binding = RunLocalGameFolderBindingV1(**dependency_document)
             external_profile = None
             if args.external_patch_profile:
-                from .external_patch import ExternalQwenPatchProfile
-                external_profile = ExternalQwenPatchProfile(**read_json_object(args.external_patch_profile))
+                from .external_patch import external_profile_from_document
+                external_profile = external_profile_from_document(read_json_object(args.external_patch_profile))
             worker_configuration = PatchWorkerConfiguration.load(args.patch_worker_config) if args.patch_worker_config else None
             stage_limits = read_json_object(args.stage_model_call_limits) if args.stage_model_call_limits else None
             if stage_limits is not None and (not stage_limits or any(type(value) is not int or value < 1 for value in stage_limits.values())):

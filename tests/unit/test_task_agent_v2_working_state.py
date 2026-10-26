@@ -39,6 +39,23 @@ def test_explicit_model_claim_survives_many_reads_without_optional_plan():
     assert "observed_call_ids" not in view
 
 
+def test_responses_native_history_keeps_only_explicit_output_text_and_exact_call_arguments():
+    first = AgentToolExchange((AgentToolResult("real-1", "source_read", {"execution": "executed", "value": {"text": "same"}}),),
+        [{"type": "reasoning", "summary": [{"text": "not a public model statement"}], "encrypted_content": "opaque"},
+            {"type": "message", "content": [{"type": "output_text", "text": "Explicit "}, {"type": "output_text", "text": "claim."}]},
+            {"type": "function_call", "id": "item-not-call-id", "call_id": "real-1", "name": "source_read",
+                "arguments": json.dumps({"path": "A.cs", "working_state": {}})}], 1)
+    second = AgentToolExchange((AgentToolResult("real-2", "source_read", first.tool_results[0].output),),
+        [{"type": "function_call", "call_id": "real-2", "name": "source_read", "arguments": json.dumps({"path": "B.cs"})}], 1)
+    before = json.dumps(first.provider_state)
+    working = advance(None, [first, second])
+    assert [row["content"] for row in working["model_statements"]] == ["Explicit claim."]
+    assert working["counts"]["distinct_returns"] == 2 and working["counts"]["repeated_returns"] == 0
+    assert working["latest_action"]["arguments"] == {"path": "B.cs"}
+    assert json.dumps(first.provider_state) == before
+    assert advance(working, [first, second]) == working
+
+
 def test_repeated_return_feedback_is_factual_and_recovery_does_not_reset_or_double_count():
     history = [observed(str(i)) for i in range(4)]
     before = advance(None, history)

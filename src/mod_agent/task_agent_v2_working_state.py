@@ -6,8 +6,9 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from src.libs.llm.agent_turn import AgentTurnProviderError, _parse_ollama_tool_call
+from src.libs.llm.agent_turn import AgentTurnProviderError
 from src.mod_agent.model_qualification import canonical_hash
+from src.mod_agent.task_agent_v2_context import native_assistant_text, native_tool_calls
 from src.mod_agent.task_agent_v2_semantic_state import strip_working_state
 
 _SCHEMA = "task-agent-working-state.v1"
@@ -91,17 +92,15 @@ def update_working_state(previous, request, *, task_contract_ref, current_revisi
     seen_calls, fingerprints, counts = (value[key] for key in
         ("observed_call_ids", "returned_evidence_fingerprints", "counts"))
     for native, results in exchanges:
-        if isinstance(native, dict) and isinstance(native.get("content"), str) and native["content"].strip():
-            value = retain_model_statement(value, native)
+        content = native_assistant_text(native)
+        if isinstance(content, str) and content.strip():
+            value = retain_model_statement(value, {"content": content})
             seen_calls, fingerprints, counts = (value[key] for key in
                 ("observed_call_ids", "returned_evidence_fingerprints", "counts"))
-        calls = {}
-        for raw in (native.get("tool_calls", []) if isinstance(native, dict) else []):
-            try:
-                call = _parse_ollama_tool_call(raw)
-                calls[call.call_id] = call
-            except (AgentTurnProviderError, ValueError):
-                continue
+        try:
+            calls = {call.call_id: call for call in native_tool_calls(native)}
+        except (AgentTurnProviderError, ValueError):
+            calls = {}
         for result in results:
             identity = [result.name, result.call_id]
             if identity in seen_calls:

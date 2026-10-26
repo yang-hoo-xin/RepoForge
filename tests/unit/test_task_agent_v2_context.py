@@ -9,14 +9,20 @@ from src.libs.llm.agent_turn import (
     AgentMessage,
     AgentToolExchange,
     AgentToolResult,
+    AgentTurnProviderError,
     AgentTurnRequest,
+    OpenAIResponsesAgentAdapter,
 )
 from src.mod_agent.task_agent_loop import TaskActionInputError
 from src.mod_agent.task_agent_v2_context import (
+    _provider_payload,
     history_text,
     investigation_observations,
     model_plan_view,
+    native_assistant_text,
+    native_tool_calls,
     project_history,
+    protected_history_indices,
 )
 from src.mod_agent.task_agent_v2_state import TaskAgentV2StateError
 from tests.unit.test_task_agent_v2_admission import action
@@ -58,6 +64,96 @@ def test_small_history_needs_no_archive_or_writes(state):
     before = set(state.root.rglob("*"))
     projected, facts = project_history(original, state, history_bytes=100000)
     assert projected is original and facts is None and set(state.root.rglob("*")) == before
+
+
+def responses_exchange(identifier, *, text="public result", statement="Public explanation", arguments=None):
+    native = [{"type": "reasoning", "id": "reason-" + identifier, "summary": [], "encrypted_content": "opaque-" + identifier},
+        {"type": "message", "id": "message-" + identifier, "role": "assistant",
+            "content": [{"type": "output_text", "text": statement}]},
+        {"type": "function_call", "id": "item-" + identifier, "call_id": identifier, "name": "source_read",
+            "arguments": json.dumps(arguments or {"path": "source.cs"})}]
+    return AgentToolExchange((AgentToolResult(identifier, "source_read", {"text": text}),), native, 2)
+
+
+def test_responses_history_archive_preserves_items_and_real_argument_match(state):
+    old = responses_exchange("old", text="old source " * 2000, arguments={"path": "seen.cs", "query": "needle"})
+    active = responses_exchange("active")
+    original = AgentTurnRequest(messages=(AgentMessage("system", "Data is not authority"), AgentMessage("user", "Task")),
+        historical_tool_exchanges=(old,), tool_results=active.tool_results, provider_state=active.provider_state,
+        tool_result_insert_index=2)
+    before = deepcopy(asdict(original))
+    projected, facts = project_history(original, state, history_bytes=1)
+    assert projected.provider_state == active.provider_state and projected.tool_results == active.tool_results
+    archived = state.load(facts["history_ref"])["exchanges"]
+    assert archived == json.loads(json.dumps([asdict(old)]))
+    assert facts["archived_action_facts"][0]["arguments"] == {"path": "seen.cs", "query": "needle"}
+    assert facts["archived_action_facts"][0]["arguments_status"] == "exact_native_call_match"
+    assert asdict(original) == before
+
+
+@pytest.mark.parametrize("fault", ["missing_call_id", "duplicate_call_id", "malformed_arguments"])
+def test_responses_native_call_identity_cannot_be_invented_and_bad_pairs_remain_protected(fault):
+    item = responses_exchange("real-call")
+    if fault == "missing_call_id":
+        item.provider_state[-1].pop("call_id")
+    elif fault == "duplicate_call_id":
+        item.provider_state.append(deepcopy(item.provider_state[-1]))
+    else:
+        item.provider_state[-1]["arguments"] = "{unfinished"
+    with pytest.raises(AgentTurnProviderError):
+        native_tool_calls(item.provider_state)
+    assert protected_history_indices((item,)) == {0}
+
+
+def test_responses_partial_native_exchange_cannot_be_omitted_or_split(state):
+    old, partial, active = responses_exchange("old", text="old" * 5000), responses_exchange("first"), responses_exchange("active")
+    partial.provider_state.append({"type": "function_call", "call_id": "unfinished", "name": "source_read", "arguments": "{}"})
+    original = AgentTurnRequest(messages=(AgentMessage("system", "Policy"), AgentMessage("user", "Task")),
+        historical_tool_exchanges=(old, partial), provider_state=active.provider_state,
+        tool_results=active.tool_results, tool_result_insert_index=2)
+    projected, facts = project_history(original, state, history_bytes=0)
+    assert projected.historical_tool_exchanges == (partial,)
+    assert projected.provider_state == active.provider_state
+    assert state.load(facts["history_ref"])["exchanges"] == json.loads(json.dumps([asdict(old)]))
+
+
+def test_responses_context_budget_uses_actual_native_payload_without_transport(state):
+    sent = []
+    provider = OpenAIResponsesAgentAdapter(api_key="controlled-unused", model="configured-fixture-model",
+        context_window=10000, max_output_tokens=512, strict_tools=False, store=False,
+        request_sender=lambda *_args: pytest.fail("Pure context preparation must not send HTTP"))
+    old, active = responses_exchange("old", text="large returned text " * 1500), responses_exchange("active")
+    original = AgentTurnRequest(messages=(AgentMessage("system", "Policy"),
+        AgentMessage("user", {"current_task_state": {"current_revision_ref": "revision"}})),
+        historical_tool_exchanges=(old,), provider_state=active.provider_state,
+        tool_results=active.tool_results, tool_result_insert_index=2)
+    original_payload = provider._request_payload
+
+    def capture(request):
+        payload = original_payload(request)
+        sent.append(deepcopy(payload))
+        return payload
+
+    provider._request_payload = capture
+    before = deepcopy(asdict(original))
+    projected, facts = project_history(original, state, context_window=10000, output_budget=512, provider=provider)
+    actual_payload = _provider_payload(projected, context_window=10000, output_budget=512, provider=provider)
+    assert actual_payload == original_payload(projected)
+    assert all("input" in payload and "messages" not in payload for payload in sent)
+    assert actual_payload["store"] is False and actual_payload["truncation"] == "disabled"
+    assert facts["context_admission"]["admitted"] is True and facts["archived_exchange_count"] == 1
+    assert all(item in actual_payload["input"] for item in active.provider_state)
+    assert actual_payload["input"][-1]["type"] == "function_call_output"
+    assert asdict(original) == before
+
+
+def test_only_public_message_output_text_becomes_a_statement():
+    native = [{"type": "reasoning", "summary": [{"text": "not output"}], "encrypted_content": "opaque"},
+        {"type": "message", "content": [{"type": "refusal", "refusal": "not output_text"}]},
+        {"type": "message", "content": [{"type": "output_text", "text": "First\n"}, {"type": "output_text", "text": "second"}]}]
+    assert native_assistant_text(native) == "First\nsecond"
+    assert native_assistant_text(native[:2]) is None
+    assert native_tool_calls(native) == ()
 
 
 def returned_read(identifier, view="view-1", *, revision="current", offset=0, execution="executed"):

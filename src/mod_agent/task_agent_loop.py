@@ -27,7 +27,7 @@ from src.libs.llm.agent_turn import (
 from src.mod_agent.model_call_budget import call_allowance, validate_budget
 
 _ROLES = frozenset({"source_read", "source_search", "upstream", "candidate_submit", "candidate_check", "finish"})
-_STOPPED = frozenset({"length", "max_tokens", "max_output_tokens", "incomplete", "content_filter", "refusal"})
+_STOPPED = frozenset({"length", "max_tokens", "max_output_tokens", "incomplete", "content_filter", "refusal", "failed", "cancelled"})
 _CORRECTION_CODES = frozenset({"TASK_AGENT_SOURCE_ARGUMENTS_INVALID", "TASK_AGENT_MIXED_TOOL_BATCH",
     "TASK_AGENT_READ_BUDGET_EXCEEDED", "TASK_AGENT_CANDIDATE_ARGUMENTS_INVALID"})
 _OUTPUT_CORRECTION = "task_agent_output_correction"
@@ -43,6 +43,20 @@ def _copy(value):
 
 def _hash(value):
     return hashlib.sha256(_json(value).encode("utf-8")).hexdigest()
+
+
+def measured_turn_usage(response):
+    """Keep missing provider measurements unknown instead of charging dataclass zeros.
+
+    为什么要有它：未知token数与零token不同；同一纯函数供正常执行、Trace和恢复读取既有测量标记。
+    """
+    value = asdict(response) if isinstance(response, AgentTurnResponse) else response
+    diagnostic = value.get("provider_diagnostic") or {}
+    if "measured_usage" in diagnostic:
+        return deepcopy(diagnostic["measured_usage"])
+    if value.get("provider") == "openai_responses":
+        return None
+    return AgentUsage(**value["usage"]).to_dict()
 
 
 def _output_correction_in_history(messages):
@@ -267,13 +281,16 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
             tool_result_insert_index=len(request.messages), historical_tool_exchanges=historical,
             response_format=None, tool_choice="auto", parallel_tool_calls=False)
 
-    def retain_assistant_text(text):
+    def retain_assistant_text(text, response):
         nonlocal request
         historical = request.historical_tool_exchanges
         if request.tool_results:
             historical = (*historical, AgentToolExchange(request.tool_results, request.provider_state,
                 len(request.messages) if request.tool_result_insert_index is None else request.tool_result_insert_index))
         assistant = AgentMessage("assistant", text)
+        if response.provider == "openai_responses":
+            # 为什么要有它：纠正文字输出也必须保留原生opaque续接；提供方序列化时替换同位置的重复公开文本。
+            historical = (*historical, AgentToolExchange((), deepcopy(response.provider_state), len(request.messages)))
         request = replace(request, messages=(*request.messages, assistant), tool_results=(), provider_state=None,
             tool_result_insert_index=None, historical_tool_exchanges=historical)
         return assistant
@@ -437,15 +454,17 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
                     if isinstance(response, AgentTurnResponse):
                         span.update(provider=response.provider, model=response.model, stop_reason=response.stop_reason)
         except Exception as error:
-            usage.append({"turn": turns, "usage": None, "usage_available": False})
+            measured = (getattr(error, "diagnostic", None) or {}).get("measured_usage")
+            usage.append({"turn": turns, "usage": deepcopy(measured), "usage_available": measured is not None})
             return stop("TASK_AGENT_PROVIDER_TURN_FAILED", detail={"error_type": type(error).__name__,
                 "provider_diagnostic": deepcopy(getattr(error, "diagnostic", None))})
         if not isinstance(response, AgentTurnResponse):
             return stop("TASK_AGENT_RESPONSE_INVALID")
         if not resume_pending:
+            measured = measured_turn_usage(response)
             usage.append({"turn": turns, "provider": response.provider, "model": response.model,
                           "request_id": response.request_id, "stop_reason": response.stop_reason,
-                          "usage": response.usage.to_dict(), "usage_available": True})
+                          "usage": measured, "usage_available": measured is not None})
         try:
             if response_admission is not None and not resume_pending:
                 response_admission(response)
@@ -460,7 +479,7 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
                 {"length", "max_tokens", "max_output_tokens", "incomplete"} else "TASK_AGENT_PROVIDER_STOPPED")
         if not response.tool_calls:
             has_text = type(response.content) is str and bool(response.content.strip())
-            assistant = retain_assistant_text(response.content) if has_text else None
+            assistant = retain_assistant_text(response.content, response) if has_text else None
             if any(row.get("status") in {"pending", "unknown"} for row in seen.values()):
                 return stop("TASK_AGENT_PREVIOUS_OUTCOME_NOT_REUSABLE", unknown=True)
             # Scope: only complete, admitted text is correctable; real owner stops remain authoritative.

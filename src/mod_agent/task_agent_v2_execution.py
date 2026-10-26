@@ -119,9 +119,11 @@ def classify_v2_technical_inputs(loop_request, prepared_request, initial_request
 class TaskAgentExecutionV2(TaskAgentExecution):
     protocol = "v2"
 
-    def __init__(self, *, experience_configuration_ref=None, deadline_utc=None, semantic_state_enabled=True, **kwargs):
+    def __init__(self, *, experience_configuration_ref=None, deadline_utc=None, semantic_state_enabled=True,
+                 source_disclosure=None, **kwargs):
         _require(type(semantic_state_enabled) is bool, "SEMANTIC_STATE_POLICY_INVALID")
         self.semantic_state_enabled = semantic_state_enabled
+        self.source_disclosure = deepcopy(source_disclosure)
         clock, utc = time.monotonic(), time.time()
         relative = kwargs.get("deadline")
         if relative is not None:
@@ -133,6 +135,12 @@ class TaskAgentExecutionV2(TaskAgentExecution):
         super().__init__(**kwargs)
         self._experience = None
         if experience_configuration_ref is not None:
+            from src.mod_agent.external_patch import (
+                ExternalOpenAIResponsesProfile,
+                validate_openai_experience_configuration,
+            )
+            if isinstance(self.profile, ExternalOpenAIResponsesProfile):
+                validate_openai_experience_configuration(experience_configuration_ref)
             from src.mod_agent.task_agent_v2_experience import TaskAgentV2Experience
             self._experience = TaskAgentV2Experience(self, experience_configuration_ref)
 
@@ -388,6 +396,11 @@ class TaskAgentExecutionV2(TaskAgentExecution):
             if resumed is not None:
                 task = resumed["state"]
             else:
+                disclosure_fields = {}
+                if self.source_disclosure is not None:
+                    disclosure_fields["source_disclosure_ref"] = save_v2_artifact(root, "source-disclosure", {
+                        "schema": "task-agent-source-disclosure.v2", "record": self.source_disclosure,
+                        "model_profile": asdict(self.profile)})
                 authority = save_v2_artifact(root, "authority", {"schema": "task-agent-authority.v2",
                 "scope": "file", "operation": "modify_existing", "allowed_edit_paths": paths,
                 "read_roots": {"target": str(target)},
@@ -407,7 +420,7 @@ class TaskAgentExecutionV2(TaskAgentExecution):
                     "non_goals": feature.get("non_goals", [])},
                 contract_fields={"original_request_ref": request_ref, "feature_spec_ref": asdict(feature_ref),
                     "public_acceptance_ref": acceptance, "execution_profile_ref": profile_ref,
-                    "resource_policy_ref": resource})
+                    "resource_policy_ref": resource, **disclosure_fields})
             self._v2_state = task
             if resumed is None:
                 task.record_resources({"model_calls": before["consumed"]}, operation_id="initial-resource-baseline")
@@ -434,11 +447,19 @@ class TaskAgentExecutionV2(TaskAgentExecution):
             self._v2_session = session
             client = (self.client_factory or LocalOllamaInitialPatchAdapter._default_agent_turn_client)(self.profile)
             self._v2_client = client
-            _require(getattr(client, "provider", None) == "ollama_chat_local"
+            from src.mod_agent.external_patch import (
+                ExternalOpenAIResponsesProfile,
+                validate_openai_task_identity,
+            )
+            openai = isinstance(self.profile, ExternalOpenAIResponsesProfile)
+            _require(getattr(client, "provider", None) == ("openai_responses" if openai else "ollama_chat_local")
                      and getattr(client, "model", None) == self.profile.model, "PROVIDER_CHANGED")
 
             def identity():
                 observed = self.identity_reader(self.profile.base_url, self.profile.model)
+                if openai:
+                    validate_openai_task_identity(self.profile, observed, self.expected_model_identity)
+                    return observed
                 validate_ollama_model_identity(observed, expected_base_url=self.profile.base_url, expected_model=self.profile.model)
                 assert_ollama_model_identity_stable(expected=self.expected_model_identity, observed=observed)
                 validate_ollama_context_window(observed, requested_context_window=self.profile.context_window)
@@ -447,6 +468,7 @@ class TaskAgentExecutionV2(TaskAgentExecution):
             self._v2_identity = identity
 
             def complete(request):
+                from src.mod_agent.task_agent_loop import measured_turn_usage
                 if resumed is not None and self._experience is not None:
                     self._experience._terminal_receipt = None
                 loop_request = asdict(request)
@@ -479,19 +501,22 @@ class TaskAgentExecutionV2(TaskAgentExecution):
                     else:
                         with trace.model_call({"provider": client.provider, "model": client.model,
                                 "turn_index": index, "usage_available": False, "response_received": False}) as observation:
-                            bodies = PatchTransportBodyRecorder(record=event, observation=observation, body_root=self.output_root)
+                            bodies = PatchTransportBodyRecorder(record=event, observation=observation,
+                                body_root=self.output_root, provider=client.provider)
                             with observe_transport(observation.transport_started, observation.update,
                                     request_callback=observation.update, local_request_body_callback=bodies.callback):
                                 self.require_model_send_window("technical_decision")
                                 response = client.complete_turn(request)
                             if isinstance(response, AgentTurnResponse):
-                                observation.record_response(usage=response.usage.to_dict(), usage_available=True,
+                                measured = measured_turn_usage(response)
+                                observation.record_response(usage=measured, usage_available=measured is not None,
                                     response_sha256=canonical_hash(asdict(response)), response_origin="live_provider_response",
                                     stop_reason=response.stop_reason, tool_call_ids=[row.call_id for row in response.tool_calls])
                             bodies.publish_refs()
                     _require(isinstance(response, AgentTurnResponse), "RESPONSE_INVALID")
+                    measured = measured_turn_usage(response)
                     event.update(status="responded", response_ref=self._save(f"response-{index:03d}.json", asdict(response)),
-                                 usage=response.usage.to_dict())
+                                 usage=measured, usage_available=measured is not None)
                     from src.mod_agent.task_agent_v2_working_state import retain_model_statement
                     self._v2_working_state = retain_model_statement(getattr(self, "_v2_working_state", None),
                         response, response_ref=event["response_ref"], source_boundary=deepcopy(self._v2_working_state.get("boundary")))
@@ -502,12 +527,25 @@ class TaskAgentExecutionV2(TaskAgentExecution):
                             actual_request=read_bound_json(event["request_ref"]),
                             request_ref=event["request_ref"], response_ref=event["response_ref"])
                     reservation.update(response_ref=event["response_ref"], call_ids=[call.call_id for call in response.tool_calls])
-                    task.record_resources(response.usage.to_dict(),
+                    task.record_resources(measured if measured is not None else {"unknown_usage_calls": 1},
                         operation_id="model-usage:" + reservation["reservation_id"])
                     identity()
                     return response
                 except Exception as error:
                     event.update(status="failed", error_type=type(error).__name__)
+                    diagnostic = deepcopy(getattr(error, "diagnostic", None) or {})
+                    if diagnostic.get("raw_response") is not None:
+                        event["provider_error_ref"] = self._save("provider-error-" + reservation["reservation_id"] + ".json",
+                            {"error_type": type(error).__name__, "diagnostic": diagnostic})
+                    measured = event.get("usage", diagnostic.get("measured_usage"))
+                    event.update(usage=deepcopy(measured), usage_available=measured is not None)
+                    task.record_resources(measured if measured is not None else {"unknown_usage_calls": 1},
+                        operation_id="model-usage:" + reservation["reservation_id"])
+                    diagnostic.update(measured_usage=deepcopy(measured), usage_available=measured is not None)
+                    try:
+                        error.diagnostic = diagnostic
+                    except (AttributeError, TypeError):
+                        pass
                     raise
                 finally:
                     self._save("provider-outcome-" + reservation["reservation_id"] + ".json", event)

@@ -103,7 +103,7 @@ class TaskAgentSessionV2:
 
         if response.model != self.owner.profile.model:
             raise ValueError("TASK_V2_RESPONSE_MODEL_CHANGED")
-        _admitted_response(asdict(response), {"model": self.owner.profile.model})
+        _admitted_response(asdict(response), self.owner.profile.to_dict())
         reference = self.owner._save("model-response-" + uuid4().hex + ".json", asdict(response))
         for call in response.tool_calls:
             self.actual_calls.append({"name": call.name, "call_id": call.call_id,
