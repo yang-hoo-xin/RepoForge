@@ -102,6 +102,14 @@ def freeze(configuration_ref):
     semantic_state = config.get("task_agent_semantic_state", "enabled")
     if type(semantic_state) is not str or semantic_state not in {"enabled", "disabled"}:
         raise ValueError("PILOT_SEMANTIC_STATE_POLICY_INVALID")
+    experience_ref = config.get("experience_config_ref")
+    experience = None
+    if "experience_config_ref" in config:
+        experience = read_bound_json(experience_ref)
+        if (experience.get("schema_version") != "task_agent_experience_config_v1"
+                or not {"store_root", "snapshot_ref", "extract_on_terminal"} <= set(experience)
+                or type(experience["extract_on_terminal"]) is not bool):
+            raise ValueError("PILOT_EXPERIENCE_CONFIG_INVALID")
     # 为什么要有它：普通产品试跑的语义状态选择必须进入已绑定argv；经验配对仍保留其原冻结输入。
     for key in configuration_keys(config):
         read_bound_json(config[key]) if key in {"intent_ref", "public_profile_ref", "qualification_ref"} else _verify(config[key])
@@ -167,12 +175,16 @@ def freeze(configuration_ref):
                 "--technical-executor", "task_agent", "--task-agent-protocol", "v2",
                 "--task-agent-semantic-state", semantic_state,
                 "--constraint-policy", "source_priority_v1", "--task-agent-edit-paths", json.dumps(profile.data["allowed_edit_paths"])]
+            if experience_ref is not None:
+                arguments.extend(["--task-agent-experience-config", experience_ref["path"]])
             execution = _save(arm_root / "base-execution.json", {"arguments": arguments})
             selected = prepare_new_task(execution_config=execution["path"], description=common)
             business = build_product_argv(execution_config=selected, description=common)
             _, options = _configuration_arguments(selected)
             run_root = arm_root / "runs" / options["--run-id"]
             bound = [_ref(selected), _ref(settings_path), profile.reference, common_ref, configuration_ref, _ref(__file__)]
+            if experience_ref is not None:
+                bound.append(experience_ref)
             platform = prepare_snapshot(source_root=REPO, snapshot_root=root / "platform",
                 business_argv=business, run_root=run_root, bound_inputs=[(r["path"], r["sha256"]) for r in bound])
             policy_id = "user_goal_disposable_product_pilot_compile_only"
@@ -188,9 +200,14 @@ def freeze(configuration_ref):
                 inspection=evidence_locator(execution_config=selected, run_id=options["--run-id"]),
                 bound_inputs=bound, task_agent_semantic_state=semantic_state,
                 configuration_difference="explicit context65536/output4096/temperature0/seed0; semantic working state="
-                    + semantic_state + "; no injected strategy or terminal extraction configured",
+                    + semantic_state + ("; host experience policy explicitly bound" if experience_ref is not None
+                        else "; no injected strategy or terminal extraction configured"),
                 command=[sys.executable, "-I", "-B", str(root / "platform/scripts/run_frozen_product.py"),
                     "--_child", platform["path"], platform["sha256"]])
+            if experience_ref is not None:
+                # 为什么要有它：显式配置须同时进入真实请求、冻结输入和可核验计划，不能静默漏传或在派发前变更。
+                base.update(experience_config_ref=experience_ref,
+                    experience_policy={key: experience.get(key) for key in ("snapshot_ref", "extract_on_terminal", "episode_catalog")})
         plans[arm] = _save(arm_root / "frozen-plan.json", base)
     result = _save(root / "frozen-pilot.json", {"configuration_ref": configuration_ref, "common_request_ref": common_ref,
         "order": list(arms), "plans": plans, "model_calls": 0, "mode": mode,
@@ -233,6 +250,8 @@ def configuration_keys(config):
     if config.get("mode") == "strategy_pair":
         return ("intent_ref", "prepared_ref", "public_profile_ref", "qualification_ref")
     keys = ("intent_ref", "public_problem_ref", "public_contract_ref", "public_profile_ref", "qualification_ref", "settings_ref")
+    if "experience_config_ref" in config:
+        keys += ("experience_config_ref",)
     return (*keys, "codex_executable_ref") if config.get("mode", "matched_product_pair") == "matched_product_pair" else keys
 
 

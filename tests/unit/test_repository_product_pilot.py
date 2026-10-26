@@ -19,8 +19,9 @@ def test_absolute_real_b_does_not_require_external_product_readiness():
 
 
 @pytest.mark.parametrize("mode", ["absolute_real_B", "matched_product_pair"])
-@pytest.mark.parametrize("selected", [None, "enabled", "disabled"], ids=["default", "enabled", "disabled"])
-def test_semantic_state_reaches_generated_configuration_and_product_argv(tmp_path, monkeypatch, capsys, mode, selected):
+@pytest.mark.parametrize("selected,with_experience", [(None, False), ("enabled", False), ("disabled", False), ("enabled", True)],
+    ids=["default", "enabled", "disabled", "catalog"])
+def test_semantic_state_reaches_generated_configuration_and_product_argv(tmp_path, monkeypatch, capsys, mode, selected, with_experience):
     from tests.unit.test_csharp_repository_backend import _profile
 
     profile, source = _profile(tmp_path)
@@ -39,6 +40,10 @@ def test_semantic_state_reaches_generated_configuration_and_product_argv(tmp_pat
         config["codex_executable_ref"] = _ref(executable)
     if selected is not None:
         config["task_agent_semantic_state"] = selected
+    if with_experience:
+        experience = {"schema_version": "task_agent_experience_config_v1", "store_root": str(tmp_path / "experience"),
+            "snapshot_ref": None, "extract_on_terminal": False, "episode_catalog": {"catalog_id": "real-runs"}}
+        config["experience_config_ref"] = _save(tmp_path / "experience-config.json", experience)
     captured = []
 
     def snapshot(**kwargs):
@@ -52,17 +57,46 @@ def test_semantic_state_reaches_generated_configuration_and_product_argv(tmp_pat
     monkeypatch.setattr(pilot, "local_codex_command", lambda *_args: ["controlled-codex-not-executed"])
     configuration = _save(tmp_path / "pilot-config.json", config)
     pilot.freeze(configuration)
-    frozen = pilot.read_bound_json(json.loads(capsys.readouterr().out)["pilot_ref"])
+    pilot_ref = json.loads(capsys.readouterr().out)["pilot_ref"]
+    frozen = pilot.read_bound_json(pilot_ref)
     plan = pilot.read_bound_json(frozen["plans"]["RepoForge_B"])
     execution = pilot.read_bound_json(plan["execution_config_ref"])
     expected = selected or "enabled"
     for arguments in (execution["arguments"], captured[0]["business_argv"]):
         assert arguments.count("--task-agent-semantic-state") == 1
         assert arguments[arguments.index("--task-agent-semantic-state") + 1] == expected
+        if with_experience:
+            assert arguments.count("--task-agent-experience-config") == 1
+            assert arguments[arguments.index("--task-agent-experience-config") + 1] == config["experience_config_ref"]["path"]
+        else:
+            assert "--task-agent-experience-config" not in arguments
     assert plan["task_agent_semantic_state"] == expected
     assert plan["configuration_ref"] == configuration
     assert configuration in plan["bound_inputs"]
     assert frozen["model_calls"] == 0 and not (Path(plan["root"]) / "started.json").exists()
+    if with_experience:
+        reference = config["experience_config_ref"]
+        assert plan["experience_config_ref"] == reference and reference in plan["bound_inputs"]
+        assert (reference["path"], reference["sha256"]) in captured[0]["bound_inputs"]
+        assert plan["experience_policy"] == {key: experience[key] for key in ("snapshot_ref", "extract_on_terminal", "episode_catalog")}
+        assert "no injected strategy or terminal extraction configured" not in plan["configuration_difference"]
+        Path(reference["path"]).write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(pilot, "read_ollama_model_identity", lambda *_args: pytest.fail("Changed input must reject before provider admission"))
+        with pytest.raises(ValueError, match="BOUND_INPUT_CHANGED"):
+            pilot.run(pilot_ref, "RepoForge_B")
+        assert not (Path(plan["root"]) / "started.json").exists()
+    else:
+        assert "experience_config_ref" not in plan
+        assert "no injected strategy or terminal extraction configured" in plan["configuration_difference"]
+
+
+@pytest.mark.parametrize("value", [None, "not-a-reference", {"path": "relative.json", "sha256": "a" * 64}])
+def test_supplied_invalid_experience_ref_is_not_ignored(tmp_path, monkeypatch, value):
+    monkeypatch.setattr(pilot, "validate_frozen_evaluator", lambda *_args: pytest.fail("No evaluator preparation"))
+    monkeypatch.setattr(pilot, "read_ollama_model_identity", lambda *_args: pytest.fail("No provider admission"))
+    config = _save(tmp_path / "invalid-experience.json", {"mode": "absolute_real_B", "experience_config_ref": value})
+    with pytest.raises(ValueError):
+        pilot.freeze(config)
 
 
 @pytest.mark.parametrize("mode", ["absolute_real_B", "matched_product_pair"])
