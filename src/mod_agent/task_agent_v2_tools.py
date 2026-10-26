@@ -17,6 +17,7 @@ from src.mod_agent.task_agent_loop import (
     PreparedTaskAction,
     TaskActionInputError,
     TaskAgentAction,
+    TaskCandidateReadinessError,
     TaskCandidateRevisionInputError,
     run_task_agent_loop,
 )
@@ -32,8 +33,8 @@ _REQUEST_DEFAULTS = {
     **{name: {"parent_revision_ref": "current_revision_ref"}
        for name in ("source_read", "candidate_read", "source_search", "candidate_submit")},
     "binding_add": {"expected_registry_ref": "binding_registry_ref"},
-    "candidate_check": {"candidate_ref": "current_revision_ref"},
-    "finish": {"candidate_ref": "current_revision_ref", "check_ref": "current_check_ref"},
+    "candidate_check": {"candidate_ref": "current_candidate_ref"},
+    "finish": {"candidate_ref": "current_candidate_ref", "check_ref": "current_check_ref"},
     **{name: {"source_revision_ref": "current_revision_ref"}
        for name in ("test_catalog", "probe_submit", "experiment_run")},
 }
@@ -58,6 +59,9 @@ def resolve_tool_arguments(name, arguments, request_ref=None, *, reader=read_bou
             raise ValueError("TASK_V2_ACTUAL_REQUEST_STATE_REQUIRED")
         index, current = rows[0]
         for key, field in _REQUEST_DEFAULTS.get(name, {}).items():
+            # 为什么要有它：新请求明确记录无候选；历史请求缺少该字段时仍须按当时规则重算原始补全来源。
+            if field == "current_candidate_ref" and field not in current:
+                field = "current_revision_ref"
             if key not in effective and isinstance(current.get(field), str) and current[field]:
                 effective[key] = current[field]
                 defaults[key] = {"value": current[field],
@@ -146,6 +150,8 @@ class TaskAgentSessionV2:
         if (len(current) != 1 or current[0].get("origin") != "execution_host"
                 or current[0].get("task_contract_ref") != self.state.contract_ref
                 or current[0].get("current_revision_ref") != self.state.current_revision_ref
+                or "current_candidate_ref" in current[0]
+                and current[0]["current_candidate_ref"] != self.state.current_candidate_ref
                 or current[0].get("binding_registry_ref") != self.state.registry_ref
                 or current[0].get("current_check_ref") != self.current_check):
             raise ValueError("TASK_V2_ACTUAL_REQUEST_BOUNDARY_CHANGED")
@@ -214,6 +220,10 @@ class TaskAgentSessionV2:
 
     def _prepare(self, name, schema, args):
         args = self.resolve_arguments(name, args)
+        if name in {"candidate_check", "finish"}:
+            # 为什么要有它：缺少尚未产生的产物是状态反馈，显式坏类型、未知字段和伪造引用仍须先按原合同拒绝。
+            schema = deepcopy(schema)
+            schema["required"] = [key for key in schema["required"] if key in args]
         if name in {"source_read", "candidate_read"}:
             # 为什么要有它：旧调用仍按原字符单位执行，兼容字段只进入运行校验，不在新模型schema继续宣传模糊坐标名。
             schema = deepcopy(schema)
@@ -270,9 +280,15 @@ class TaskAgentSessionV2:
             if args.get("offset", 0) > len(history_text(state, args["history_ref"])):
                 raise TaskActionInputError(("offset exceeds total_chars of this public task history",))
         elif name in {"candidate_check", "finish"}:
+            if "candidate_ref" not in args:
+                if "check_ref" in args:
+                    raise ValueError("TASK_V2_CURRENT_CANDIDATE_REQUIRED")
+                raise TaskCandidateReadinessError(("candidate_required",))
             if args["candidate_ref"] != state.current_revision_ref:
                 raise ValueError("TASK_V2_CURRENT_CANDIDATE_REQUIRED")
             state.validate_candidate(args["candidate_ref"])
+            if name == "finish" and "check_ref" not in args:
+                raise TaskCandidateReadinessError(("current_check_required",))
         return PreparedTaskAction(deepcopy(args), int(name in {"source_read", "candidate_read", "source_search", "check_feedback_read", "history_read"}),
                                   self.request_version_identity())
 
@@ -383,7 +399,8 @@ class TaskAgentSessionV2:
                                      operation_id=operation)
         if name == "plan_update":
             return {"technical_plan_ref": state.update_plan(args["plan"], operation_id=operation),
-                    "binding_registry_ref": state.registry_ref, "candidate_ref": state.current_revision_ref}
+                    "binding_registry_ref": state.registry_ref, "current_revision_ref": state.current_revision_ref,
+                    "candidate_ref": state.current_candidate_ref}
         if name == "candidate_submit":
             result = state.submit(args["parent_revision_ref"], args["edits"], operation_id=operation,
                 model_origin={key: deepcopy(origin[key]) for key in ("call_id", "response_ref", "arguments_ref")})
@@ -543,7 +560,8 @@ class TaskAgentSessionV2:
                 + "Same schema for first and later edits; all previous edits remain unless explicitly reversed. "
                 "rationale is optional explanatory evidence; omission is recorded as not_expressed without inventing a reason."),
             ("candidate_check", "candidate_check", {"candidate_ref": text}, ["candidate_ref"],
-                "Execute full frozen public acceptance against this exact current candidate. Return actual failure observations."),
+                "Execute full frozen public acceptance against this exact current candidate. A source snapshot is not a candidate. "
+                "Without an accepted candidate, return not_ready without executing checks. Return actual failure observations."),
             ("finish", "finish", {"candidate_ref": text, "check_ref": text}, ["candidate_ref", "check_ref"],
                 "Request product handoff of the current candidate with its current passed public check. This does not Apply or deliver code."),
         ]

@@ -580,6 +580,10 @@ def _reconcile_checkpoint(state, checkpoint_ref, checkpoint, latest_path):
             "current_revision_ref": value["task_head"]["current_revision_ref"],
             "binding_registry_ref": value["task_head"]["registry_ref"],
             "current_check_ref": value["session"]["current_check"]}, "PROVIDER_WORKING_BOUNDARY_CHANGED")
+        # 为什么要有它：新请求的候选事实须由原源码状态复算；旧请求缺少该字段时保留原边界，不补写历史。
+        if "current_candidate_ref" in current:
+            _require(current["current_candidate_ref"] == state.current_candidate_ref,
+                "PROVIDER_CANDIDATE_BOUNDARY_CHANGED")
         # 为什么要有它：provider_pending在请求准备前落盘，恢复应重建实际请求的观察状态而不是沿用旧边界。
         working = update_working_state(owner.get("working_state"), retained_request_from_document(expected),
             task_contract_ref=boundary["task_contract_ref"], current_revision_ref=boundary["current_revision_ref"],
@@ -636,7 +640,22 @@ def _reconcile_checkpoint(state, checkpoint_ref, checkpoint, latest_path):
             return _trusted_read(reference, state.store_root)
         validate_origin_request(origin, value["details"]["provider_turns"], reader=reader)
         output, arguments, name = receipt["output"], resolved_origin_arguments(origin, reader=reader), origin["name"]
-        if name in {"candidate_submit", "binding_add", "plan_update"}:
+        if name == "plan_update":
+            operation = state.head["operations"].get(call_id)
+            expected = {"technical_plan_ref": state.head["plan_ref"], "binding_registry_ref": state.registry_ref}
+            _require(operation is not None and operation["result"] == {"plan_ref": expected["technical_plan_ref"]}
+                and operation["request_hash"] == canonical_hash({"kind": "plan_update", "plan": arguments["plan"]}),
+                "MUTATION_RECEIPT_MISSING")
+            actual_request = reader(origin["request_ref"]) if origin.get("request_ref") else {}
+            new_candidate_fact = any("current_candidate_ref" in row.get("content", {}).get("current_task_state", {})
+                for row in actual_request.get("messages", []) if isinstance(row.get("content"), dict))
+            # 为什么要有它：新回执区分源码与候选；历史回执仍按当时的源码引用验真，不能追认其为真实候选。
+            if new_candidate_fact or "current_revision_ref" in output:
+                expected.update(current_revision_ref=state.current_revision_ref, candidate_ref=state.current_candidate_ref)
+            else:
+                expected["candidate_ref"] = state.current_revision_ref
+            _require(output == expected, "PLAN_RECEIPT_BOUNDARY_CHANGED")
+        elif name in {"candidate_submit", "binding_add"}:
             operation = state.head["operations"].get(call_id)
             _require(operation is not None and all(output.get(key) == item for key, item in operation["result"].items()),
                 "MUTATION_RECEIPT_MISSING")

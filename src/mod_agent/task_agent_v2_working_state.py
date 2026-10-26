@@ -127,7 +127,7 @@ def update_working_state(previous, request, *, task_contract_ref, current_revisi
             fact = {"call_id": result.call_id, "name": result.name, "arguments": arguments,
                 "returned_output_sha256": canonical_hash(result.output), "repeated_exact_return": repeated}
             value["latest_action"] = fact
-            if result.name == "candidate_check":
+            if result.name == "candidate_check" and executed:
                 counts["public_check_returns"] += 1
                 value["latest_public_check"] = {**fact, "output": deepcopy(result.output)}
                 if observed.get("status") not in {None, "passed"}:

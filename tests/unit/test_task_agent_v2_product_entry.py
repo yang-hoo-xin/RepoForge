@@ -29,7 +29,8 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                                                                  exercise_feedback=False, expect_postcheck_failure=False,
                                                                  exercise_paging=False, exercise_history=False,
                                                                  exercise_deadline=False, expect_unsent_deadline=False,
-                                                                 exercise_repeat=False, exercise_diagnostics=False):
+                                                                 exercise_repeat=False, exercise_diagnostics=False,
+                                                                 exercise_candidate_readiness=False):
     short_workspace = repository_workspace
     if exercise_history:
         from src.mod_agent import task_agent_v2_context as context_owner
@@ -157,6 +158,28 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         tool_outputs = [json.loads(x["content"]) for x in payload["messages"] if x["role"] == "tool"]
         observed = [row.get("value", row) for row in tool_outputs]
         last = observed[-1] if observed else None
+        if exercise_candidate_readiness and len(requests) in {5, 6, 7}:
+            # 为什么要有它：真实失败先消耗空修改纠错，随后无候选检查仍须能反馈，不能靠额外参数纠错机会绕过原问题。
+            current = next(json.loads(row["content"])["current_task_state"] for row in reversed(payload["messages"])
+                if row["role"] == "user" and '"current_task_state"' in row["content"])
+            assert current["current_candidate_ref"] is None
+            assert current["current_revision_ref"] == memory["parent"]
+            assert current["current_check_ref"] is None
+            if len(requests) == 5:
+                assert last["code"] == "TASK_AGENT_CANDIDATE_ARGUMENTS_INVALID"
+                assert "candidate_has_no_changes" in last["argument_errors"]
+                memory["readiness_extra_calls"] = 3
+            else:
+                assert last["status"] == "not_ready" and last["executed"] is False
+                assert last["code"] == "TASK_AGENT_CANDIDATE_NOT_READY"
+                assert last["argument_errors"] == ["candidate_required"]
+            if len(requests) in {5, 6}:
+                name = "candidate_check" if len(requests) == 5 else "finish"
+                return httpx.Response(200, request=request, json={"model": model,
+                    "message": {"role": "assistant", "content": "", "tool_calls": [{
+                        "id": "not-ready-" + name, "function": {"name": name, "arguments": {}}}]},
+                    "done": True, "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
+            last = memory["pre_candidate_binding"]
         if exercise_repeat and last and last.get("schema") == "task-agent-source-view.v2":
             current = next(json.loads(row["content"])["current_task_state"] for row in reversed(payload["messages"])
                 if row["role"] == "user" and '"current_task_state"' in row["content"])
@@ -278,6 +301,7 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                 - memory.get("repeat_requests", 0)
                 - memory.get("page_requests", 0)
                 - memory.get("history_requests", 0)
+                - memory.get("readiness_extra_calls", 0)
                 - int(exercise_correction and len(requests) > 4)
                 - (2 if exercise_stale_view and len(requests) > 12 else 0)
                 - int(exercise_feedback and len(requests) > 6))
@@ -285,6 +309,9 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
             memory.update(parent=context["parent_revision_ref"], registry=context["binding_registry_ref"])
             name, args = "plan_update", {"plan": {"hypotheses": ["Investigate marker state"], "intended_targets": ["Library/Unused.cs"]}}
         elif turn in {2, 6, 8, 10}:
+            if turn == 2:
+                assert last["candidate_ref"] is None
+                assert last["current_revision_ref"] == memory["parent"]
             path = {2: "Unused.cs", 6: "Arithmetic.cs", 8: "Factor.cs", 10: "Unused.cs"}[turn]
             name, args = "source_read", {"parent_revision_ref": memory["parent"], "path": "Library/" + path}
             memory["reading"] = path
@@ -310,6 +337,9 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                 "binding_id": memory["unused_binding"], "source_view_ref": memory["Unused.cs"]["source_view_ref"],
                 "before_text": "Marker = 0", "after_text": "Marker = 1", "rationale": "Intentionally wrong controlled hypothesis"}]}
             del args["edits"][0]["rationale"]
+            if exercise_candidate_readiness and len(requests) == 4:
+                memory["pre_candidate_binding"] = last
+                args["edits"][0]["after_text"] = args["edits"][0]["before_text"]
             if exercise_correction and len(requests) == 4:
                 del args["edits"][0]["before_text"]
         elif turn in {5, 12}:
@@ -340,9 +370,14 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         if turn == 6:
             assert last["status"] == "behavior_failed"
             assert last["verification_summary"]["test_command_executed"]
+        if exercise_candidate_readiness:
+            for field in ("candidate_ref", "check_ref", "parent_revision_ref", "expected_registry_ref"):
+                args.pop(field, None)
         response = {"model": model, "message": {"role": "assistant", "content": "", "tool_calls": [
             {"function": {"name": name, "arguments": args}}]}, "done": True,
             "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20}
+        if exercise_candidate_readiness:
+            response["message"]["tool_calls"][0]["id"] = "readiness-turn-" + str(len(requests))
         return httpx.Response(200, request=request, json=response)
 
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", transport)
@@ -412,6 +447,7 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                              + memory.get("repeat_requests", 0)
                              + memory.get("page_requests", 0)
                              + memory.get("history_requests", 0)
+                             + memory.get("readiness_extra_calls", 0)
                              + int(exercise_correction) + (2 if exercise_stale_view else 0) + int(exercise_feedback))
     if exercise_feedback:
         assert pending["model_call_budget"]["consumed"] == 14
@@ -428,6 +464,20 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         assert pending["model_call_budget"]["consumed"] == 15
     assert {p.name: p.read_bytes() for p in (source / "Library").glob("*.cs")} == baseline
     root = Path(pending["run_root"])
+    if exercise_candidate_readiness:
+        from src.mod_agent.task_agent_v2_recovery import load_task_agent_checkpoint
+
+        latest = next((root / "a/v2/session-checkpoints").glob("*.json"))
+        saved = load_task_agent_checkpoint(artifact_store_root=root / "a",
+            checkpoint_ref=json.loads(latest.read_bytes())["checkpoint_ref"])["checkpoint"]
+        assert pending["model_call_budget"]["consumed"] == 16
+        assert saved["loop"]["tool_argument_correction_used"] is True
+        assert len(saved["session"]["public_checks"]) == 2
+        assert sum(row["name"] == "candidate_check" for row in saved["details"]["completed_tool_records"]) == 2
+        for name in ("candidate_check", "finish"):
+            record = saved["loop"]["call_records"]["not-ready-" + name]
+            assert record["status"] == "not_dispatched"
+            assert record["result"]["output"]["executed"] is False
     if exercise_deadline:
         from src.mod_agent.task_agent_v2_state import load_v2_artifact
 
@@ -514,6 +564,12 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
 def test_normal_cli_probe_unavailable_preserves_task_path(repository_workspace, monkeypatch, capsys):
     test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
         repository_workspace, monkeypatch, capsys, False, exercise_experiments=True)
+
+
+def test_normal_cli_empty_edit_then_absent_candidate_feedback_still_repairs_and_hands_off(
+        repository_workspace, monkeypatch, capsys):
+    test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
+        repository_workspace, monkeypatch, capsys, False, exercise_candidate_readiness=True)
 
 
 def test_normal_cli_passes_deadline_to_actual_requests_and_checkpoint(repository_workspace, monkeypatch, capsys):

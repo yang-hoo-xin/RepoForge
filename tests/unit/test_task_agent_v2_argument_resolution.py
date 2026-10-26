@@ -169,6 +169,70 @@ def test_current_candidate_check_and_probe_defaults_keep_model_selection_explici
         assert 'working_state' not in selected.definition.parameters.get('required', [])
 
 
+@pytest.mark.parametrize('name', ['candidate_check', 'finish'])
+def test_missing_candidate_is_not_defaulted_to_baseline_or_dispatched(session, name):
+    reference = bind(session)
+    current = json.loads(Path(reference['path']).read_bytes())['messages'][-1]['content']['current_task_state']
+    assert current.get('current_candidate_ref') is None
+    session.response_admission(response(name, {}, 'not-ready'))
+    assert session.actual_calls[-1]['effective_arguments'] == {}
+    with pytest.raises(ValueError, match='TASK_AGENT_CANDIDATE_NOT_READY'):
+        action(session, name).prepare({})
+    assert session.current_check is None and session.public_checks == []
+    assert session.state.current_revision_ref == session.state.contract['baseline_manifest_ref']
+
+
+def test_plan_update_reports_source_revision_without_inventing_a_candidate(session):
+    bind(session)
+    raw = {'plan': {'hypotheses': ['inspect source']}}
+    session.response_admission(response('plan_update', raw, 'plan'))
+    selected = action(session, 'plan_update')
+    result = selected.execute(selected.prepare(raw).value)
+    assert result['candidate_ref'] is None
+    assert result['current_revision_ref'] == session.state.current_revision_ref
+
+
+def test_candidate_binding_is_request_bound_and_rejects_forged_readiness(session):
+    baseline_request = bind(session)
+    session.response_admission(response('candidate_check', {}, 'before-candidate'))
+    candidate = edit(session.state, 'A.cs', '1', '2')['candidate_ref']
+    with pytest.raises(ValueError, match='TASK_AGENT_CANDIDATE_NOT_READY'):
+        action(session, 'candidate_check').prepare({})
+    current_request = bind(session)
+    assert action(session, 'candidate_check').prepare({}).value == {'candidate_ref': candidate}
+    document = json.loads(Path(current_request['path']).read_bytes())
+    document['messages'][-1]['content']['current_task_state']['current_candidate_ref'] = None
+    forged = session.owner._save('forged-candidate-boundary.json', document)
+    with pytest.raises(ValueError, match='ACTUAL_REQUEST_BOUNDARY_CHANGED'):
+        session.bind_actual_request(forged)
+    assert baseline_request != current_request
+
+
+def test_missing_check_for_real_candidate_is_correctable_but_explicit_invalid_values_are_not(session):
+    candidate = edit(session.state, 'A.cs', '1', '2')['candidate_ref']
+    bind(session)
+    with pytest.raises(ValueError, match='TASK_AGENT_CANDIDATE_NOT_READY'):
+        action(session, 'finish').prepare({})
+    for raw in ({'candidate_ref': 7}, {'candidate_ref': 'baseline'}, {'candidate_ref': 'forged'}):
+        with pytest.raises(ValueError) as error:
+            action(session, 'candidate_check').prepare(raw)
+        assert 'TASK_AGENT_CANDIDATE_NOT_READY' not in str(error.value)
+    assert action(session, 'candidate_check').prepare({'candidate_ref': candidate}).value['candidate_ref'] == candidate
+
+
+def test_legacy_saved_request_defaults_are_not_reinterpreted_as_new_readiness(session):
+    from src.mod_agent.task_agent_v2_tools import resolve_tool_arguments
+
+    reference = bind(session)
+    document = json.loads(Path(reference['path']).read_bytes())
+    document['messages'][-1]['content']['current_task_state'].pop('current_candidate_ref', None)
+    legacy = session.owner._save('legacy-request.json', document)
+    session.bind_actual_request(legacy)
+    effective, resolution = resolve_tool_arguments('candidate_check', {}, legacy)
+    assert effective == {'candidate_ref': session.state.current_revision_ref}
+    assert resolution['defaulted_fields']['candidate_ref']['locator'][-1] == 'current_revision_ref'
+
+
 def test_failed_public_episode_rejects_self_consistent_unsent_request(session):
     from src.mod_agent.model_qualification import read_bound_json
     from src.mod_agent.task_agent_v2_experience import seal_current_public_episode

@@ -190,6 +190,7 @@ class TaskAgentExecutionV2(TaskAgentExecution):
         current_check = state.load(session.current_check) if session.current_check is not None else None
         current = {"origin": "execution_host", "task_contract_ref": state.contract_ref,
             "current_revision_ref": state.current_revision_ref, "binding_registry_ref": state.registry_ref,
+            "current_candidate_ref": state.current_candidate_ref,
             "valid_bindings": [{"binding_id": key, "path": item["canonical_path"]} for key, item in sorted(registry["bindings"].items())],
             "current_check_ref": session.current_check, "current_check_status": current_check["status"] if current_check else None,
             "technical_plan_ref": state.head["plan_ref"], "baseline_revision_ref": state.contract["baseline_manifest_ref"],

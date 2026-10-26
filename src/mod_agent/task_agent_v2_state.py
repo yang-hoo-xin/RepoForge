@@ -295,6 +295,15 @@ class TaskAgentV2State:
     def current_revision_ref(self) -> str:
         return self.head["current_revision_ref"]
 
+    @property
+    def current_candidate_ref(self) -> str | None:
+        # 为什么要有它：源码基线可供读取和编辑，但只有已验证的候选产物才能进入检查与交接。
+        reference = self.current_revision_ref
+        if reference == self.contract["baseline_manifest_ref"]:
+            return None
+        self.validate_candidate(reference)
+        return reference
+
     def validate_registry(self, registry_ref: str) -> dict[str, Any]:
         registry = self.load(registry_ref)
         if registry.get("schema") != "task-agent-binding-registry.v2" or registry.get("contract_ref") != self.contract_ref:

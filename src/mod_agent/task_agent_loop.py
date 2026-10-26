@@ -106,6 +106,20 @@ class TaskCandidateRevisionInputError(ValueError):
         super().__init__("TASK_AGENT_CANDIDATE_ARGUMENTS_INVALID")
 
 
+class TaskCandidateReadinessError(ValueError):
+    """A check or handoff lacks a candidate or check, before any dispatch.
+
+    为什么要有它：尚未产生的候选或检查不应耗尽参数纠错机会，也不能被记录成已运行的验收。
+    """
+
+    def __init__(self, argument_errors: Sequence[str]):
+        if not argument_errors or any(item not in {"candidate_required", "current_check_required"}
+                for item in argument_errors):
+            raise ValueError("TASK_AGENT_ARGUMENT_FEEDBACK_INVALID")
+        self.argument_errors = tuple(argument_errors)
+        super().__init__("TASK_AGENT_CANDIDATE_NOT_READY")
+
+
 def read_budget_view(*, used, limit):
     """Project an existing owner's counter; never allocate or reset an allowance."""
     if (type(used) is not int or used < 0
@@ -585,6 +599,12 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
                         raise ValueError("TASK_AGENT_REUSE_NOT_CONFIRMED")
                     proof = _copy(proof)
                 prepared_rows.append((call, action, prepared, mode, proof, args_hash))
+            except TaskCandidateReadinessError as error:
+                if action.role not in {"candidate_check", "finish"}:
+                    hard_errors.append("TASK_AGENT_ACTION_NOT_ADMITTED")
+                else:
+                    input_errors[call.call_id] = list(error.argument_errors)
+                    input_error_codes[call.call_id] = "TASK_AGENT_CANDIDATE_NOT_READY"
             except TaskCandidateRevisionInputError as error:
                 if action.role != "candidate_submit" or action.read_only:
                     hard_errors.append("TASK_AGENT_ACTION_NOT_ADMITTED")
@@ -615,7 +635,8 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
             return stop("TASK_AGENT_BATCH_NOT_ADMITTED", detail={"reasons": hard_errors})
 
         if input_errors or correctable_mixed:
-            if argument_used:
+            readiness_only = bool(input_errors) and set(input_error_codes.values()) == {"TASK_AGENT_CANDIDATE_NOT_READY"}
+            if argument_used and not readiness_only:
                 return stop("TASK_AGENT_TOOL_ARGUMENT_CORRECTION_EXHAUSTED")
             if call_allowance(snapshot(), model_role) <= 0:
                 return stop("TASK_AGENT_MODEL_BUDGET_EXHAUSTED")
@@ -624,11 +645,15 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
             for call in response.tool_calls:
                 prepared = prepared_by_id.get(call.call_id)
                 corrections.append(AgentToolResult(call.call_id, call.name, {
-                    "status": "rejected_not_executed", "code": (
+                    "status": "not_ready" if readiness_only else "rejected_not_executed",
+                    **({"executed": False} if readiness_only else {}), "code": (
                         "TASK_AGENT_MIXED_TOOL_BATCH" if correctable_mixed else
                         input_error_codes.get(call.call_id, "TASK_AGENT_SOURCE_ARGUMENTS_INVALID")),
                     "argument_errors": input_errors.get(call.call_id, []), "read_cost": 0,
-                    "message": ("No calls in this batch executed. Only " + "/".join(read_tool_names) + " may be batched together. "
+                    "message": ("No candidate check or handoff executed. Submit a valid source change before checking; "
+                        "finish requires a current passed check. Continue using the existing task tools and budget."
+                        if readiness_only else
+                        "No calls in this batch executed. Only " + "/".join(read_tool_names) + " may be batched together. "
                         "Send upstream, candidate_submit, candidate_check or finish alone. Unchanged never-dispatched calls may keep their IDs."
                         " 为什么要有它：本批没有执行，必须先拆开动作再按原预算继续，不能依赖尚未产生的结果。"
                         if correctable_mixed else
@@ -650,12 +675,13 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
             size = sum(len(_json(asdict(result)).encode("utf-8")) for result in corrections)
             try:
                 charge(byte_count=size)
-                argument_used = True
-                emit({"event": "mixed_batch_correction" if correctable_mixed else
+                argument_used = argument_used or not readiness_only
+                emit({"event": "candidate_readiness_feedback" if readiness_only else
+                      "mixed_batch_correction" if correctable_mixed else
                       "candidate_argument_correction" if "TASK_AGENT_CANDIDATE_ARGUMENTS_INVALID" in input_error_codes.values()
                       else "source_argument_correction",
                       "turn": turns, "observation_bytes": size,
-                      "tool_argument_correction_used": True})
+                      "tool_argument_correction_used": argument_used})
             except Exception:
                 return stop("TASK_AGENT_OBSERVATION_BUDGET_EXHAUSTED", unadmitted=corrections)
             retain(corrections, response)
