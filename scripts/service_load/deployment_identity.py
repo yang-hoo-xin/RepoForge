@@ -25,7 +25,7 @@ INSPECT_FORMAT = (
     '"Paused":{{json .State.Paused}},"Restarting":{{json .State.Restarting}},'
     '"Dead":{{json .State.Dead}},"OOMKilled":{{json .State.OOMKilled}},'
     '"Pid":{{json .State.Pid}},"ExitCode":{{json .State.ExitCode}},'
-    '"HealthStatus":{{if .State.Health}}{{json .State.Health.Status}}{{else}}null{{end}}},'
+    '"HealthStatus":{{with (index .State "Health")}}{{json (index . "Status")}}{{else}}null{{end}}},'
     '"mounts":[{{range $i,$m := .Mounts}}{{if $i}},{{end}}'
     '{"type":{{json $m.Type}},"name":{{json $m.Name}},'
     '"destination":{{json $m.Destination}}}{{end}}]}'
