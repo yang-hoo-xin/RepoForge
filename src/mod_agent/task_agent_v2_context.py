@@ -158,7 +158,8 @@ def project_history(request, state, *, history_bytes=None, context_window=None, 
     history = request.historical_tool_exchanges
     latest_check = next((index for index in range(len(history) - 1, -1, -1)
         if any(row.name == "candidate_check" for row in history[index].tool_results)), None)
-    retained = protected_history_indices(history)
+    retained = protected_history_indices(history, current_revision_ref=_request_revision(request, state),
+        active_results=request.tool_results)
     used = len(_text([asdict(row) for row in request.tool_results]).encode("utf-8"))
     used += sum(len(_text(asdict(history[index])).encode("utf-8")) for index in retained)
     # Always retain the active exchange; never synthesize its provider state or tool result.
@@ -256,12 +257,38 @@ def with_history_projection(request, facts):
     return replace(request, messages=tuple(messages))
 
 
-def protected_history_indices(history):
+def _request_revision(request, state=None):
+    for message in reversed(request.messages):
+        if isinstance(message.content, dict) and isinstance(message.content.get("current_task_state"), dict):
+            return message.content["current_task_state"].get("current_revision_ref")
+    return getattr(state, "current_revision_ref", None)
+
+
+def protected_history_indices(history, *, current_revision_ref=None, active_results=()):
     """Identify native exchanges that projection may not omit.
 
     为什么要有它：正常投影和恢复证明必须共用未闭合调用与公开反馈的保护条件，不能各自形成不同门禁。
     """
     protected = set()
+    # 为什么要有它：活动代码窗口和最近成功编辑比旧旁白更接近下一次决策；仍只保护实际返回的完整调用/输出组。
+    def current_work(result, kind):
+        output = result.output if isinstance(result.output, dict) else {}
+        value = output.get("value")
+        if output.get("execution") != "executed" or not isinstance(value, dict):
+            return False
+        if kind == "source":
+            return (result.name in {"source_read", "candidate_read"} and value.get("schema") == "task-agent-source-view.v2"
+                and isinstance(value.get("source_view_ref"), str)
+                and (current_revision_ref is None or value.get("parent_revision_ref") == current_revision_ref))
+        return (result.name in {"candidate_submit", "candidate_edit"} and isinstance(value.get("candidate_ref"), str)
+            and (current_revision_ref is None or value["candidate_ref"] == current_revision_ref))
+
+    for kind in ("source", "edit"):
+        if not any(current_work(result, kind) for result in active_results):
+            latest = next((index for index in range(len(history) - 1, -1, -1)
+                if any(current_work(result, kind) for result in history[index].tool_results)), None)
+            if latest is not None:
+                protected.add(latest)
     for wanted in ("candidate_check", "check_feedback_read", "feedback_read"):
         latest = next((index for index in range(len(history) - 1, -1, -1)
             if any(row.name == wanted for row in history[index].tool_results)), None)
@@ -301,7 +328,8 @@ def _project_configured_history(request, state, *, context_window, output_budget
             "failure_boundary": "context_projection", "configured_num_ctx": context_window,
             "num_predict": output_budget, "transport_attempted": False})
     history = request.historical_tool_exchanges
-    protected = protected_history_indices(history)
+    protected = protected_history_indices(history, current_revision_ref=_request_revision(request, state),
+        active_results=request.tool_results)
     retained = set(range(len(history)))
     removable = [index for index in range(len(history)) if index not in protected]
     estimator = getattr(provider, "_context_admission", None)
@@ -315,14 +343,18 @@ def _project_configured_history(request, state, *, context_window, output_budget
         return (estimator(payload) if callable(estimator) else build_ollama_context_admission(
             payload=payload, configured_num_ctx=context_window, num_predict=output_budget))
 
+    statements_omitted = any(isinstance(message.content, dict)
+        and ((message.content.get("current_task_state") or {}).get("working_state") or {}).get(
+            "model_statement_projection", {}).get("omitted_statement_count", 0) > 0 for message in request.messages)
     facts = {"schema": "task-agent-history-projection.v2", "origin": "execution_host",
-        "projection_policy": "provider_budget_complete_exchanges_v1", "history_ref": None,
+        "projection_policy": "current_work_before_archived_narrative_v1", "history_ref": None,
         "archived_exchange_count": 0, "retained_exchange_count": len(history) + int(bool(request.tool_results)),
         "protected_history_indices": sorted(protected), "active_exchange_preserved": True,
-        "model_statements_preserved": True, "configured_num_ctx": context_window, "output_token_reserve": output_budget,
+        "model_statements_preserved": not statements_omitted, "model_statement_originals_archived": statements_omitted,
+        "configured_num_ctx": context_window, "output_token_reserve": output_budget,
         "exact_prompt_tokens_available_pre_call": False,
-        "meaning": "Only closed historical exchanges may be omitted. The current exchange, latest public check/failure, "
-            "and model-authored working statements remain available. history_read returns archived original public data."}
+        "meaning": "Omit archived older raw statements before closed historical exchanges. Preserve current source/edit, "
+            "latest public check/failure and complete native call/output groups; history_read returns original public data."}
     projected_messages = request.messages
     while True:
         facts.update(archived_exchange_count=len(history) - len(retained),
@@ -336,13 +368,13 @@ def _project_configured_history(request, state, *, context_window, output_budget
         admission = measure(checked)
         if admission.get("admitted") is True:
             break
+        compacted = _omit_oldest_statement(projected_messages)
+        if compacted is not None:
+            projected_messages = compacted
+            facts["model_statements_preserved"] = False
+            facts["model_statement_originals_archived"] = True
+            continue
         if not removable:
-            compacted = _omit_oldest_statement(projected_messages)
-            if compacted is not None:
-                projected_messages = compacted
-                facts["model_statements_preserved"] = False
-                facts["model_statement_originals_archived"] = True
-                continue
             raise AgentTurnProviderError("TASK_AGENT_PROTECTED_CONTEXT_EXCEEDS_LIMIT", diagnostic={
                 "failure_boundary": "context_projection", "context_admission": admission,
                 "protected_history_indices": sorted(protected), "active_exchange_preserved": True,
@@ -377,13 +409,7 @@ def _omit_oldest_statement(messages):
         latest = next((row for row in rows
             if row["content_sha256"] == working.get("latest_model_statement_sha256")),
             max(rows, key=lambda row: row.get("last_observed_sequence", row["statement_index"])))
-        anchors = {latest["statement_index"]}
-        current_rows = [row for row in rows if row.get("source_boundary") == boundary]
-        first_current = min(current_rows, key=lambda row: row.get(
-            "boundary_first_observed_sequence", row["statement_index"])) if current_rows else None
-        if first_current is not None:
-            anchors.add(first_current["statement_index"])
-        victim = next((row for row in rows if row["statement_index"] not in anchors), None)
+        victim = next((row for row in rows if row["statement_index"] != latest["statement_index"]), None)
         if victim is None:
             return None
         changed = deepcopy(content)
@@ -392,11 +418,12 @@ def _omit_oldest_statement(messages):
             if row["statement_index"] != victim["statement_index"]]
         selected = view["model_statement_projection"]
         selected["retained_statement_indices"] = [row["statement_index"] for row in view["model_statements"]]
-        selected["omitted_statement_indices"] = sorted([*selected["omitted_statement_indices"], victim["statement_index"]])
-        selected["current_boundary_statement_available"] = first_current is not None
+        selected.pop("omitted_statement_indices", None)
+        selected["omitted_statement_count"] = selected["total_statements"] - len(view["model_statements"])
+        selected["current_boundary_statement_available"] = any(row.get("source_boundary") == boundary for row in view["model_statements"])
         selected["latest_statement_sha256"] = latest["content_sha256"]
         selected["selection_basis"] = ("Budgeted raw statements: actual latest occurrence retained; "
-            + ("first statement at the current recorded boundary also retained. " if first_current is not None
+            + ("A statement at the current recorded boundary is retained. " if selected["current_boundary_statement_available"]
                 else "No statement at the current boundary exists; prior statements are historical. ")
             + "No semantic hypothesis status is inferred.")
         return (*messages[:index], replace(message, content=changed), *messages[index + 1:])
@@ -442,7 +469,9 @@ def validate_projected_request(original, prepared, state):
         require(index is not None, "history_not_ordered_original_subset")
         indices.append(index)
         cursor = index + 1
-    protected = protected_history_indices(retained_request_from_document(original).historical_tool_exchanges)
+    original_request = retained_request_from_document(original)
+    protected = protected_history_indices(original_request.historical_tool_exchanges,
+        current_revision_ref=current.get("current_revision_ref"), active_results=original_request.tool_results)
     require(protected.issubset(indices), "protected_exchange_omitted")
     omitted = [row for index, row in enumerate(history) if index not in indices]
     projection = current.get("history_projection")

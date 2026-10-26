@@ -111,7 +111,16 @@ def validate_task_agent_handoff_v2(outcome, *, store, workspace_root, expected_i
             and row.get("event") in loop.get("events", [])
             and row["event"].get("output_sha256") == canonical_hash(output)
             and output.get("execution") == "executed", "V2_TOOL_EXECUTION_CHANGED")
-        outputs.append((name, arguments, output.get("value", {}), row))
+        from src.mod_agent.task_agent_v2_tools import (
+            resolved_origin_arguments,
+            validate_origin_request,
+        )
+        origin = {**row, "arguments": arguments}
+        def reader(reference):
+            return _read(reference, store.root)
+        validate_origin_request(origin, execution.get("provider_turns", []), reader=reader)
+        effective = resolved_origin_arguments(origin, reader=reader)
+        outputs.append((name, effective, output.get("value", {}), row))
     historical_count = 0
     if state.contract.get("rebase_origin_ref") is not None:
         # 为什么要有它：重基线保留原技术会话，但旧contract的提交不能冒充新baseline的候选父链。

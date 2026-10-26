@@ -72,7 +72,7 @@ def _public_reference(reference):
     return reference
 
 
-def _validated_action(call, session):
+def _validated_action(call, session, *, provider_turns=None):
     """Read the actual model call and independent tool receipt, never inferred reasoning."""
     from src.mod_agent.task_agent_execution import _admitted_response, _read
 
@@ -83,6 +83,11 @@ def _validated_action(call, session):
     _learning_require(len(matching) == 1 and matching[0][1] == {
         "call_id": call["call_id"], "name": call["name"], "arguments": arguments}
         and arguments == call["arguments"], "ACTION_CHANGED")
+    from src.mod_agent.task_agent_v2_tools import resolved_origin_arguments, validate_origin_request
+    resolved_origin_arguments(call, reader=lambda ref: _read(_public_reference(ref), root))
+    if provider_turns is not None:
+        # 为什么要有它：失败终态也会入库；自洽的host默认值必须属于实际发送的请求，不能仅凭重签来源成为学习事实。
+        validate_origin_request(call, provider_turns, reader=lambda ref: _read(_public_reference(ref), root))
     reference = call.get("execution_receipt_ref")
     _learning_require(reference is not None, "ACTION_RECEIPT_MISSING")
     receipt = _read(_public_reference(reference), root)
@@ -140,7 +145,9 @@ def _experiment_evidence(session, completed_ids=None):
             and dispatched.get("request") == request
             and request["model_origin"] == {k: call[k] for k in ("call_id", "response_ref", "arguments_ref")},
             "EXPERIMENT_EXECUTION_CHANGED")
-        actual_revision = call["arguments"].get("source_revision_ref", receipt["task_head"]["current_revision_ref"])
+        from src.mod_agent.task_agent_v2_tools import resolved_origin_arguments
+        effective = resolved_origin_arguments(call)
+        actual_revision = effective.get("source_revision_ref", receipt["task_head"]["current_revision_ref"])
         revision, identity, files = _source(state, actual_revision)
         observed = original["observations"]
         _learning_require(request["source_revision_ref"] == observed["source_revision_ref"] == revision
@@ -527,6 +534,7 @@ def seal_saved_public_episode(*, artifact_store_root, checkpoint_ref, stop_ref):
         "run_id": stop["run_id"], "request_id": stop["request_id"], "task_contract_ref": state.contract_ref,
         "checkpoint_ref": checkpoint_ref, "stop_ref": deepcopy(stop_ref), "process_ref": deepcopy(stop["source_ref"]),
         "completed_tool_records": deepcopy(records), "loop_result_ref": loop_ref,
+        "provider_turns": deepcopy(checkpoint["details"]["provider_turns"]),
         "candidate_ref": current if current != state.contract["baseline_manifest_ref"] else None,
         "check_ref": checkpoint["session"].get("current_check"), "unknown_effects": unknowns,
         "native_terminal": False, "business_result": "not_established", "model_calls": 0,
@@ -712,7 +720,8 @@ class TaskAgentV2Experience:
             _learning_require(all(completed_records[call["call_id"]].get(key) == value
                 for key, value in call.items()), "COMPLETED_ACTION_CHANGED")
             ref = call["response_ref"]
-            _response, index_in_response, action_receipt = _validated_action(call, session)
+            _response, index_in_response, action_receipt = _validated_action(call, session,
+                provider_turns=execution.get("provider_turns", []))
             evidence_id = "public_action_" + str(index)
             sources.append({"kind": "json_file", "evidence_id": evidence_id, **ref,
                 "visibility": "public", "allowed_uses": ["strategy_learning"]})

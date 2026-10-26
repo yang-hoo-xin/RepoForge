@@ -321,9 +321,8 @@ def test_long_working_statements_are_projected_and_originals_remain_publicly_ret
     projected, facts = project_history(original, state, context_window=22000, output_budget=4000)
     view = current_state(projected)["working_state"]
     projection = view["model_statement_projection"]
-    assert projection["omitted_statement_indices"]
-    assert projection["retained_statement_indices"][0] == 0
-    assert projection["retained_statement_indices"][-1] == 11
+    assert projection["omitted_statement_count"] == 11
+    assert projection["retained_statement_indices"] == [11]
     assert projection["semantic_summary_available"] is False
     assert "Claim 5:" in history_text(state, projection["archive_ref"])
     assert len(working["model_statements"]) == 12
@@ -354,12 +353,107 @@ def test_occurrence_aware_projection_keeps_actual_latest_and_discloses_absent_cu
             source_boundary={"current_revision_ref": "historical"})
     view = working_state_view(working, statement_archive_ref="public-archive")
     messages = (AgentMessage("user", {"current_task_state": {"working_state": view}}),)
-    compacted = _omit_oldest_statement(messages)
-    compacted = _omit_oldest_statement(compacted)
-    selected = compacted[0].content["current_task_state"]["working_state"]
+    assert _omit_oldest_statement(messages) is None
+    selected = messages[0].content["current_task_state"]["working_state"]
     assert [row["content"] for row in selected["model_statements"]] == ["A"]
     assert selected["model_statement_projection"]["current_boundary_statement_available"] is False
-    assert "No statement at the current boundary exists" in selected["model_statement_projection"]["selection_basis"]
+    assert selected["model_statement_projection"]["omitted_statement_count"] == 2
+
+
+def work_exchange(name, identifier, value):
+    item = exchange(name, identifier)
+    item.tool_results[0].output.clear()
+    item.tool_results[0].output.update(execution="executed", value=value)
+    return item
+
+
+def test_capacity_omits_old_narration_before_even_unprotected_current_code_and_keeps_quotes(state):
+    from src.libs.llm.agent_turn import AgentToolCall, AgentTurnResponse
+    from src.mod_agent.task_agent_v2_semantic_state import (
+        record_semantic_state,
+        semantic_state_view,
+        with_semantic_evidence,
+    )
+    from src.mod_agent.task_agent_v2_working_state import retain_model_statement, working_state_view
+
+    boundary = {"task_contract_ref": state.contract_ref, "current_revision_ref": "current",
+        "binding_registry_ref": "registry", "current_check_ref": "failed"}
+    working = {"boundary": boundary}
+    for content in ("OBSOLETE_NARRATION " * 300, "Latest explicit Arithmetic hypothesis remains open."):
+        working = retain_model_statement(working, {"content": content}, source_boundary=boundary)
+    archive = state.save("context-archive", {"schema": "task-agent-context-archive.v2",
+        "task_contract_ref": state.contract_ref, "exchanges": [{"model_statement": row} for row in working["model_statements"]]})
+    # A legacy full view exercises the eviction order; normal views already omit these old statements.
+    view = working_state_view(working)
+    view["model_statement_projection"]["archive_ref"] = archive
+    code = "public static int Double(int value) => value;"
+    first = work_exchange("source_read", "first-window", {"schema": "task-agent-source-view.v2",
+        "parent_revision_ref": "current", "source_view_ref": "view-first", "path": "Arithmetic.cs", "text": "// earlier actual window"})
+    recent = work_exchange("source_read", "recent-window", {"schema": "task-agent-source-view.v2",
+        "parent_revision_ref": "current", "source_view_ref": "view-recent", "path": "Arithmetic.cs", "text": code})
+    edit = work_exchange("candidate_submit", "accepted", {"candidate_ref": "current"})
+    failed = work_exchange("candidate_check", "failed", {"status": "behavior_failed", "check_ref": "failed",
+        "observations": [{"expected": 6, "observed": {"actual": 3}}]})
+    current = {"origin": "execution_host", **boundary, "working_state": view}
+    original = replace(configured_request(), messages=(AgentMessage("system", "Use actual evidence"),
+        AgentMessage("user", {"current_task_state": current})), historical_tool_exchanges=(edit, first, recent, failed),
+        tool_results=(), provider_state=None, tool_result_insert_index=None)
+    seen = with_semantic_evidence(original)
+    citation = next(row for row in current_state(seen)["semantic_evidence_catalog"] if row["label"] == "source_read:recent-window")
+    explicit = {"observations": [{"statement": "The returned method returns its input.", "evidence": [{"id": citation["id"], "quote": code}]}],
+        "hypotheses": [{"id": "h1", "statement": "Returning the input may explain actual 3 versus expected 6.", "status": "open",
+            "evidence": [{"id": citation["id"], "quote": code}]}], "open_questions": [],
+        "next_action": {"purpose": "Test the proposed arithmetic change", "expected_observation": "Double(3) equals 6",
+            "decision_if_observed": "Keep or revise the expressed hypothesis"}}
+    response = AgentTurnResponse(provider="fixture", model="fixture", content=None, tool_calls=(
+        AgentToolCall("state", "source_read", {"working_state": explicit}),))
+    working = record_semantic_state(working, response, actual_request=asdict(seen),
+        request_ref={"path": "seen-request.json", "sha256": "seen"}, response_ref={"path": "response.json", "sha256": "response"})
+    current["semantic_work_state"] = semantic_state_view(working, boundary)
+    semantic_before = deepcopy(current["semantic_work_state"])
+    before = deepcopy(asdict(original))
+
+    class Provider:
+        context_window, max_output_tokens, model = 65536, 4096, "controlled"
+
+        def _context_admission(self, payload):
+            raw = json.dumps(payload, ensure_ascii=False)
+            assert code in raw and "// earlier actual window" in raw
+            return {"admitted": "OBSOLETE_NARRATION" not in raw, "mode": "controlled_narrative_pressure"}
+
+    projected, facts = project_history(original, state, provider=Provider(), decorate=with_semantic_evidence)
+    assert facts["archived_exchange_count"] == 0
+    assert projected.historical_tool_exchanges == original.historical_tool_exchanges
+    assert asdict(original) == before
+    assert current_state(projected)["semantic_work_state"] == semantic_before
+    assert current_state(projected)["working_state"]["model_statement_projection"]["omitted_statement_count"] == 1
+    assert "OBSOLETE_NARRATION" in history_text(state, archive)
+
+
+def test_current_source_window_and_last_accepted_edit_survive_capacity_and_recovery_proof(state):
+    from src.mod_agent.task_agent_v2_context import validate_projected_request
+
+    stale = work_exchange("source_read", "stale", {"schema": "task-agent-source-view.v2",
+        "parent_revision_ref": "old", "source_view_ref": "old-view", "path": "Arithmetic.cs", "text": "OLD_SOURCE " * 1000})
+    accepted = work_exchange("candidate_edit", "edit", {"candidate_ref": "current"})
+    read = work_exchange("candidate_read", "read", {"schema": "task-agent-source-view.v2",
+        "parent_revision_ref": "current", "source_view_ref": "current-view", "path": "Arithmetic.cs",
+        "text": "public static int Double(int value) => value * 2;"})
+    raw = replace(configured_request(), messages=(AgentMessage("system", "Tools"), AgentMessage("user", "Repair Arithmetic")),
+        historical_tool_exchanges=(stale, accepted, read), tool_results=(), provider_state=None, tool_result_insert_index=None)
+    staged = replace(raw, messages=(*raw.messages, AgentMessage("user", {"current_task_state": {
+        "origin": "execution_host", "task_contract_ref": state.contract_ref, "current_revision_ref": "current"}})))
+    projected, facts = project_history(staged, state, context_window=9000, output_budget=4000)
+    assert projected.historical_tool_exchanges == (accepted, read)
+    assert facts["protected_history_indices"] == [1, 2]
+    assert "OLD_SOURCE" in history_text(state, facts["history_ref"])
+    original_doc, prepared_doc = (json.loads(json.dumps(asdict(row))) for row in (raw, projected))
+    assert validate_projected_request(original_doc, prepared_doc, state)["retained_history_indices"] == [1, 2]
+    for removed in range(2):
+        changed = deepcopy(prepared_doc)
+        changed["historical_tool_exchanges"].pop(removed)
+        with pytest.raises(ValueError, match="protected_exchange_omitted"):
+            validate_projected_request(original_doc, changed, state)
 
 
 def projected_recovery_documents(state):

@@ -167,23 +167,47 @@ def update_working_state(previous, request, *, task_contract_ref, current_revisi
 
 
 def working_state_view(working, *, statement_archive_ref=None):
-    """Expose durable statements and observations without the growing deduplication ledger.
+    """Project current work without resending the durable narrative and audit ledgers.
 
-    为什么要有它：完整台账用于恢复，模型需要的是可追溯事实和原文，内部去重键不应挤占决策上下文。
+    为什么要有它：后台保留完整原文和恢复台账；模型需要当前明确陈述及反馈引用，旧叙述不能重复挤占源码与实验结果。
     """
-    keys = ("schema", "boundary", "counts", "model_statements", "latest_action", "latest_public_check",
-        "latest_public_failure", "consecutive_repeated_returns", "stagnation",
-        "latest_model_statement_sha256", "public_failure_repetition")
+    keys = ("schema", "boundary", "counts", "consecutive_repeated_returns", "latest_model_statement_sha256")
     view = {key: deepcopy(working[key]) for key in keys if key in working}
-    statements = view.get("model_statements", [])
+    statements = deepcopy(working.get("model_statements", []))
     for index, statement in enumerate(statements):
         statement["statement_index"] = index
+    latest = max(statements, key=lambda row: row.get("last_observed_sequence", row["statement_index"]), default=None)
+    # No original is omitted without the normal caller's public archive.
+    selected = [latest] if latest is not None and statement_archive_ref is not None else statements
+    view["model_statements"] = selected
+    for key in ("latest_action", "latest_public_check", "latest_public_failure"):
+        row = working.get(key)
+        if not isinstance(row, dict):
+            continue
+        item = {name: deepcopy(row[name]) for name in ("call_id", "name", "returned_output_sha256",
+            "repeated_exact_return") if name in row}
+        output = row.get("output")
+        if isinstance(output, dict):
+            observed = output.get("value", output)
+            if isinstance(observed, dict):
+                item["receipt"] = {name: deepcopy(observed[name]) for name in
+                    ("status", "candidate_ref", "check_ref", "feedback_ref", "source_revision_ref") if name in observed}
+        view[key] = item
+    if "stagnation" in working:
+        view["stagnation"] = {key: deepcopy(working["stagnation"][key]) for key in
+            ("triggered", "consecutive_repeated_returns", "same_visible_public_failure", "business_progress_inferred", "guidance")
+            if key in working["stagnation"]}
+    if "public_failure_repetition" in working:
+        view["public_failure_repetition"] = {key: deepcopy(working["public_failure_repetition"][key]) for key in
+            ("signature", "consecutive_checks", "latest_check_ref", "latest_call_id", "same_visible_failure", "business_progress_inferred")
+            if key in working["public_failure_repetition"]}
     view["model_statement_projection"] = {"archive_ref": statement_archive_ref,
-        "total_statements": len(statements), "retained_statement_indices": list(range(len(statements))),
-        "omitted_statement_indices": [], "semantic_summary_available": False,
-        "selection_basis": "Exact model statements in chronological order; no inferred hypothesis status.",
-        "meaning": "These are raw model statements, not a maintained or verified hypothesis set. "
-            "Omitted originals remain retrievable with history_read; omission does not mean a claim was resolved."}
+        "total_statements": len(statements), "retained_statement_indices": [row["statement_index"] for row in selected],
+        "omitted_statement_count": len(statements) - len(selected), "semantic_summary_available": False,
+        "current_boundary_statement_available": any(row.get("source_boundary") == working.get("boundary") for row in selected),
+        "selection_basis": "Latest actual nonempty model statement; earlier statements remain in the public archive."
+            if statement_archive_ref is not None else "All original statements retained because no archive was supplied.",
+        "meaning": "Raw model wording, not inferred hypothesis status. Omission does not mean a claim was resolved."}
     return view
 
 

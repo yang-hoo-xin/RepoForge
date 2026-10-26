@@ -20,10 +20,9 @@ from tests.unit.test_task_agent_v2_state import edit
 from tests.unit.test_task_agent_v2_state import state as state
 
 SEMANTIC_GUIDANCE = (
-    "Include working_state with your next normal tool action. Maintain concise observations, hypotheses, "
+    "working_state is optional. When useful, record concise observations, hypotheses, "
     "open questions and the purpose/expected observation of that action using the semantic contract "
-    "and actually seen evidence provided in current_task_state. Use an empty object only when the retained "
-    "state still describes the current decision and needs no update; "
+    "and actually seen evidence provided in current_task_state. Omit it when no update is needed; "
     "in a read-only batch include at most one nonempty update. These are your explicit advisory statements, "
     "not hidden reasoning, established truth, new permission or completion. "
     "Do not invent observations or cite unseen evidence."
@@ -51,7 +50,7 @@ def test_enabled_metadata_uses_existing_tools_and_disabled_input_remains_legacy(
     for name, row in enabled.items():
         assert row.role == legacy[name].role and row.read_only == legacy[name].read_only
         assert row.definition.parameters["properties"]["working_state"]["type"] == "object"
-        assert "working_state" in row.definition.parameters["required"]
+        assert "working_state" not in row.definition.parameters["required"]
         assert "observations" not in row.definition.parameters["properties"]["working_state"]
     session.owner.semantic_state_enabled = False
     assert session.initial_request() == legacy_request

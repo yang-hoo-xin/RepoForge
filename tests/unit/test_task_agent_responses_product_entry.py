@@ -27,7 +27,7 @@ from tests.unit.test_csharp_repository_product_entry import (
 
 @pytest.mark.parametrize("boundary", ["provider_receipt", "tool_receipt"])
 def test_responses_normal_cli_failure_revision_and_receipt_recovery(
-    repository_workspace, monkeypatch, capsys, record_property, boundary, registered_entry=False,
+    repository_workspace, monkeypatch, capsys, record_property, boundary, registered_entry=False, omit_host_ids=False,
 ):
     root = repository_workspace
     profile, source = _profile(root)
@@ -113,6 +113,8 @@ def test_responses_normal_cli_failure_revision_and_receipt_recovery(
         assert payload["store"] is False and payload["truncation"] == "disabled"
         assert "reasoning.encrypted_content" in payload["include"]
         assert all(tool["strict"] is False for tool in payload["tools"])
+        if omit_host_ids:
+            assert all("working_state" not in tool["parameters"].get("required", []) for tool in payload["tools"])
         assert payload.get("reasoning", {}).get("effort") == "medium"
         items = payload["input"]
         current = next(json.loads(row["content"])["current_task_state"] for row in reversed(items)
@@ -162,7 +164,11 @@ def test_responses_normal_cli_failure_revision_and_receipt_recovery(
         else:
             assert turn == 8 and last["status"] == "passed"
             name, arguments = "finish", {"candidate_ref": revision, "check_ref": last["check_ref"]}
-        arguments["working_state"] = {}
+        if omit_host_ids:
+            arguments = {key: value for key, value in arguments.items()
+                if key not in {"parent_revision_ref", "candidate_ref", "check_ref", "expected_registry_ref"}}
+        else:
+            arguments["working_state"] = {}
         call = {"type": "function_call", "id": f"item-{turn}", "call_id": f"call-{turn}",
             "status": "completed", "name": name, "arguments": json.dumps(arguments)}
         returned.append(call)
@@ -235,6 +241,14 @@ def test_responses_normal_cli_failure_revision_and_receipt_recovery(
     assert all(row["provider"] == "openai_responses" and row["model"] == model for row in responses)
     assert sum(row["usage"]["input_tokens"] + row["usage"]["output_tokens"] for row in responses) == 240
     assert all(row["usage"]["reasoning_tokens"] == 5 and row["usage"]["cached_input_tokens"] == 4 for row in responses)
+    if omit_host_ids:
+        from src.mod_agent.task_agent_v2_tools import resolved_origin_arguments
+
+        for origin in checkpoint["session"]["actual_calls"]:
+            assert origin["arguments"] == read_bound_json(origin["arguments_ref"])
+            assert not {"parent_revision_ref", "candidate_ref", "check_ref", "working_state"}.intersection(origin["arguments"])
+            effective = resolved_origin_arguments(origin)
+            assert effective == origin["effective_arguments"] and origin["argument_resolution"]["defaulted_fields"]
     for response, request in zip(responses, requests, strict=True):
         diagnostic = response["provider_diagnostic"]
         assert diagnostic["usage_available"] is True
@@ -252,7 +266,7 @@ def test_responses_normal_cli_failure_revision_and_receipt_recovery(
         assert len(requests) == 8
         registered_evidence = _save(root / "responses-registered-evidence.json", observed)
     record_property("responses_entry", json.dumps({
-        "scope": "controlled_HTTP_and_SDK_not_autonomous_repair", "interruption": boundary,
+        "scope": "controlled_HTTP_and_SDK_not_autonomous_repair", "interruption": boundary, "omitted_host_identifiers": omit_host_ids,
         "actual_request_refs": [turn["request_ref"] for turn in turns],
         "initial_checkpoint_ref": checkpoint_ref, "final_checkpoint_ref": owner.v2_checkpoint_ref,
         "public_failure": saved["public_failure"], "candidate_ref": owner._v2_state.current_revision_ref,
@@ -267,3 +281,12 @@ def test_registered_responses_entry_and_read_only_evidence(
 ):
     test_responses_normal_cli_failure_revision_and_receipt_recovery(
         repository_workspace, monkeypatch, capsys, record_property, "tool_receipt", registered_entry=True)
+
+
+@pytest.mark.parametrize("boundary", ["provider_receipt", "tool_receipt"])
+def test_registered_work_view_uses_bound_defaults_and_recovers(
+    repository_workspace, monkeypatch, capsys, record_property, boundary,
+):
+    test_responses_normal_cli_failure_revision_and_receipt_recovery(
+        repository_workspace, monkeypatch, capsys, record_property, boundary,
+        registered_entry=True, omit_host_ids=True)

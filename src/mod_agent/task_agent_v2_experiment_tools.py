@@ -13,7 +13,7 @@ from jsonschema import Draft202012Validator
 
 from src.libs.llm.agent_turn import AgentToolDefinition
 from src.mod_agent.domain.csharp_repository_backend import CSharpRepositoryBackend
-from src.mod_agent.model_qualification import canonical_hash, read_bound_json
+from src.mod_agent.model_qualification import read_bound_json
 from src.mod_agent.task_agent_loop import PreparedTaskAction, TaskAgentAction
 from src.mod_agent.task_agent_v2_experiments import (
     CSharpRegisteredTestRunner,
@@ -97,6 +97,7 @@ def experiment_actions(session):
     ]
 
     def prepare(name, schema, args):
+        args = session.resolve_arguments(name, args)
         errors = list(Draft202012Validator(schema).iter_errors(args))
         if errors:
             raise ValueError("TASK_EXPERIMENT_ARGUMENTS_INVALID: " + errors[0].message)
@@ -107,8 +108,7 @@ def experiment_actions(session):
             needed = {"catalog_ref", "test_ids"} if args["kind"] == "registered_test" else {"probe_artifact_ref"}
             if not needed <= set(args):
                 raise ValueError("TASK_EXPERIMENT_SELECTION_REQUIRED")
-        return PreparedTaskAction(deepcopy(args), 0, canonical_hash({"contract": session.state.contract_ref,
-            "revision": session.state.current_revision_ref}))
+        return PreparedTaskAction(deepcopy(args), 0, session.request_version_identity())
 
     def execute_owned(name, args):
         session.owner.check_experience_boundary()
@@ -163,9 +163,15 @@ def experiment_actions(session):
                 origin["execution_receipt_ref"] = reference
         return output
 
-    return [TaskAgentAction(AgentToolDefinition(name, description, schema), "upstream",
-        lambda args, name=name, schema=schema: prepare(name, schema, args),
-        lambda args, name=name: execute(name, args), False) for name, schema, description in specs]
+    result = []
+    for name, schema, description in specs:
+        public = deepcopy(schema)
+        public["required"] = [key for key in schema.get("required", []) if key != "source_revision_ref"]
+        result.append(TaskAgentAction(AgentToolDefinition(name, description +
+            " Omitted source_revision_ref binds to the saved current_task_state for this request.", public), "upstream",
+            lambda args, name=name, schema=schema: prepare(name, schema, args),
+            lambda args, name=name: execute(name, args), False))
+    return result
 
 
 def _invalidate_check(session, revision, receipt):

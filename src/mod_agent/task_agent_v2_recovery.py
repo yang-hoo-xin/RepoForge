@@ -72,12 +72,14 @@ def single_task_lock(store_root, contract_ref):
 
 def session_snapshot(session):
     return {name: deepcopy(getattr(session, name)) for name in (
-        "actual_calls", "submission_origins", "current_check", "public_checks", "_check_inflight")}
+        "actual_calls", "submission_origins", "current_check", "public_checks", "_check_inflight")} | {
+            "_actual_request_ref": deepcopy(getattr(session, "_actual_request_ref", None))}
 
 
 def restore_session(session, snapshot):
     for name in ("actual_calls", "submission_origins", "current_check", "public_checks", "_check_inflight"):
         setattr(session, name, deepcopy(snapshot[name]))
+    session._actual_request_ref = deepcopy(snapshot.get("_actual_request_ref"))
 
 
 class TaskAgentRecoveryJournal:
@@ -94,6 +96,7 @@ class TaskAgentRecoveryJournal:
             task_agent_v2_experience,
             task_agent_v2_experiment_tools,
             task_agent_v2_experiments,
+            task_agent_v2_model_view,
             task_agent_v2_semantic_state,
             task_agent_v2_state,
             task_agent_v2_tools,
@@ -132,7 +135,7 @@ class TaskAgentRecoveryJournal:
                     task_agent_execution, task_agent_loop, task_agent_v2_execution, task_agent_v2_tools,
                     task_agent_v2_state, task_agent_v2_experience, task_agent_v2_experiments,
                     task_agent_v2_experiment_tools, task_agent_v2_context, task_agent_v2_working_state,
-                    task_agent_v2_semantic_state, public_failure_feedback,
+                    task_agent_v2_semantic_state, task_agent_v2_model_view, public_failure_feedback,
                     strategy_experience, learning_request, episode_catalog, learning_context,
                     external_patch, agent_turn, patch_transport_bodies)] + [_ref(__file__)]}
             self.host_config_ref = self.state.save("host-recovery-config", host)
@@ -214,6 +217,14 @@ def _validate_completed(checkpoint, store_root, host=None):
         _require([item for item in response["tool_calls"] if item["call_id"] == call_id]
             == [{"call_id": call_id, "name": call["name"], "arguments": arguments}]
             and arguments == call["arguments"] and canonical_hash(arguments) == record["arguments_sha256"], "COMPLETED_ARGUMENTS_CHANGED")
+        from src.mod_agent.task_agent_v2_tools import (
+            resolved_origin_arguments,
+            validate_origin_request,
+        )
+        def reader(reference):
+            return _trusted_read(reference, store_root)
+        validate_origin_request(call, checkpoint["details"]["provider_turns"], reader=reader)
+        resolved_origin_arguments(call, reader=reader)
         _require(call.get("execution_receipt_ref"), "COMPLETED_EXECUTION_RECEIPT_REQUIRED")
         receipt = _trusted_read(call["execution_receipt_ref"], store_root)
         receipts_by_call[call_id] = receipt
@@ -415,9 +426,9 @@ def _validate_probe_receipt(state, origin, output, *, receipt_ref, model_profile
         _source,
         normalize_probe_path,
     )
-    from src.mod_agent.task_agent_v2_semantic_state import strip_working_state
+    from src.mod_agent.task_agent_v2_tools import resolved_origin_arguments
 
-    arguments = strip_working_state(origin["arguments"])
+    arguments = resolved_origin_arguments(origin, reader=lambda reference: _trusted_read(reference, state.store_root))
     ref, identity, _files = _source(state, arguments["source_revision_ref"])
     model_origin = {key: origin[key] for key in ("call_id", "response_ref", "arguments_ref")}
     if origin["name"] == "probe_submit":
@@ -593,7 +604,11 @@ def _reconcile_checkpoint(state, checkpoint_ref, checkpoint, latest_path):
             "PROVIDER_RESOURCE_RECONCILIATION_FAILED")
         for call in response["tool_calls"]:
             arguments_ref = _write_bound(state.root / "reconciled" / (uuid4().hex + ".json"), call["arguments"])
-            value["session"]["actual_calls"].append({**call, "response_ref": event["response_ref"], "arguments_ref": arguments_ref})
+            from src.mod_agent.task_agent_v2_tools import resolve_tool_arguments
+            effective_args, resolution = resolve_tool_arguments(call["name"], call["arguments"], event["request_ref"])
+            value["session"]["actual_calls"].append({**call, "response_ref": event["response_ref"], "arguments_ref": arguments_ref,
+                "request_ref": event["request_ref"], "effective_arguments": effective_args, "argument_resolution": resolution})
+        value["session"]["_actual_request_ref"] = deepcopy(event["request_ref"])
         value["details"]["provider_turns"].append(event)
         loop["usage_by_turn"].append({"turn": loop["model_turns"], "provider": response["provider"], "model": response["model"],
             "request_id": response.get("request_id"), "stop_reason": response.get("stop_reason"),
@@ -613,7 +628,14 @@ def _reconcile_checkpoint(state, checkpoint_ref, checkpoint, latest_path):
         origin = next(row for row in value["session"]["actual_calls"] if row["call_id"] == call_id)
         _require(receipt["origin"] == {key: item for key, item in origin.items() if key != "execution_receipt_ref"}
             and receipt["task_head"] == state.head, "TOOL_RECEIPT_CHANGED")
-        output, arguments, name = receipt["output"], origin["arguments"], origin["name"]
+        from src.mod_agent.task_agent_v2_tools import (
+            resolved_origin_arguments,
+            validate_origin_request,
+        )
+        def reader(reference):
+            return _trusted_read(reference, state.store_root)
+        validate_origin_request(origin, value["details"]["provider_turns"], reader=reader)
+        output, arguments, name = receipt["output"], resolved_origin_arguments(origin, reader=reader), origin["name"]
         if name in {"candidate_submit", "binding_add", "plan_update"}:
             operation = state.head["operations"].get(call_id)
             _require(operation is not None and all(output.get(key) == item for key, item in operation["result"].items()),

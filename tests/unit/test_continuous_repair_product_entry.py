@@ -79,7 +79,7 @@ def test_normal_cli_no_plan_or_binding_gate_retains_observation_and_repairs(
             name, arguments = "source_read", {"parent_revision_ref": revision, "path": "Library/Arithmetic.cs"}
             memory["reads"] += 1
         elif phase == "investigate":
-            assert statement in json.dumps(current["working_state"]), "Explicit observations must survive without plan_update"
+            assert statement in json.dumps(payload), "The actual request must retain the observation without duplicating its audit ledger"
             assert current["investigation_observations"]["repeated_view_returns"] == 3
             assert not current["valid_bindings"]
             name, arguments = "candidate_submit", {"parent_revision_ref": revision, "edits": [{

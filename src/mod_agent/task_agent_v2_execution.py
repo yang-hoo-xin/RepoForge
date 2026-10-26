@@ -482,6 +482,7 @@ class TaskAgentExecutionV2(TaskAgentExecution):
                 _require(reservation["turn"] == index, "V2_RESERVATION_TURN_CHANGED")
                 event = {**deepcopy(reservation), "status": "requested", "request_ref": self._save(
                     f"request-{index:03d}.json", asdict(request)), "budget": validate_budget(self.budget_snapshot())}
+                session.bind_actual_request(event["request_ref"])
                 host = task.load(journal.host_config_ref)
                 prior_refs = [row["response_ref"] for row in details["provider_turns"] if row.get("response_ref")]
                 input_audit = classify_v2_technical_inputs(loop_request, asdict(request), read_bound_json(host["initial_request_ref"]),

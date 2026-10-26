@@ -98,6 +98,30 @@ def test_model_response_content_is_exact_and_never_promoted_to_fact():
     assert working["model_statements"][0]["interpretation"].startswith("Model-authored statement")
 
 
+def test_model_work_view_does_not_repeat_full_narrative_or_feedback_ledger():
+    from copy import deepcopy
+
+    working = None
+    for index in range(30):
+        working = retain_model_statement(working, {"content": f"Explicit note {index}: " + "earlier narration " * 100},
+            response_ref={"path": f"response-{index}.json", "sha256": str(index)})
+    failure = observed("failed", name="candidate_check")
+    failure.tool_results[0].output["value"].update(status="behavior_failed", check_ref="check", feedback_ref="feedback",
+        observations=[{"expected": 6, "observed": {"actual": 3}, "details": "full public detail " * 1000}])
+    working = advance(working, [failure], current_check_ref="check")
+    before = deepcopy(working)
+    view = working_state_view(working, statement_archive_ref="original-public-statements")
+    assert working == before and len(working["model_statements"]) == 30
+    assert [row["statement_index"] for row in view["model_statements"]] == [29]
+    assert view["model_statement_projection"]["omitted_statement_count"] == 29
+    assert "omitted_statement_indices" not in view["model_statement_projection"]
+    assert view["latest_public_failure"]["receipt"] == {"status": "behavior_failed", "check_ref": "check", "feedback_ref": "feedback"}
+    assert "output" not in view["latest_public_failure"]
+    assert "observable_projection" not in view.get("public_failure_repetition", {})
+    assert "full public detail" not in json.dumps(view)
+    assert "hypotheses" not in view
+
+
 def test_latest_public_failure_survives_later_pass_and_has_exact_output():
     failure = observed("failed", name="candidate_check")
     failure.tool_results[0].output["value"].update(status="behavior_failed", check_ref="failed-check", feedback_ref="public")
