@@ -22,7 +22,9 @@ from src.mod_agent.task_agent_loop import (
 )
 from src.mod_agent.task_agent_v2_state import (
     SOURCE_READ_DEFAULT_LIMIT,
+    SOURCE_READ_DEFAULT_LINES,
     SOURCE_READ_MAX_LIMIT,
+    SOURCE_READ_POSITION_FIELDS,
     TaskAgentV2StateError,
 )
 
@@ -131,6 +133,11 @@ class TaskAgentSessionV2:
             self._dispatch_call_id = None
 
     def _prepare(self, name, schema, args):
+        if name in {"source_read", "candidate_read"}:
+            # 为什么要有它：旧调用仍按原字符单位执行，兼容字段只进入运行校验，不在新模型schema继续宣传模糊坐标名。
+            schema = deepcopy(schema)
+            schema["properties"].update(offset={"type": "integer", "minimum": 0},
+                limit={"type": "integer", "minimum": 1, "maximum": SOURCE_READ_MAX_LIMIT})
         if name == "candidate_submit":
             schema = deepcopy(schema)
             schema["properties"]["parent_revision_ref"]["enum"] = [self.state.current_revision_ref]
@@ -165,7 +172,7 @@ class TaskAgentSessionV2:
             try:
                 state.validate_read_request(args["parent_revision_ref"], root_id=args.get("root_id", "target"),
                     path=args.get("path"), query=args.get("query"),
-                    **({"offset": args.get("offset", 0), "limit": args.get("limit", SOURCE_READ_DEFAULT_LIMIT)}
+                    **({key: args[key] for key in SOURCE_READ_POSITION_FIELDS if key in args}
                        if name in {"source_read", "candidate_read"} else {}))
             except TaskAgentV2StateError as error:
                 if error.code in {"source_not_in_snapshot", "invalid_source_read_window"} and name in {"source_read", "candidate_read"}:
@@ -255,7 +262,7 @@ class TaskAgentSessionV2:
         operation = origin["call_id"]
         if name in {"source_read", "candidate_read"}:
             return state.read_source(args["parent_revision_ref"], args["path"], args.get("root_id", "target"),
-                offset=args.get("offset", 0), limit=args.get("limit", SOURCE_READ_DEFAULT_LIMIT))
+                **{key: args[key] for key in SOURCE_READ_POSITION_FIELDS if key in args})
         if name == "source_search":
             return state.search_source(args["parent_revision_ref"], args["query"], args.get("root_id", "target"))
         if name == "check_feedback_read":
@@ -384,8 +391,11 @@ class TaskAgentSessionV2:
     def actions(self):
         text = {"type": "string", "minLength": 1}
         reading = {"parent_revision_ref": text, "path": text, "root_id": text,
-            "offset": {"type": "integer", "minimum": 0},
-            "limit": {"type": "integer", "minimum": 1, "maximum": SOURCE_READ_MAX_LIMIT}}
+            "start_line": {"type": "integer", "minimum": 1, "description": "1-based source line; default 1 when line_count alone is supplied."},
+            "line_count": {"type": "integer", "minimum": 1, "description": "Number of source lines; default 40 with start_line, capped at 8000 Unicode characters."},
+            "offset_chars": {"type": "integer", "minimum": 0, "description": "0-based Unicode character offset, not a line number; CR and LF each count once."},
+            "limit_chars": {"type": "integer", "minimum": 1, "maximum": SOURCE_READ_MAX_LIMIT,
+                "description": "Maximum Unicode characters; default 2000 with offset_chars. Cannot mix character and line coordinates."}}
         bindings = self.state.validate_registry(self.state.registry_ref)["bindings"]
         binding_schema = {**text, **({"enum": sorted(bindings)} if bindings else {})}
         edit = {"type": "object", "additionalProperties": False,
@@ -395,16 +405,20 @@ class TaskAgentSessionV2:
             "oneOf": [{"required": ["path"]}, {"required": ["binding_id"]}]}
         specs: list[tuple[str, str, dict[str, Any], list[str], str]] = [
             ("source_read", "source_read", reading,
-                ["parent_revision_ref", "path"], "Read authorized source at baseline or a named candidate in bounded Unicode character pages "
-                f"(default offset=0, limit={SOURCE_READ_DEFAULT_LIMIT}; maximum {SOURCE_READ_MAX_LIMIT}). "
-                "Use search result offsets to read near matches; follow next_offset for later pages. Returns full-file hash and a "
+                ["parent_revision_ref", "path"], "Read authorized source at baseline or a named candidate. Prefer the search hit's read_args "
+                f"or 1-based start_line/line_count (defaults 1/{SOURCE_READ_DEFAULT_LINES}). "
+                f"For precise Unicode character positions use offset_chars/limit_chars (defaults 0/{SOURCE_READ_DEFAULT_LIMIT}). "
+                f"Do not mix coordinate families. Without positions read the first {SOURCE_READ_DEFAULT_LIMIT} characters; maximum {SOURCE_READ_MAX_LIMIT} per call. "
+                "Follow next_read exactly for continuation, including when a long line was split. Returns actual line/character windows, full-file hash and a "
                 "version-bound source_view_ref recording the actual read window. Edit before_text must occur within that page; "
                 "request an overlapping page when needed. File-level binding authority is unchanged."),
             ("candidate_read", "source_read", reading,
-                ["parent_revision_ref", "path"], "Read a candidate with the same bounded offset/limit and next_offset paging as source_read. "
+                ["parent_revision_ref", "path"], "Read a candidate using the same mutually exclusive start_line/line_count or offset_chars/limit_chars coordinates as source_read. "
+                "Prefer line coordinates and follow returned next_read, including split long lines. "
                 "Supply its exact reference, not an ambiguous current alias. Read the edit preimage in one page before submitting."),
             ("source_search", "source_search", {"parent_revision_ref": text, "query": text, "root_id": text},
-                ["parent_revision_ref", "query"], "Search authorized source at the chosen revision. Results grant no edit authority."),
+                ["parent_revision_ref", "query"], "Search authorized source at the chosen revision. Each hit includes ready-to-call read_args for public source context around its line. "
+                "Pass read_args to source_read without converting line numbers into character offsets. Results grant no new edit authority."),
             ("check_feedback_read", "source_read", {"feedback_ref": text, "offset": {"type": "integer", "minimum": 0},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 8000}}, ["feedback_ref"],
                 "Read complete public failure details in bounded chunks from feedback_ref returned by candidate_check. No arbitrary files or independent evaluator reports are accessible."),

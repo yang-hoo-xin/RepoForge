@@ -9,6 +9,7 @@ import json
 import os
 import re
 import stat
+from bisect import bisect_right
 from collections.abc import Mapping
 from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
@@ -17,12 +18,63 @@ from uuid import uuid4
 
 SOURCE_READ_DEFAULT_LIMIT = 2000
 SOURCE_READ_MAX_LIMIT = 8000
+SOURCE_READ_DEFAULT_LINES = 40
+SOURCE_READ_POSITION_FIELDS = ("start_line", "line_count", "offset_chars", "limit_chars", "offset", "limit")
 
 
 class TaskAgentV2StateError(ValueError):
     @property
     def code(self) -> str:
         return str(self)
+
+
+def resolve_source_read_window(content: str, *, start_line=None, line_count=None,
+                               offset_chars=None, limit_chars=None, offset=None, limit=None):
+    """Resolve one coordinate family without changing the caller's arguments.
+
+    为什么要有它：行号和字符偏移必须有明确单位；返回窗口与后续读取位置都依据实际文本，不能扩大编辑前像。
+    """
+    line_mode = start_line is not None or line_count is not None
+    char_mode = offset_chars is not None or limit_chars is not None
+    legacy_mode = offset is not None or limit is not None
+    if sum((line_mode, char_mode, legacy_mode)) > 1:
+        raise TaskAgentV2StateError("invalid_source_read_window")
+    lines = content.splitlines(keepends=True)
+    boundaries = [0]
+    for line in lines:
+        boundaries.append(boundaries[-1] + len(line))
+    starts = boundaries[:-1]
+    if line_mode:
+        start_line = 1 if start_line is None else start_line
+        line_count = SOURCE_READ_DEFAULT_LINES if line_count is None else line_count
+        if (type(start_line) is not int or type(line_count) is not int
+                or not 1 <= start_line <= len(lines) + 1 or line_count < 1):
+            raise TaskAgentV2StateError("invalid_source_read_window")
+        begin = boundaries[start_line - 1]
+        end = min(boundaries[min(len(lines), start_line - 1 + line_count)], begin + SOURCE_READ_MAX_LIMIT)
+        page_limit = SOURCE_READ_MAX_LIMIT
+    else:
+        begin = offset_chars if char_mode else offset
+        page_limit = limit_chars if char_mode else limit
+        begin = 0 if begin is None else begin
+        page_limit = SOURCE_READ_DEFAULT_LIMIT if page_limit is None else page_limit
+        if (type(begin) is not int or type(page_limit) is not int or not 0 <= begin <= len(content)
+                or not 1 <= page_limit <= SOURCE_READ_MAX_LIMIT):
+            raise TaskAgentV2StateError("invalid_source_read_window")
+        end = min(len(content), begin + page_limit)
+    first_line = bisect_right(starts, begin) if starts else 1
+    column = begin - starts[first_line - 1] if starts else 0
+    if begin == len(content) and (not lines or lines[-1].endswith(("\n", "\r", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029"))):
+        first_line, column = len(lines) + 1, 0
+    next_position = None
+    if end < len(content):
+        if line_mode and end in starts:
+            next_position = {"start_line": bisect_right(starts, end), "line_count": line_count}
+        else:
+            next_position = {"offset_chars": end, "limit_chars": page_limit}
+    return {"offset": begin, "end": end, "total_lines": len(lines), "next_position": next_position,
+        "line_window": {"start_line": first_line, "end_line": bisect_right(starts, end - 1) if end > begin else None,
+            "start_column_chars": column, "ends_mid_line": end < len(content) and end not in starts}}
 
 
 def _bytes(value: Any) -> bytes:
@@ -311,8 +363,11 @@ class TaskAgentV2State:
             lock.unlink(missing_ok=True)
 
     def read_source(self, parent_revision_ref: str, path: str, root_id: str = "target", *,
-                    offset: int | None = None, limit: int | None = None) -> dict[str, Any]:
-        self.validate_read_request(parent_revision_ref, path=path, root_id=root_id, offset=offset, limit=limit)
+                    offset: int | None = None, limit: int | None = None, start_line: int | None = None,
+                    line_count: int | None = None, offset_chars: int | None = None, limit_chars: int | None = None) -> dict[str, Any]:
+        coordinates = {"offset": offset, "limit": limit, "start_line": start_line, "line_count": line_count,
+            "offset_chars": offset_chars, "limit_chars": limit_chars}
+        self.validate_read_request(parent_revision_ref, path=path, root_id=root_id, **coordinates)
         path = _path(path)
         if root_id not in self.contract["read_roots"]:
             raise TaskAgentV2StateError("read_root_denied")
@@ -329,16 +384,18 @@ class TaskAgentV2State:
         data = {"schema": "task-agent-source-view.v2", "contract_ref": self.contract_ref,
             "root_id": root_id, "parent_revision_ref": revision, "path": path,
             "file_sha256": _text_hash(files[path]), "text": files[path]}
-        if offset is None:
-            return {**data, "source_view_ref": self.save("source-view", data)}
         content = files[path]
-        end = min(len(content), offset + limit)
+        selected = resolve_source_read_window(content, **coordinates)
+        offset, end = selected["offset"], selected["end"]
         # 为什么要有它：原件保留完整版本及实际返回窗口，分页不把局部文本伪装成整文件，也不允许用未读取部分作为编辑前像。
         data["read_window"] = {"offset": offset, "end": end}
         return {**data, "source_view_ref": self.save("source-view", data), "text": content[offset:end],
             "text_scope": "read_window", "offset": offset, "next_offset": end if end < len(content) else None,
-            "total_chars": len(content), "total_lines": len(content.splitlines()),
-            "start_line": content.count("\n", 0, offset) + 1,
+            "read_window_chars": {"offset_chars": offset, "end_chars": end}, "line_window": selected["line_window"],
+            "next_read": {"parent_revision_ref": revision, "path": path, "root_id": root_id, **selected["next_position"]}
+                if selected["next_position"] is not None else None,
+            "total_chars": len(content), "total_lines": selected["total_lines"],
+            "start_line": selected["line_window"]["start_line"],
             "truncated": offset > 0 or end < len(content)}
 
     def _revision(self, ref: str) -> str:
@@ -346,7 +403,8 @@ class TaskAgentV2State:
 
     def validate_read_request(self, parent_revision_ref: str, *, path: str | None = None,
                               root_id: str = "target", query: str | None = None,
-                              offset: int | None = None, limit: int | None = None) -> None:
+                              offset: int | None = None, limit: int | None = None, start_line: int | None = None,
+                              line_count: int | None = None, offset_chars: int | None = None, limit_chars: int | None = None) -> None:
         if root_id not in self.contract["read_roots"]:
             raise TaskAgentV2StateError("read_root_denied")
         if root_id == "target":
@@ -362,11 +420,9 @@ class TaskAgentV2State:
                 raise TaskAgentV2StateError("read_path_denied")
             if path not in files:
                 raise TaskAgentV2StateError("source_not_in_snapshot")
-            if offset is not None or limit is not None:
-                content = files[path] if root_id == "target" else files[path]["text"]
-                if (type(offset) is not int or type(limit) is not int or offset < 0
-                        or offset > len(content) or not 1 <= limit <= SOURCE_READ_MAX_LIMIT):
-                    raise TaskAgentV2StateError("invalid_source_read_window")
+            content = files[path] if root_id == "target" else files[path]["text"]
+            resolve_source_read_window(content, offset=offset, limit=limit, start_line=start_line, line_count=line_count,
+                offset_chars=offset_chars, limit_chars=limit_chars)
         elif not isinstance(query, str) or not query:
             raise TaskAgentV2StateError("invalid_search")
 
@@ -400,10 +456,12 @@ class TaskAgentV2State:
             for number, line, offset in selected[:max_matches - len(matches)]:
                 start = max(0, _casefold_match_offset(line, query) - 128)
                 # 为什么要有它：搜索返回的读取凭据也只绑定实际展示的片段，超长单行不能绕过有界读取。
-                view = self.read_source(parent_revision_ref, path, root_id, offset=offset + start,
-                    limit=max(1, min(512, len(line) - start)))
+                view = self.read_source(parent_revision_ref, path, root_id, offset_chars=offset + start,
+                    limit_chars=max(1, min(512, len(line) - start)))
                 matches.append({"path": path, "root_id": root_id, "line": number, "text": view["text"],
                     "offset": offset + start, "line_offset": offset, "text_truncated": start > 0 or len(line) > 512,
+                    "read_args": {"parent_revision_ref": view["parent_revision_ref"], "path": path, "root_id": root_id,
+                        "start_line": max(1, number - 3), "line_count": SOURCE_READ_DEFAULT_LINES},
                     "source_view_ref": view["source_view_ref"], "file_sha256": view["file_sha256"]})
         return {"matches": matches, "total_matches": count, "truncated": count > len(matches)}
 
@@ -520,7 +578,7 @@ class TaskAgentV2State:
     @staticmethod
     def _validate_visible_preimage(view: dict[str, Any], before: str) -> None:
         window = view.get("read_window")
-        if window is not None and before not in view["text"][window["offset"]:window["end"]]:
+        if window is not None and before in view["text"] and before not in view["text"][window["offset"]:window["end"]]:
             raise TaskAgentV2StateError("before_text_outside_read_window")
 
     def submit(self, parent_revision_ref: str, edits: list[dict[str, Any]], operation_id: str | None = None,

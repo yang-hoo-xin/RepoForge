@@ -17,7 +17,7 @@ from src.mod_agent.platform_execution_snapshot import FrozenExecution
 from src.mod_agent.task_agent_v2_recovery import _validate_completed, _validate_host_binding
 from src.mod_agent.task_agent_v2_state import TaskAgentV2State, _no_links
 
-VERSION = "complete_public_process_trajectory_v2"
+VERSION = "complete_public_process_trajectory_v3"
 
 
 def require(value, code):
@@ -291,10 +291,61 @@ def task_context_evidence(verified):
     return refs, selectors, documents
 
 
+def _returned_text_coverage(index, arguments, output, history):
+    """Measure selected returned character intervals, never model receipt or understanding.
+
+    为什么要有它：改变请求limit不代表获得新文本；缺失窗口或版本身份也不能靠请求参数补写为已知覆盖。
+    """
+    text = output.get("text")
+    identity = {"root_id": output.get("root_id", arguments.get("root_id", "target")),
+        "path": output.get("path", arguments.get("path")),
+        "revision": output.get("parent_revision_ref", output.get("source_revision_ref",
+            arguments.get("parent_revision_ref", arguments.get("source_revision_ref")))),
+        "file_sha256": output.get("file_sha256")}
+    result = {"scope": "selected_source_read_returned_text_only", "status": "unknown",
+        "returned_chars": len(text) if isinstance(text, str) else None,
+        "new_returned_chars": None, "overlap_returned_chars": None,
+        "identity": identity, "prior_overlapping_actions": []}
+    if not isinstance(text, str):
+        return {**result, "reason": "returned_text_not_selected_or_missing"}
+    if not all(isinstance(value, str) and value for value in identity.values()):
+        return {**result, "reason": "file_or_revision_identity_not_selected_or_missing"}
+    windows = []
+    for field, start_key, end_key in (("read_window", "offset", "end"), ("read_window_chars", "offset_chars", "end_chars")):
+        if field in output:
+            value = output[field]
+            if not isinstance(value, dict) or type(value.get(start_key)) is not int or type(value.get(end_key)) is not int:
+                return {**result, "reason": "returned_window_invalid"}
+            windows.append((value[start_key], value[end_key]))
+    if not windows:
+        return {**result, "reason": "returned_window_not_selected_or_missing"}
+    start, end = windows[0]
+    if any(window != (start, end) for window in windows) or start < 0 or end < start or end - start != len(text):
+        return {**result, "reason": "returned_window_text_mismatch"}
+    result["window_chars"] = {"offset_chars": start, "end_chars": end}
+    key = tuple(identity.values())
+    intervals, prior = [], history.setdefault(key, [])
+    for old_index, old_start, old_end, old_text in prior:
+        left, right = max(start, old_start), min(end, old_end)
+        if left < right:
+            if text[left - start:right - start] != old_text[left - old_start:right - old_start]:
+                return {**result, "reason": "same_identity_returned_text_conflict"}
+            intervals.append((left, right))
+            result["prior_overlapping_actions"].append(old_index)
+    covered, previous_end = 0, start
+    for left, right in sorted(intervals):
+        covered += max(0, right - max(left, previous_end))
+        previous_end = max(previous_end, right)
+    prior.append((index, start, end, text))
+    return {**result, "status": "known", "new_returned_chars": len(text) - covered,
+        "overlap_returned_chars": covered}
+
+
 def project_verified(verified):
-    """Keep all actions and verbatim statements; omit only declared process-irrelevant bodies."""
+    """Keep selected navigation returns and all actions/explicit statements verbatim."""
     cp, actions, statements, refs, paths, omissions = verified.get("checkpoint", {}), [], {}, {}, {}, []
     loop = cp.get("loop", {"phase": "not_selected_in_original_episode"})
+    returned_history = {}
 
     def alias(value):
         if isinstance(value, str) and value.startswith("v2/"):
@@ -347,8 +398,27 @@ def project_verified(verified):
         kept = {k: v for k, v in output.items() if k in {"status", "executed", "reason", "code", "error_code", "message",
             "argument_errors", "correctable", "execution_origin", "truncated", "offset", "next_offset", "total_chars",
             "total_matches", "catalog_ref", "probe_artifact_ref", "candidate_ref", "check_ref", "grants_acceptance"}}
+        retained = []
+        if not pending and call["name"] in {"source_read", "source_search"}:
+            # 为什么要有它：已经选择的窗口和搜索片段是操作定位证据，不能当大正文省略或回读未选择的source-view补全。
+            if call["name"] == "source_read":
+                kept.update({key: deepcopy(value) for key, value in output.items() if key in {
+                    "root_id", "path", "parent_revision_ref", "source_revision_ref", "file_sha256", "source_view_ref",
+                    "read_window", "read_window_chars", "line_window", "start_line", "end_line", "total_lines",
+                    "text_scope", "next_read", "coordinate_system"}})
+                kept["returned_text_coverage"] = _returned_text_coverage(index, arguments, output, returned_history)
+                selected_field, reason = "text", "selected_returned_source_window_preserved_verbatim_for_navigation_and_overlap_analysis"
+            else:
+                selected_field, reason = "matches", "selected_search_hits_preserved_with_original_coordinates_snippets_and_read_arguments"
+            if selected_field in output:
+                kept[selected_field] = deepcopy(output[selected_field])
+                retained.append({"field": selected_field, "reference": deepcopy(call["execution_receipt_ref"]),
+                    "locator": ["output", selected_field], "json_sha256": canonical_hash(output[selected_field]),
+                    "selection_reason": reason})
+            if retained:
+                kept["retained_evidence"] = retained
         for field, value in output.items():
-            if field in {"text", "matches", "observations", "changes"}:
+            if field in {"text", "matches", "observations", "changes"} and field not in kept:
                 omit(index, "output." + field, value, call["execution_receipt_ref"], ["output", field])
         # 为什么要有它：公开失败内容属于行动结果，不能为了上下文合格而隐去已发生的反例。
         if call["name"] in {"candidate_check", "experiment_run"} and output.get("observations"):
@@ -357,7 +427,12 @@ def project_verified(verified):
         if pending:
             kept = ({"execution": "not_dispatched", "feedback": row.get("recorded_feedback")}
                 if row.get("execution_status") == "not_dispatched" else {"execution": "unknown_not_in_completed_prefix"})
-        actions.append([index, call["name"], alias(revision), alias(args), alias(kept)])
+        result = alias(kept)
+        # 为什么要有它：原文和合法源码路径可以以v2/开头，别名不能改写源码、可直接调用的导航参数或覆盖身份。
+        for field in ("text", "matches", "retained_evidence", "path", "next_read", "returned_text_coverage"):
+            if field in kept:
+                result[field] = deepcopy(kept[field])
+        actions.append([index, call["name"], alias(revision), alias(args), result])
     # 为什么要有它：没有工具调用的完整回答也可能明确表达判断，不能只保留已经执行的动作对应文字。
     for row in verified["responses"]:
         statement = row["response"].get("content")
@@ -393,7 +468,9 @@ def project_verified(verified):
         "paths": {v: k for k, v in paths.items()}, "reference_aliases": {v: k for k, v in refs.items()},
         "argument_defaults_omitted": {"root_id": "target"}, "omission_summary": summaries,
         "scope": "All public completed actions plus explicitly pending model actions. Statements are verbatim, not established hypotheses. "
-            "Source text, long search matches and code bodies are omitted for process-strategy extraction; their locators remain in the omission manifest."}
+            "Selected source_read text and source_search matches retain original navigation evidence without further clipping. "
+            "Returned coverage counts only selected source_read character intervals, not model receipt, understanding, usefulness or search coverage. "
+            "Other omitted bodies retain locators in the omission manifest; unselected source references are never expanded."}
     if "public_selected_facts" in verified:
         trajectory.update(public_selected_facts=verified["public_selected_facts"], source_coverage=verified["coverage"],
             statement_columns=["verbatim_text", "action_occurrences", "selected_response_occurrences"],

@@ -24,7 +24,7 @@ def verified_rows():
         "responses": [{"turn": i + 1, "response": row["response"]} for i, row in enumerate(rows)]}
 
 
-def test_all_actions_and_verbatim_statement_occurrences_survive_body_omission():
+def test_all_actions_and_statements_survive_with_selected_read_text_retained():
     source = verified_rows()
     original = deepcopy(source)
     view, omitted = projection.project_verified(source)
@@ -35,8 +35,10 @@ def test_all_actions_and_verbatim_statement_occurrences_survive_body_omission():
     assert view["pending_outcome"] == "unknown" and view["business_result"] == "not_established"
     assert list(view["paths"].values()) == ["A.cs"]
     assert list(view["reference_aliases"].values()) == [original["records"][0]["arguments"]["parent_revision_ref"]]
-    assert len(omitted) == 3 and all(row["locator"] == ["output", "text"] for row in omitted)
-    assert "SOURCE_BODY_NOT_A_STATEMENT" not in str(view)
+    assert omitted == []
+    assert view["actions"][0][-1]["text"] == source["records"][0]["receipt"]["output"]["text"]
+    assert "SOURCE_BODY_NOT_A_STATEMENT" not in str(view["statements"])
+    assert all(row[-1]["returned_text_coverage"]["status"] == "unknown" for row in view["actions"])
     assert [row[3]["offset"] for row in view["actions"]] == [0, 100, 200]
 
 
@@ -83,6 +85,121 @@ def test_public_check_failure_is_preserved_even_though_source_text_is_omitted():
     view, omitted = projection.project_verified(source)
     assert view["actions"][0][-1]["observations"] == observed
     assert not any(o["field"] == "output.observations" for o in omitted)
+
+
+def navigation_rows(windows):
+    source = verified_rows()
+    template = source["records"][0]
+    source["records"], source["responses"] = [], []
+    text = "v2/this is literal source, not an artifact reference.\n" * 10
+    for index, (start, end) in enumerate(windows):
+        row = deepcopy(template)
+        row["call"]["call_id"] = str(index)
+        row["call"]["execution_receipt_ref"]["path"] = "C:/original/receipt-" + str(index) + ".json"
+        row["arguments"].update(offset=start, limit=end - start)
+        row["receipt"]["output"] = {"root_id": "target", "path": "A.cs",
+            "parent_revision_ref": row["arguments"]["parent_revision_ref"], "file_sha256": "4" * 64,
+            "source_view_ref": "v2/source-view/" + str(index) * 64 + ".json", "text": text[start:end],
+            "read_window": {"offset": start, "end": end}, "read_window_chars": {"offset_chars": start, "end_chars": end},
+            "line_window": {"start_line": 1, "end_line": 2, "start_column_chars": start, "ends_mid_line": True},
+            "start_line": 1, "end_line": 2, "total_lines": 10, "total_chars": len(text), "text_scope": "read_window"}
+        source["records"].append(row)
+    return source
+
+
+def test_selected_windows_measure_union_coverage_without_counting_limit_changes_as_new_text():
+    source = navigation_rows([(0, 100), (0, 50), (0, 100), (0, 20), (0, 100), (90, 120), (80, 130)])
+    original = deepcopy(source)
+    view, omitted = projection.project_verified(source)
+    facts = [row[-1]["returned_text_coverage"] for row in view["actions"]]
+    assert [row["returned_chars"] for row in facts] == [100, 50, 100, 20, 100, 30, 50]
+    assert [row["new_returned_chars"] for row in facts] == [100, 0, 0, 0, 0, 20, 10]
+    assert [row["overlap_returned_chars"] for row in facts] == [0, 50, 100, 20, 100, 10, 40]
+    assert facts[3]["prior_overlapping_actions"] == [0, 1, 2]
+    assert all(row["scope"] == "selected_source_read_returned_text_only" for row in facts)
+    for index, action in enumerate(view["actions"]):
+        output = source["records"][index]["receipt"]["output"]
+        assert action[-1]["text"] == output["text"]
+        for field in ("read_window", "read_window_chars", "line_window", "start_line", "end_line", "total_lines", "file_sha256"):
+            assert action[-1][field] == output[field]
+        retained = action[-1]["retained_evidence"][0]
+        assert retained["locator"] == ["output", "text"]
+        assert retained["json_sha256"] == projection.canonical_hash(output["text"])
+        assert retained["reference"] == source["records"][index]["call"]["execution_receipt_ref"]
+    assert source == original and omitted == []
+
+
+def test_navigation_and_coverage_preserve_v2_prefixed_source_paths_as_literal_data():
+    source = navigation_rows([(0, 20), (0, 20)])
+    for row in source["records"]:
+        row["arguments"]["path"] = "v2/Foo.cs"
+        output = row["receipt"]["output"]
+        output["path"] = "v2/Foo.cs"
+        output["next_read"] = {"path": "v2/Foo.cs", "root_id": "target", "offset_chars": 20,
+            "limit_chars": 20, "parent_revision_ref": row["arguments"]["parent_revision_ref"]}
+    original = deepcopy(source)
+    view, _ = projection.project_verified(source)
+    for index, action in enumerate(view["actions"]):
+        result = action[-1]
+        assert result["path"] == "v2/Foo.cs"
+        assert result["next_read"] == source["records"][index]["receipt"]["output"]["next_read"]
+        assert result["returned_text_coverage"]["identity"] == {"root_id": "target", "path": "v2/Foo.cs",
+            "revision": source["records"][index]["arguments"]["parent_revision_ref"], "file_sha256": "4" * 64}
+    assert view["actions"][1][-1]["returned_text_coverage"]["new_returned_chars"] == 0
+    assert source == original
+
+
+@pytest.mark.parametrize("field,value", [("parent_revision_ref", "v2/candidate/" + "8" * 64 + ".json"),
+    ("file_sha256", "9" * 64), ("root_id", "dependency"), ("path", "B.cs")])
+def test_read_coverage_never_crosses_file_or_revision_identity(field, value):
+    source = navigation_rows([(0, 20), (0, 20)])
+    source["records"][1]["receipt"]["output"][field] = value
+    view, _ = projection.project_verified(source)
+    assert [row[-1]["returned_text_coverage"]["new_returned_chars"] for row in view["actions"]] == [20, 20]
+
+
+@pytest.mark.parametrize("fault", ["unselected_window", "unselected_text", "unselected_file_identity", "mismatched_window", "conflicting_text"])
+def test_read_coverage_unknown_does_not_infer_returned_ranges_from_requested_coordinates(fault):
+    source = navigation_rows([(0, 20), (0, 20)])
+    output = source["records"][1]["receipt"]["output"]
+    if fault == "unselected_window":
+        output.pop("read_window")
+        output.pop("read_window_chars")
+        output.update(offset=0, next_offset=20)
+    elif fault == "unselected_text":
+        output.pop("text")
+    elif fault == "unselected_file_identity":
+        output.pop("file_sha256")
+    elif fault == "mismatched_window":
+        output["read_window_chars"]["end_chars"] = 19
+    else:
+        output["text"] = "x" * 20
+    view, _ = projection.project_verified(source)
+    coverage = view["actions"][1][-1]["returned_text_coverage"]
+    assert coverage["status"] == "unknown"
+    assert coverage["new_returned_chars"] is None and coverage["overlap_returned_chars"] is None
+    assert coverage["returned_chars"] == (None if fault == "unselected_text" else 20)
+
+
+def test_selected_search_coordinates_snippets_and_read_args_are_verbatim_and_traceable():
+    source = navigation_rows([(0, 20)])
+    row = source["records"][0]
+    row["call"]["name"] = "source_search"
+    row["arguments"] = {"parent_revision_ref": row["arguments"]["parent_revision_ref"], "query": "HideHeaders"}
+    matches = [{"path": "A.cs", "root_id": "target", "line": 326, "offset": 10418, "line_offset": 10418,
+        "text": "v2/this is the original bounded snippet", "file_sha256": "4" * 64,
+        "source_view_ref": "v2/source-view/unselected.json", "text_truncated": False,
+        "read_args": {"parent_revision_ref": row["arguments"]["parent_revision_ref"], "path": "A.cs",
+            "root_id": "target", "start_line": 323, "line_count": 40}}]
+    row["receipt"]["output"] = {"matches": matches, "total_matches": 1, "truncated": False}
+    view, omitted = projection.project_verified(source)
+    result = view["actions"][0][-1]
+    assert result["matches"] == matches and omitted == []
+    assert "returned_text_coverage" not in result
+    retained = result["retained_evidence"][0]
+    assert retained["reference"] == row["call"]["execution_receipt_ref"]
+    assert retained["locator"] == ["output", "matches"] and retained["json_sha256"] == projection.canonical_hash(matches)
+    assert "coordinates" in retained["selection_reason"]
 
 
 def test_private_location_is_rejected_before_open(tmp_path):
@@ -232,7 +349,9 @@ def test_existing_public_episode_consumes_only_original_selectors_without_checkp
     response = projection.write_once(root / "response.json", {"content": "UNSELECTED_VISIBLE_TEXT",
         "tool_calls": [{"call_id": "call-1", "name": "source_read", "arguments": arguments}]})
     receipt = projection.write_once(root / "receipt.json", {"origin": {"call_id": "call-1", "name": "source_read",
-        "arguments": arguments, "response_ref": response}, "output": {"text": "source body", "status": "returned"}})
+        "arguments": arguments, "response_ref": response}, "output": {"text": "source body", "status": "returned",
+            "read_window": {"offset": 0, "end": 11}, "file_sha256": "9" * 64,
+            "source_view_ref": "v2/source-view/unselected-must-not-open.json"}})
     refs = [{"kind": "json_file", "evidence_id": key, **ref, "visibility": "public", "allowed_uses": ["strategy_learning"]}
         for key, ref in (("public_action_0", response), ("public_action_0_result", receipt))]
     episode = projection.write_once(root / "episode.json", {"schema_version": "public_strategy_episode_v1",
@@ -246,7 +365,11 @@ def test_existing_public_episode_consumes_only_original_selectors_without_checkp
     verified = projection.verify_source(source)
     view, omitted = projection.project_verified(verified)
     assert view["completed_actions"] == 1 and view["statements"] == []
-    assert "UNSELECTED_VISIBLE_TEXT" not in str(view) and len(omitted) == 1
+    assert "UNSELECTED_VISIBLE_TEXT" not in str(view) and omitted == []
+    assert view["actions"][0][-1]["text"] == "source body"
+    assert view["actions"][0][-1]["returned_text_coverage"]["status"] == "unknown"
+    assert "read_window" not in view["actions"][0][-1] and "file_sha256" not in view["actions"][0][-1]
+    assert "unselected-must-not-open" not in str(view)
     assert "source_episode_sha256" in view and "checkpoint_sha256" not in view
     derived = projection.read_public(projection.prepare_trajectory(source, tmp_path / "derived"))
     assert derived["applicability"] == {"runtime": "dotnet"}
