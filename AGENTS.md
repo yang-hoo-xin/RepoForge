@@ -90,3 +90,17 @@ they do not freeze an old architecture or override platform permissions.
     costs. Do not change hidden acceptance, reveal its answers, or expand product
     authority for measurement. A supported negative result completes an experiment.
     为什么要有它：工程推进应默认留下可复算的结果与成本，避免漏掉外层救援、失败尝试和未知量，也不为取得漂亮数字延长实验或扩大权限。
+
+## Agent skills
+
+### Issue tracker
+
+RepoForge issues, specs and implementation tickets use GitHub Issues; pull requests are not a request surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human` and `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use the single-context layout: domain language lives in the root `GLOSSARY.md` and hard-to-reverse decisions live in `docs/adr/`. See `docs/agents/domain.md`.

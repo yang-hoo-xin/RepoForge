@@ -1,0 +1,25 @@
+{
+  "schema": "github-tracer-bullet-publication.v1",
+  "repository": "yang-hoo-xin/RepoForge",
+  "parent": {
+    "number": 3,
+    "url": "https://github.com/yang-hoo-xin/RepoForge/issues/3"
+  },
+  "relations": {
+    "sub_issues": "native",
+    "dependencies": "native"
+  },
+  "tickets": {
+    "T1": {"number": 4, "url": "https://github.com/yang-hoo-xin/RepoForge/issues/4", "blocked_by": []},
+    "T2": {"number": 5, "url": "https://github.com/yang-hoo-xin/RepoForge/issues/5", "blocked_by": []},
+    "T3": {"number": 6, "url": "https://github.com/yang-hoo-xin/RepoForge/issues/6", "blocked_by": []},
+    "T4": {"number": 7, "url": "https://github.com/yang-hoo-xin/RepoForge/issues/7", "blocked_by": [4, 5, 6]},
+    "T5": {"number": 8, "url": "https://github.com/yang-hoo-xin/RepoForge/issues/8", "blocked_by": []},
+    "T6": {"number": 9, "url": "https://github.com/yang-hoo-xin/RepoForge/issues/9", "blocked_by": []},
+    "T7": {"number": 10, "url": "https://github.com/yang-hoo-xin/RepoForge/issues/10", "blocked_by": []},
+    "T8": {"number": 11, "url": "https://github.com/yang-hoo-xin/RepoForge/issues/11", "blocked_by": [7, 8, 9, 10]},
+    "T9": {"number": 12, "url": "https://github.com/yang-hoo-xin/RepoForge/issues/12", "blocked_by": [11]},
+    "T10": {"number": 13, "url": "https://github.com/yang-hoo-xin/RepoForge/issues/13", "blocked_by": [12]},
+    "T11": {"number": 14, "url": "https://github.com/yang-hoo-xin/RepoForge/issues/14", "blocked_by": [13]}
+  }
+}
