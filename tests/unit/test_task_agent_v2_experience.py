@@ -376,7 +376,7 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
     if learning_question:
         assert receipt["status"] == learning_outcome, receipt
         assert len(learning) == 1 and receipt["model_calls"] == 1
-        assert receipt["known_usage"][0]["total_tokens"] == 30
+        assert receipt["known_usage"][0] == {"input_tokens": 10, "output_tokens": 20}
         assert receipt["learning_request_ref"] == learning_ref
         assert receipt["assessment_kind"] == "model_interpretation_not_verified_fact"
         assert receipt["evidence_gaps"][0]["status"] == "not_observed"
@@ -397,14 +397,14 @@ def test_experience_through_normal_cli_actual_requests_and_terminal(repository_w
         sent = json.loads(learning[0]["messages"][-1]["content"])
         assert [row["run_id"] for row in sent["episodes"]] == ["retained-one", "retained-two"]
         assert [row["source_role"] for row in sent["episodes"]] == ["context", "opposing"]
-        assert receipt["known_usage"][0]["total_tokens"] == 30
+        assert receipt["known_usage"][0] == {"input_tokens": 10, "output_tokens": 20}
         assert memory.read(receipt["strategy_ref"])["state"] == "proposed"
         assert owner.complete_terminal_learning() == receipt and len(learning) == 1
     elif mode in {"extract", "compile_extract", "discovery_extract", "recheck_extract", "argument_extract"}:
         assert receipt["status"] == "completed", receipt
         assert len(learning) == 1
         assert receipt["budget_after"]["consumed"] == owner.execution_receipt().budget_after["consumed"] + 1
-        assert receipt["known_usage"][0]["total_tokens"] == 30
+        assert receipt["known_usage"][0] == {"input_tokens": 10, "output_tokens": 20}
         assert memory.read(receipt["strategy_ref"])["origin"]["kind"] == "model"
         assert memory.read(receipt["strategy_ref"])["state"] == "proposed"
         assert owner.complete_terminal_learning() == receipt and len(learning) == 1

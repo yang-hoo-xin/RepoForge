@@ -8,13 +8,13 @@ import re
 from copy import deepcopy
 from pathlib import Path
 
-from src.libs.llm.agent_turn import AgentUsage
 from src.mod_agent.artifacts import ArtifactRef, ArtifactStore
 from src.mod_agent.domain.full_project_compilation import _ref, _save
 from src.mod_agent.evaluation.native_execution_lineage import validate_native_execution_lineage
 from src.mod_agent.model_call_budget import validate_budget
 from src.mod_agent.model_qualification import canonical_hash, read_bound_json
 from src.mod_agent.task_agent_execution import _admitted_response, _read
+from src.mod_agent.task_agent_loop import measured_turn_usage
 from src.mod_agent.task_agent_v2_experiments import _source
 from src.mod_agent.task_agent_v2_state import TaskAgentV2State
 
@@ -38,9 +38,10 @@ def _learning(native_ref, native, learning_ref):
     for receipt in learning.get("call_receipts", []):
         if receipt.get("response_ref"):
             response = store.read(ArtifactRef(**receipt["response_ref"]))["data"]["response"]
-            usage = AgentUsage(**response["usage"]).to_dict()
+            usage = measured_turn_usage(response)
             _require(usage == receipt["usage"], "LEARNING_USAGE_CHANGED")
-            known.append(usage)
+            if usage is not None:
+                known.append(usage)
         elif receipt.get("extraction_ref"):
             extraction = store.read(ArtifactRef(**receipt["extraction_ref"]))["data"]
             _require(extraction.get("status") == "execution_unknown", "LEARNING_UNKNOWN_ORIGIN_CHANGED")
@@ -242,9 +243,10 @@ def _project(request):
         _require(_read(_ref(outcome_path), root) == event, "PROVIDER_OUTCOME_CHANGED")
         if event.get("response_ref"):
             provider_response = _read(event["response_ref"], root)
-            usage = AgentUsage(**provider_response["usage"]).to_dict()
+            usage = measured_turn_usage(provider_response)
             _require(event.get("usage") == usage, "PROVIDER_USAGE_CHANGED")
-            known_usage.append(usage)
+            if usage is not None:
+                known_usage.append(usage)
             if provider_response == response:
                 provider_matches.append((event, provider_request))
     _require(len(provider_matches) == 1, "NATIVE_PROVIDER_ORIGIN_REQUIRED")

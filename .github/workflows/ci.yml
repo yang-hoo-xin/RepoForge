@@ -65,6 +65,7 @@ jobs:
           tests/unit/test_task_agent_v2_experiment_tools.py
           tests/unit/test_task_agent_v2_experiments.py
           tests/unit/test_task_agent_v2_experience.py
+          tests/unit/test_strategy_native_export.py::test_unknown_learning_response_is_not_reclassified_as_known_zero_usage
           tests/unit/test_strategy_experience.py
           tests/unit/test_strategy_learning_request.py
           tests/unit/test_learning_calibration.py

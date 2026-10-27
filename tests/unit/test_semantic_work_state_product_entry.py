@@ -141,7 +141,8 @@ def test_normal_cli_semantic_state_and_invalid_metadata_preserve_real_action_cha
     first_request = read_bound_json(first["request_ref"])
     first_system = next(row for row in first_request["messages"] if row["role"] == "system" and row["content"])
     assert "You are the technical agent in one continuous repository task." in first_system["content"]
-    assert "Include working_state with your next normal tool action." in first_system["content"]
+    assert "working_state is optional." in first_system["content"]
+    assert "Omit it when no update is needed" in first_system["content"]
     assert sum(row["role"] == "system" for row in first_request["messages"]) == 1
     store_root = Path(first["request_ref"]["path"]).parents[1]
     host_path = store_root / checkpoint["host_config_ref"]
