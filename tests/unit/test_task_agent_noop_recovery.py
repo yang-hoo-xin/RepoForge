@@ -51,7 +51,7 @@ def test_failed_behavior_noop_feedback_then_actual_revision_and_recheck(current_
     assert "RecordRuntimeMarker();" in session._candidate(session.current_candidate)["generated_changes"][0]["patch"]["after_text"]
 
 
-def test_noop_correction_limit_survives_native_history_restore(current_setup):  # noqa: F811
+def test_repeated_noop_correction_stops_after_recovery_without_new_feedback(current_setup):  # noqa: F811
     _inputs, session, _oracle, budget = current_setup
     responses = [lambda: response(call("candidate_submit", patch(session, correct=False), "initial")),
                  lambda: response(call("candidate_submit", _noop(session), "noop"))]
@@ -65,6 +65,7 @@ def test_noop_correction_limit_survives_native_history_restore(current_setup):  
     first = session.run(client=Interrupted())
     assert first.tool_argument_correction_used, first.termination
     charged = budget.bytes
+    budget.maximum = budget.consumed + 2
 
     class Repeated:
         def complete_turn(self, request):
@@ -72,8 +73,10 @@ def test_noop_correction_limit_survives_native_history_restore(current_setup):  
 
     second = session.run(client=Repeated(), initial_request=_request(asdict(first.request)),
                          prior_call_records=first.call_records)
-    assert second.termination["code"] == "TASK_AGENT_TOOL_ARGUMENT_CORRECTION_EXHAUSTED"
+    assert second.termination["code"] == "TASK_AGENT_CORRECTION_NO_PROGRESS"
     assert second.tool_argument_correction_used and budget.bytes == charged
+    assert any(event["event"] == "correction_no_progress" for event in second.events)
+    assert second.call_records["again"]["status"] == "not_dispatched"
     assert len(session.candidates) == 1
 
 

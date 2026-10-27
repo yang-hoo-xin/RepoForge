@@ -308,21 +308,21 @@ def _mixed_calls():
         call("upstream", {"question": "reassess"}, "mixed-upstream"))
 
 
-@pytest.mark.parametrize("limit", ["second_error", "model_budget", "observation_budget"])
+@pytest.mark.parametrize("limit", ["multiple_errors", "model_budget", "observation_budget"])
 def test_mixed_batch_correction_stops_within_original_limits_without_dispatch(limit):
-    owners = Owners(Budget(maximum=1 if limit == "model_budget" else 20,
+    owners = Owners(Budget(maximum=1 if limit == "model_budget" else 3 if limit == "multiple_errors" else 20,
         max_bytes=0 if limit == "observation_budget" else 100_000))
-    client = Client([response(*_mixed_calls()), response(*_mixed_calls())])
+    client = Client([response(*_mixed_calls()) for _ in range(3 if limit == "multiple_errors" else 1)])
     result = run(client, owners)
-    expected = {"second_error": "TASK_AGENT_TOOL_ARGUMENT_CORRECTION_EXHAUSTED",
+    expected = {"multiple_errors": "TASK_AGENT_CORRECTION_NO_PROGRESS",
         "model_budget": "TASK_AGENT_MODEL_BUDGET_EXHAUSTED", "observation_budget": "TASK_AGENT_OBSERVATION_BUDGET_EXHAUSTED"}
     assert result.termination["code"] == expected[limit]
     assert owners.effects == [] and owners.budget.reads == result.read_units == 0
-    assert len(client.requests) == (2 if limit == "second_error" else 1)
-    assert result.tool_argument_correction_used is (limit == "second_error")
-    assert bool(result.unadmitted_tool_results) is (limit == "observation_budget")
-    if limit == "second_error":
-        feedback = client.requests[1].tool_results
+    assert len(client.requests) == (2 if limit == "multiple_errors" else 1)
+    assert result.tool_argument_correction_used is (limit == "multiple_errors")
+    assert bool(result.unadmitted_tool_results) is (limit in {"multiple_errors", "observation_budget"})
+    if limit == "multiple_errors":
+        feedback = [row for request in client.requests[1:] for row in request.tool_results]
         assert owners.budget.bytes == sum(len(json.dumps(asdict(row), sort_keys=True,
             ensure_ascii=False, separators=(",", ":")).encode()) for row in feedback)
     else:
@@ -351,17 +351,22 @@ def test_mixed_batch_with_any_other_fault_is_hard_rejected_without_correction(ba
 
 
 @pytest.mark.parametrize("first_kind", ["argument", "mixed"])
-def test_argument_and_mixed_errors_share_one_correction_even_after_history_restore(first_kind):
+def test_argument_and_mixed_corrections_both_survive_history_restore(first_kind):
     owners = Owners(Budget())
     first = (response(call("source_read", {}, "bad-argument")) if first_kind == "argument" else response(*_mixed_calls()))
     retained = run(Client([first, AgentTurnProviderError("controlled pause")]), owners)
     assert retained.tool_argument_correction_used
     second = response(*_mixed_calls()) if first_kind == "argument" else response(call("source_read", {}, "bad-argument"))
     before = owners.budget.consumed
-    result = run(Client([second]), owners, initial_request=retained.request,
+    result = run(Client([second, AgentTurnProviderError("pause after second correction")]), owners, initial_request=retained.request,
         prior_call_records=retained.call_records)
-    assert result.termination["code"] == "TASK_AGENT_TOOL_ARGUMENT_CORRECTION_EXHAUSTED"
-    assert owners.budget.consumed == before + 1 and owners.effects == []
+    assert result.termination["code"] == "TASK_AGENT_PROVIDER_TURN_FAILED"
+    assert owners.budget.consumed == before + 2 and owners.effects == []
+    correction_codes = {"TASK_AGENT_SOURCE_ARGUMENTS_INVALID", "TASK_AGENT_MIXED_TOOL_BATCH"}
+    assert sum(any(row.output.get("code") in correction_codes for row in exchange.tool_results)
+        for exchange in result.request.historical_tool_exchanges) == 1
+    assert result.request.tool_results and all(row.output["code"] in correction_codes
+        for row in result.request.tool_results)
 
 
 def test_corrected_never_dispatched_ids_resume_from_native_history_without_an_extra_chance():
@@ -468,7 +473,7 @@ def test_no_reexecution_of_candidate_submit_or_unknown_effect():
     assert unknown.unknown_effects and unknown.termination["code"] == "TASK_AGENT_ACTION_OUTCOME_UNKNOWN"
     assert len(owners.effects) == len(client.requests) == 1 and unknown.call_records["check"]["status"] == "unknown"
     pending = [row for row in unknown.events if row["event"] == "tool_dispatch_started"]
-    assert pending == [{"event": "tool_dispatch_started", "call_id": "check",
+    assert pending == [{"event": "tool_dispatch_started", "turn": 1, "call_id": "check",
                         "role": "candidate_check", "operation_state": "pending"}]
 
 
@@ -557,16 +562,39 @@ def test_native_ollama_one_argument_feedback_preserves_unchanged_unexecuted_good
     assert feedback[1]["argument_errors"] == []
 
 
-def test_argument_correction_is_shared_once_and_retained_across_provider_interruption():
+def test_argument_corrections_are_retained_across_provider_interruption():
     owners = Owners(Budget())
     first = run(Client([response(call("source_read", {}, "bad1")),
                         AgentTurnProviderError("controlled interruption")]), owners)
     assert first.tool_argument_correction_used and first.model_budget["consumed"] == 2
-    second = run(Client([response(call("source_read", {"binding_id": 3}, "bad2"))]), owners,
+    second = run(Client([response(call("source_read", {"binding_id": 3}, "bad2")),
+        AgentTurnProviderError("pause after second correction")]), owners,
         initial_request=first.request, prior_call_records=first.call_records)
     assert second.tool_argument_correction_used
-    assert second.termination["code"] == "TASK_AGENT_TOOL_ARGUMENT_CORRECTION_EXHAUSTED"
-    assert owners.effects == [] and second.model_budget["consumed"] == 3
+    assert second.termination["code"] == "TASK_AGENT_PROVIDER_TURN_FAILED"
+    assert owners.effects == [] and second.model_budget["consumed"] == 4
+    assert second.call_records["bad2"]["status"] == "not_dispatched"
+
+
+def test_distinct_safe_argument_corrections_continue_until_original_model_budget_exhausts():
+    owners = Owners(Budget(maximum=3))
+    client = Client([
+        response(call("source_read", {}, "missing-binding")),
+        response(call("source_read", {"binding_id": 3}, "wrong-binding-type")),
+        response(call("source_read", {}, "budget-bound-final-error")),
+    ])
+
+    result = run(client, owners)
+
+    assert result.termination["code"] == "TASK_AGENT_MODEL_BUDGET_EXHAUSTED"
+    assert result.model_turns == result.model_budget["consumed"] == 3
+    assert owners.effects == [] and owners.budget.reads == 0
+    assert [request.tool_results[0].call_id for request in client.requests[1:]] == [
+        "missing-binding", "wrong-binding-type"]
+    assert all(request.tool_results[0].output["status"] == "rejected_not_executed"
+        for request in client.requests[1:])
+    assert all(result.call_records[call_id]["status"] == "not_dispatched"
+        for call_id in ("missing-binding", "wrong-binding-type"))
 
 
 def test_host_only_execution_history_allows_new_repair_without_resending_old_messages():
@@ -615,11 +643,12 @@ def test_host_only_execution_history_preserves_used_correction(kind):
     bad = (response(call("source_read", {}, "invalid")) if kind == "argument"
         else AgentTurnResponse("scripted", "controlled", "Finished without tools"))
     retained = run(Client([bad, AgentTurnProviderError("controlled pause")]), owners)
-    result = run(Client([bad]), owners, prior_execution_requests=(retained.request,),
+    replies = [bad, AgentTurnProviderError("pause after another correction")] if kind == "argument" else [bad]
+    result = run(Client(replies), owners, prior_execution_requests=(retained.request,),
         prior_call_records=retained.call_records)
     assert result.termination["code"] == (
-        "TASK_AGENT_TOOL_ARGUMENT_CORRECTION_EXHAUSTED" if kind == "argument" else "TASK_AGENT_FINISH_TOOL_REQUIRED")
-    assert result.model_budget["consumed"] == 3 and not owners.effects
+        "TASK_AGENT_PROVIDER_TURN_FAILED" if kind == "argument" else "TASK_AGENT_FINISH_TOOL_REQUIRED")
+    assert result.model_budget["consumed"] == (4 if kind == "argument" else 3) and not owners.effects
 
 
 def test_host_only_execution_history_rejects_unknown_effects_before_another_send():
@@ -653,7 +682,7 @@ def test_second_fresh_restore_retains_first_context_effects():
 
 
 @pytest.mark.parametrize("kind", ["argument", "output"])
-def test_second_fresh_restore_does_not_reissue_used_correction(kind):
+def test_second_fresh_restore_preserves_correction_policy(kind):
     owners = Owners(Budget())
     bad = (response(call("source_read", {}, "invalid")) if kind == "argument"
         else AgentTurnResponse("scripted", "controlled", "Finished without tools"))
@@ -661,11 +690,13 @@ def test_second_fresh_restore_does_not_reissue_used_correction(kind):
     middle = run(Client([response(call("source_read", {"binding_id": "one"}, "new-read")),
         AgentTurnProviderError("second pause")]), owners,
         prior_execution_requests=first.execution_history_requests, prior_call_records=first.call_records)
-    final = run(Client([bad]), owners,
+    replies = [bad, AgentTurnProviderError("pause after another correction")] if kind == "argument" else [bad]
+    final = run(Client(replies), owners,
         prior_execution_requests=middle.execution_history_requests, prior_call_records=middle.call_records)
     assert final.termination["code"] == (
-        "TASK_AGENT_TOOL_ARGUMENT_CORRECTION_EXHAUSTED" if kind == "argument" else "TASK_AGENT_FINISH_TOOL_REQUIRED")
-    assert owners.effects == [("source_read", {"binding_id": "one"})] and owners.budget.consumed == 5
+        "TASK_AGENT_PROVIDER_TURN_FAILED" if kind == "argument" else "TASK_AGENT_FINISH_TOOL_REQUIRED")
+    assert owners.effects == [("source_read", {"binding_id": "one"})]
+    assert owners.budget.consumed == (6 if kind == "argument" else 5)
 
 
 def test_actual_unknown_execution_without_result_stays_unknown_during_fresh_restore():
@@ -716,6 +747,32 @@ def test_source_feedback_cannot_advertise_an_unavailable_next_model_turn():
     assert result.termination["code"] == "TASK_AGENT_MODEL_BUDGET_EXHAUSTED"
     assert not result.tool_argument_correction_used and owners.budget.bytes == 0
     assert not result.request.tool_results and owners.effects == []
+
+
+def test_multiple_safe_corrections_obey_the_existing_wall_stop_before_another_model_send():
+    owners = Owners(Budget())
+    charges = []
+    original_charge = owners.budget.charge
+
+    def charge(**usage):
+        original_charge(**usage)
+        if usage["observation_bytes"]:
+            charges.append(usage["observation_bytes"])
+
+    owners.budget.charge = charge
+    client = Client([
+        response(call("source_read", {}, "first-before-deadline")),
+        response(call("source_read", {"binding_id": 3}, "second-at-deadline")),
+    ])
+
+    result = run(client, owners, stop_check=lambda: (
+        {"code": "TASK_AGENT_WALL_BUDGET_EXHAUSTED"} if len(charges) == 2 else None))
+
+    assert result.termination["code"] == "TASK_AGENT_WALL_BUDGET_EXHAUSTED"
+    assert result.model_turns == result.model_budget["consumed"] == len(client.requests) == 2
+    assert result.request.tool_results[0].call_id == "second-at-deadline"
+    assert len(result.request.historical_tool_exchanges) == 1 and len(charges) == 2
+    assert result.tool_argument_correction_used and not owners.effects
 
 
 @pytest.mark.parametrize("initial", [True, False])

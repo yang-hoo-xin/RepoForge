@@ -62,6 +62,8 @@ def test_unknown_binding_correction_is_bounded_and_never_dispatches_edit(session
         return response("candidate_submit", arguments, "call-" + str(len(requests)))
     result = session.run(SimpleNamespace(complete_turn=complete), lambda event: None)
     assert len(requests) == 2
+    assert result.termination["code"] == "TASK_AGENT_CORRECTION_NO_PROGRESS"
+    assert result.termination["detail"]["consecutive_same_feedback"] == 2
     assert result.tool_argument_correction_used
     assert not any(event["event"] == "tool_dispatch_started" for event in result.events)
     assert session.state.current_revision_ref == session.state.contract["baseline_manifest_ref"]

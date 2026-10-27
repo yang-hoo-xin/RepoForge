@@ -557,6 +557,8 @@ class TaskAgentExecutionV2(TaskAgentExecution):
                 session.observe_dispatch_event(event)
                 if event.get("event") == "tool_dispatch_completed":
                     calls = [row for row in session.actual_calls if row["call_id"] == event["call_id"]]
+                    if any("turn" in row for row in calls):
+                        calls = [row for row in calls if row.get("turn") == event.get("turn")]
                     _require(len(calls) == 1, "COMPLETED_TOOL_ORIGIN_MISSING")
                     details["completed_tool_records"].append({**deepcopy(calls[0]), "role": event["role"],
                         "event": deepcopy(event)})

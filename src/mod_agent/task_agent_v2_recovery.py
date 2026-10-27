@@ -202,30 +202,60 @@ def _trusted_read(reference, store_root):
     return read_bound_json(reference)
 
 
-def _validate_completed(checkpoint, store_root, host=None):
+def _validate_call_evidence(checkpoint, store_root, host=None):
     from src.mod_agent.task_agent_execution import _admitted_response
+    from src.mod_agent.task_agent_v2_tools import (
+        resolved_origin_arguments,
+        validate_origin_request,
+    )
 
-    calls = {row["call_id"]: row for row in checkpoint["session"]["actual_calls"]}
+    calls = {}
+    for row in checkpoint["session"]["actual_calls"]:
+        calls.setdefault(row["call_id"], []).append(row)
     receipts_by_call = {}
-    for call_id, record in checkpoint["loop"]["call_records"].items():
-        if record["status"] != "completed":
-            continue
-        _require(call_id in calls, "COMPLETED_ORIGIN_MISSING")
-        call = calls[call_id]
-        response, arguments = _trusted_read(call["response_ref"], store_root), _trusted_read(call["arguments_ref"], store_root)
+
+    def validate_origin(call, record, error_code):
+        response = _trusted_read(call["response_ref"], store_root)
+        arguments = _trusted_read(call["arguments_ref"], store_root)
         _admitted_response(response, checkpoint["details"]["model_profile"])
-        _require([item for item in response["tool_calls"] if item["call_id"] == call_id]
-            == [{"call_id": call_id, "name": call["name"], "arguments": arguments}]
-            and arguments == call["arguments"] and canonical_hash(arguments) == record["arguments_sha256"], "COMPLETED_ARGUMENTS_CHANGED")
-        from src.mod_agent.task_agent_v2_tools import (
-            resolved_origin_arguments,
-            validate_origin_request,
-        )
+        _require([item for item in response["tool_calls"] if item["call_id"] == call["call_id"]]
+            == [{"call_id": call["call_id"], "name": call["name"], "arguments": arguments}]
+            and arguments == call["arguments"] and canonical_hash(arguments) == record["arguments_sha256"],
+            error_code)
         def reader(reference):
             return _trusted_read(reference, store_root)
         validate_origin_request(call, checkpoint["details"]["provider_turns"], reader=reader)
         resolved_origin_arguments(call, reader=reader)
-        _require(call.get("execution_receipt_ref"), "COMPLETED_EXECUTION_RECEIPT_REQUIRED")
+        if "turn" in call:
+            matches = [row for row in checkpoint["details"]["provider_turns"]
+                if row.get("turn") == call["turn"] and row.get("request_ref") == call.get("request_ref")
+                and row.get("response_ref") and reader(row["response_ref"]) == response]
+            _require(len(matches) == 1, "CALL_OCCURRENCE_CHANGED")
+        return response
+
+    for call_id, record in checkpoint["loop"]["call_records"].items():
+        if record["status"] not in {"completed", "not_dispatched"}:
+            continue
+        _require(call_id in calls, "CORRECTION_ORIGIN_MISSING" if record["status"] == "not_dispatched"
+            else "COMPLETED_ORIGIN_MISSING")
+        error_code = "CORRECTION_ARGUMENTS_CHANGED" if record["status"] == "not_dispatched" else "COMPLETED_ARGUMENTS_CHANGED"
+        for origin in calls[call_id]:
+            validate_origin(origin, record, error_code)
+        if record["status"] == "not_dispatched":
+            # Scope: validate retained correction evidence without replaying prepare or executing the call.
+            # 为什么要有它：恢复须绑定模型原始参数和零派发事实，但不能为验证重新产生工具副作用。
+            output = record.get("result", {}).get("output", {})
+            from src.mod_agent.task_agent_loop import is_safe_task_correction_result
+            _require(is_safe_task_correction_result(output), "CORRECTION_RESULT_CHANGED")
+            _require(all(not origin.get("execution_receipt_ref") for origin in calls[call_id])
+                and not any(event.get("event") == "tool_dispatch_started" and event.get("call_id") == call_id
+                    for event in checkpoint["loop"]["events"])
+                and not any(row.get("call_id") == call_id for row in checkpoint["details"]["completed_tool_records"]),
+                "CORRECTION_WAS_DISPATCHED")
+            continue
+        executed = [origin for origin in calls[call_id] if origin.get("execution_receipt_ref")]
+        _require(len(executed) == 1, "COMPLETED_EXECUTION_RECEIPT_REQUIRED")
+        call = executed[0]
         receipt = _trusted_read(call["execution_receipt_ref"], store_root)
         receipts_by_call[call_id] = receipt
         _require(receipt["origin"] == {key: item for key, item in call.items() if key != "execution_receipt_ref"}
@@ -297,10 +327,16 @@ def _validate_completed(checkpoint, store_root, host=None):
                     "REQUEST_NATIVE_TEXT_HISTORY_CHANGED")
                 native_text_positions.add(position)
             for result in exchange["tool_results"]:
-                _require(result == checkpoint["loop"]["call_records"].get(result["call_id"], {}).get("result"), "REQUEST_TOOL_RESULT_CHANGED")
-                source = calls.get(result["call_id"])
-                _require(source is not None and _trusted_read(source["response_ref"], store_root)["provider_state"] == exchange["provider_state"],
-                    "REQUEST_PROVIDER_HISTORY_CHANGED")
+                from src.mod_agent.task_agent_loop import is_safe_task_correction_result
+                record = checkpoint["loop"]["call_records"].get(result["call_id"], {})
+                final_result = result == record.get("result")
+                correction_result = is_safe_task_correction_result(result.get("output", {}))
+                _require(final_result or correction_result, "REQUEST_TOOL_RESULT_CHANGED")
+                sources = [source for source in calls.get(result["call_id"], [])
+                    if _trusted_read(source["response_ref"], store_root)["provider_state"] == exchange["provider_state"]
+                    and (not source.get("execution_receipt_ref") if correction_result
+                        else record.get("status") != "completed" or bool(source.get("execution_receipt_ref")))]
+                _require(sources, "REQUEST_PROVIDER_HISTORY_CHANGED")
         for index, event in enumerate(checkpoint["details"]["provider_turns"], 1):
             _require(event["turn"] == index, "PROVIDER_TURN_SEQUENCE_CHANGED")
             reference = _ref(Path(event["request_ref"]["path"]).parent / ("provider-outcome-" + event["reservation_id"] + ".json"))
@@ -311,6 +347,11 @@ def _validate_completed(checkpoint, store_root, host=None):
         if pending is not None:
             _require(turns and turns[-1].get("response_ref")
                 and _trusted_read(turns[-1]["response_ref"], store_root) == pending, "PENDING_RESPONSE_CHANGED")
+
+
+# Scope: compatibility for existing internal evidence consumers; new code uses the accurate broader name.
+# 为什么要有它：重命名恢复校验不能迫使无关经验与轨迹模块在同一工单内一起迁移。
+_validate_completed = _validate_call_evidence
 
 
 def _validate_resource_chain(state, checkpoint, host):
@@ -770,7 +811,7 @@ def load_task_agent_checkpoint(*, artifact_store_root, checkpoint_ref, reconcile
         checkpoint_ref, checkpoint = _reconcile_checkpoint(state, checkpoint_ref, checkpoint, latest)
     _require(not checkpoint["session"]["_check_inflight"], "CHECK_REQUIRES_RECONCILIATION")
     _validate_resource_chain(state, checkpoint, host)
-    _validate_completed(checkpoint, root, host)
+    _validate_call_evidence(checkpoint, root, host)
     from src.mod_agent.task_agent_v2_working_state import validate_working_state
     validate_working_state(checkpoint["owner"].get("working_state"),
         responses=[_trusted_read(row["response_ref"], root) for row in checkpoint["details"]["provider_turns"]
@@ -798,7 +839,7 @@ def _activate_delivery_rebase(root, rebase_ref):
     _require(prior["host_config_ref"] == record["prior_host_config_ref"]
         and prior["task_contract_ref"] == record["prior_task_contract_ref"]
         and all(_ref(reference["path"]) == reference for reference in old_host["owner_refs"]), "REBASE_PRIOR_HOST_CHANGED")
-    _validate_completed(prior, root, old_host)
+    _validate_call_evidence(prior, root, old_host)
     overrides = record["host_overrides"]
     host = {**deepcopy(old_host), **{key: deepcopy(value) for key, value in overrides.items() if key != "model_budget"},
         "rebase_ref": rebase_ref, "prior_host_config_ref": record["prior_host_config_ref"]}

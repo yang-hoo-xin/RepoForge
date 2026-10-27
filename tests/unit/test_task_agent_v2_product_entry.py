@@ -30,7 +30,9 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                                                                  exercise_paging=False, exercise_history=False,
                                                                  exercise_deadline=False, expect_unsent_deadline=False,
                                                                  exercise_repeat=False, exercise_diagnostics=False,
-                                                                 exercise_candidate_readiness=False):
+                                                                 exercise_candidate_readiness=False,
+                                                                 exercise_multiple_corrections=False,
+                                                                 exercise_stable_call_ids=False):
     short_workspace = repository_workspace
     if exercise_history:
         from src.mod_agent import task_agent_v2_context as context_owner
@@ -158,6 +160,29 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         tool_outputs = [json.loads(x["content"]) for x in payload["messages"] if x["role"] == "tool"]
         observed = [row.get("value", row) for row in tool_outputs]
         last = observed[-1] if observed else None
+        if exercise_stable_call_ids and len(requests) <= 3:
+            if len(requests) == 1:
+                memory.update(parent=context["parent_revision_ref"], registry=context["binding_registry_ref"],
+                    stable_call_extra_calls=1)
+                calls = [
+                    {"id": "stable-plan", "function": {"name": "plan_update", "arguments": {
+                        "plan": {"hypotheses": ["Investigate marker state"], "intended_targets": ["Library/Unused.cs"]}}}},
+                    {"id": "stable-read", "function": {"name": "source_read", "arguments": {
+                        "parent_revision_ref": memory["parent"], "path": "Library/Unused.cs"}}},
+                ]
+            elif len(requests) == 2:
+                assert {row["code"] for row in observed[-2:]} == {"TASK_AGENT_MIXED_TOOL_BATCH"}
+                assert all(row["status"] == "rejected_not_executed" for row in observed[-2:])
+                calls = [{"id": "stable-plan", "function": {"name": "plan_update", "arguments": {
+                    "plan": {"hypotheses": ["Investigate marker state"], "intended_targets": ["Library/Unused.cs"]}}}}]
+            else:
+                assert last["current_revision_ref"] == memory["parent"]
+                memory["reading"] = "Unused.cs"
+                calls = [{"id": "stable-read", "function": {"name": "source_read", "arguments": {
+                    "parent_revision_ref": memory["parent"], "path": "Library/Unused.cs"}}}]
+            return httpx.Response(200, request=request, json={"model": model,
+                "message": {"role": "assistant", "content": "", "tool_calls": calls},
+                "done": True, "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
         if exercise_candidate_readiness and len(requests) in {5, 6, 7}:
             # 为什么要有它：真实失败先消耗空修改纠错，随后无候选检查仍须能反馈，不能靠额外参数纠错机会绕过原问题。
             current = next(json.loads(row["content"])["current_task_state"] for row in reversed(payload["messages"])
@@ -217,6 +242,8 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                         "name": "history_read", "arguments": {"history_ref": projection["history_ref"]}}}]}, "done": True,
                     "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
         if exercise_paging and last and last.get("path") == "Library/Unused.cs":
+            if exercise_multiple_corrections:
+                memory.setdefault("first_unused_source_view_ref", last["source_view_ref"])
             assert len(last["text"]) <= 2000 and last["text_scope"] == "read_window"
             assert last["parent_revision_ref"] == memory["parent"]
             if last["next_offset"] is not None:
@@ -228,6 +255,46 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                             "path": last["path"], "offset": last["next_offset"]}}}]}, "done": True,
                     "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
             assert "Marker =" in last["text"]
+        if exercise_multiple_corrections:
+            correction_stage = memory.get("multiple_correction_stage")
+            if correction_stage == "missing_source_view_ref":
+                assert last["status"] == "rejected_not_executed"
+                assert last["code"] == "TASK_AGENT_CANDIDATE_ARGUMENTS_INVALID"
+                assert "source_view_ref" in str(last["argument_errors"])
+                memory["multiple_correction_stage"] = "outside_read_window"
+                return httpx.Response(200, request=request, json={"model": model,
+                    "message": {"role": "assistant", "content": "", "tool_calls": [{"id": "outside-window-edit",
+                        "function": {"name": "candidate_submit", "arguments": {
+                            "parent_revision_ref": memory["parent"], "edits": [{
+                                "binding_id": memory["unused_binding"],
+                                "source_view_ref": memory["first_unused_source_view_ref"],
+                                "before_text": "Marker = 0", "after_text": "Marker = 1",
+                                "rationale": "Use the exact visible preimage"}]}}}]},
+                    "done": True, "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
+            if correction_stage == "outside_read_window":
+                assert last["status"] == "rejected_not_executed"
+                assert last["code"] == "TASK_AGENT_CANDIDATE_ARGUMENTS_INVALID"
+                assert "before_text_outside_read_window" in last["argument_errors"]
+                marker_offset = (source / "Library/Unused.cs").read_text(encoding="utf-8").index("Marker =")
+                memory["multiple_correction_stage"] = "fresh_source_read"
+                return httpx.Response(200, request=request, json={"model": model,
+                    "message": {"role": "assistant", "content": "", "tool_calls": [{"id": "fresh-preimage-read",
+                        "function": {"name": "candidate_read", "arguments": {
+                            "parent_revision_ref": memory["parent"], "path": "Library/Unused.cs",
+                            "offset_chars": marker_offset, "limit_chars": 64}}}]},
+                    "done": True, "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
+            if correction_stage == "fresh_source_read":
+                assert last["path"] == "Library/Unused.cs" and "Marker = 0" in last["text"]
+                memory.update(multiple_correction_stage="accepted_candidate_submitted",
+                    multiple_correction_extra_calls=3)
+                return httpx.Response(200, request=request, json={"model": model,
+                    "message": {"role": "assistant", "content": "", "tool_calls": [{"id": "accepted-after-reread",
+                        "function": {"name": "candidate_submit", "arguments": {
+                            "parent_revision_ref": memory["parent"], "edits": [{
+                                "binding_id": memory["unused_binding"], "source_view_ref": last["source_view_ref"],
+                                "before_text": "Marker = 0", "after_text": "Marker = 1",
+                                "rationale": "Use the reread exact preimage"}]}}}]},
+                    "done": True, "done_reason": "stop", "prompt_eval_count": 10, "eval_count": 20})
         if exercise_feedback and len(requests) == 6:
             assert "check_feedback_read" in tools
             assert last["candidate_ref"] == memory["parent"]
@@ -302,6 +369,8 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                 - memory.get("page_requests", 0)
                 - memory.get("history_requests", 0)
                 - memory.get("readiness_extra_calls", 0)
+                 - memory.get("multiple_correction_extra_calls", 0)
+                 - memory.get("stable_call_extra_calls", 0)
                 - int(exercise_correction and len(requests) > 4)
                 - (2 if exercise_stale_view and len(requests) > 12 else 0)
                 - int(exercise_feedback and len(requests) > 6))
@@ -342,9 +411,15 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                 args["edits"][0]["after_text"] = args["edits"][0]["before_text"]
             if exercise_correction and len(requests) == 4:
                 del args["edits"][0]["before_text"]
+            if exercise_multiple_corrections:
+                del args["edits"][0]["source_view_ref"]
+                memory["multiple_correction_stage"] = "missing_source_view_ref"
         elif turn in {5, 12}:
             if turn == 5:
-                assert last["edit_explanations"] == [{"binding_id": memory["unused_binding"], "status": "not_expressed", "rationale": None}]
+                expected_explanation = ({"binding_id": memory["unused_binding"], "status": "expressed",
+                    "rationale": "Use the reread exact preimage"} if exercise_multiple_corrections else
+                    {"binding_id": memory["unused_binding"], "status": "not_expressed", "rationale": None})
+                assert last["edit_explanations"] == [expected_explanation]
                 if exercise_feedback:
                     memory["failed_source_id"] = last["candidate_source_id"]
             memory["parent"] = last["candidate_ref"]
@@ -370,6 +445,9 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         if turn == 6:
             assert last["status"] == "behavior_failed"
             assert last["verification_summary"]["test_command_executed"]
+            if exercise_multiple_corrections:
+                assert last["candidate_ref"] == memory["parent"] and last["observations"]
+                memory["multiple_correction_check_feedback_observed"] = True
         if exercise_candidate_readiness:
             for field in ("candidate_ref", "check_ref", "parent_revision_ref", "expected_registry_ref"):
                 args.pop(field, None)
@@ -448,6 +526,8 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
                              + memory.get("page_requests", 0)
                              + memory.get("history_requests", 0)
                              + memory.get("readiness_extra_calls", 0)
+                             + memory.get("multiple_correction_extra_calls", 0)
+                             + memory.get("stable_call_extra_calls", 0)
                              + int(exercise_correction) + (2 if exercise_stale_view else 0) + int(exercise_feedback))
     if exercise_feedback:
         assert pending["model_call_budget"]["consumed"] == 14
@@ -460,6 +540,9 @@ def test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_wo
         assert len(set(memory["diagnostic_roots"])) == 2
     if exercise_correction:
         assert pending["model_call_budget"]["consumed"] == 14
+    if exercise_multiple_corrections:
+        assert memory["multiple_correction_check_feedback_observed"] is True
+        assert pending["model_call_budget"]["consumed"] == 13 + memory["page_requests"] + 3
     if exercise_stale_view:
         assert pending["model_call_budget"]["consumed"] == 15
     assert {p.name: p.read_bytes() for p in (source / "Library").glob("*.cs")} == baseline
@@ -621,6 +704,12 @@ def test_normal_cli_discovery_before_edit_preserves_actual_failed_execution(repo
 def test_normal_cli_correctable_missing_preimage_continues_same_task_and_budget(repository_workspace, monkeypatch, capsys):
     test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
         repository_workspace, monkeypatch, capsys, False, exercise_correction=True)
+
+
+def test_normal_cli_multiple_safe_corrections_reread_then_reach_actual_check(repository_workspace, monkeypatch, capsys):
+    test_v2_normal_cli_empty_registry_retarget_and_product_handoff(
+        repository_workspace, monkeypatch, capsys, False, exercise_paging=True,
+        exercise_multiple_corrections=True)
 
 
 def test_normal_cli_historical_view_requires_refresh_before_revision(repository_workspace, monkeypatch, capsys):

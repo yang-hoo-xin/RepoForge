@@ -1,6 +1,6 @@
-"""Candidate form errors use the existing single correction, not new authority.
+"""Candidate form errors use existing task resources, not new authority.
 
-为什么要有它：真实首候选的空父字段不能终止整个任务，反馈也不能放松版本、来源或修改范围。
+为什么要有它：可安全修正的候选输入不能提前终止整个任务，反馈也不能放松版本、来源或修改范围。
 """
 import json
 from copy import deepcopy
@@ -253,8 +253,9 @@ def test_revision_authority_errors_precede_format_feedback(current_setup, fault)
     assert len(session.candidates) == 1
 
 
-def test_second_candidate_input_error_does_not_gain_another_correction(current_setup):  # noqa: F811
-    _inputs, session, _oracle, _budget = current_setup
+def test_repeated_candidate_input_errors_stop_without_spending_the_full_model_budget(current_setup):  # noqa: F811
+    _inputs, session, _oracle, budget = current_setup
+    budget.maximum = 3
     turns = 0
     class Scripted:
         def complete_turn(self, request):
@@ -262,8 +263,10 @@ def test_second_candidate_input_error_does_not_gain_another_correction(current_s
             turns += 1
             return response(call("candidate_submit", malformed(session, "null_parent"), f"wrong-{turns}"))
     result = session.run(client=Scripted())
-    assert result.termination["code"] == "TASK_AGENT_TOOL_ARGUMENT_CORRECTION_EXHAUSTED"
+    assert result.termination["code"] == "TASK_AGENT_CORRECTION_NO_PROGRESS"
     assert result.model_turns == 2 and result.tool_argument_correction_used
+    assert set(result.call_records) == {"wrong-1", "wrong-2"}
+    assert all(row["status"] == "not_dispatched" for row in result.call_records.values())
     assert not session.candidates
 
 

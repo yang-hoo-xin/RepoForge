@@ -1,4 +1,4 @@
-"""Real read-budget views and one atomic shrink-batch feedback; no real model/Build."""
+"""Real read-budget views and charged atomic shrink-batch feedback; no real model/Build."""
 from __future__ import annotations
 
 from dataclasses import replace
@@ -54,15 +54,16 @@ def test_three_requested_two_remaining_returns_atomic_feedback_then_same_two_ids
 
 
 @pytest.mark.parametrize("kind", ["again", "no_model_calls", "no_feedback_bytes", "already_corrected"])
-def test_read_correction_never_increases_limits_or_repeats(kind):
-    selected = owner(maximum=1 if kind == "no_model_calls" else 20, max_bytes=0 if kind == "no_feedback_bytes" else 100_000)
-    client = Client([response(*searches()), response(*searches())])
+def test_read_correction_repeats_only_within_existing_resource_limits(kind):
+    selected = owner(maximum=1 if kind == "no_model_calls" else 3 if kind in {"again", "already_corrected"} else 20,
+        max_bytes=0 if kind == "no_feedback_bytes" else 100_000)
+    client = Client([response(*searches()) for _ in range(3 if kind in {"again", "already_corrected"} else 1)])
     result = run(client, selected, tool_argument_correction_used=kind == "already_corrected")
-    assert result.termination["code"] == {"again": "TASK_AGENT_TOOL_ARGUMENT_CORRECTION_EXHAUSTED",
-        "already_corrected": "TASK_AGENT_TOOL_ARGUMENT_CORRECTION_EXHAUSTED",
+    assert result.termination["code"] == {"again": "TASK_AGENT_MODEL_BUDGET_EXHAUSTED",
+        "already_corrected": "TASK_AGENT_MODEL_BUDGET_EXHAUSTED",
         "no_model_calls": "TASK_AGENT_MODEL_BUDGET_EXHAUSTED", "no_feedback_bytes": "TASK_AGENT_OBSERVATION_BUDGET_EXHAUSTED"}[kind]
     assert selected.effects == [] and selected.budget.reads == 4
-    assert len(client.requests) == (2 if kind == "again" else 1)
+    assert len(client.requests) == (3 if kind in {"again", "already_corrected"} else 1)
     assert bool(result.unadmitted_tool_results) is (kind == "no_feedback_bytes")
 
 
@@ -75,7 +76,7 @@ def test_zero_read_remainder_can_only_switch_to_another_permitted_action():
     assert selected.budget.reads == 6
 
 
-def test_read_correction_survives_history_resume_without_new_allowance_or_chance():
+def test_read_correction_survives_history_resume_without_reset_or_replay():
     selected = owner()
     stopped = run(Client([response(*searches()), AgentTurnProviderError("controlled pause")]), selected)
     assert stopped.tool_argument_correction_used and selected.budget.reads == 4
@@ -86,16 +87,36 @@ def test_read_correction_survives_history_resume_without_new_allowance_or_chance
 
 
 @pytest.mark.parametrize("earlier", ["argument", "mixed", "read"])
-def test_all_correctable_errors_share_one_opportunity_across_resume(earlier):
+def test_all_safe_corrections_continue_across_resume_without_reset(earlier):
     selected = owner()
     first = response(call("source_read", {}, "bad-arg")) if earlier == "argument" else (
         response(searches()[0], call("upstream", {}, "upstream")) if earlier == "mixed" else response(*searches()))
     stopped = run(Client([first, AgentTurnProviderError("controlled pause")]), selected)
     assert stopped.tool_argument_correction_used
     next_error = response(call("source_read", {}, "another-arg")) if earlier == "read" else response(*searches())
-    result = run(Client([next_error]), selected, initial_request=stopped.request, prior_call_records=stopped.call_records)
-    assert result.termination["code"] == "TASK_AGENT_TOOL_ARGUMENT_CORRECTION_EXHAUSTED"
+    result = run(Client([next_error, AgentTurnProviderError("pause after another correction")]), selected,
+        initial_request=stopped.request, prior_call_records=stopped.call_records)
+    assert result.termination["code"] == "TASK_AGENT_PROVIDER_TURN_FAILED"
     assert selected.effects == [] and selected.budget.reads == 4
+
+
+def test_safe_argument_then_read_batch_corrections_use_the_original_model_budget():
+    selected = owner(maximum=3)
+    batch = searches()
+    client = Client([
+        response(call("source_read", {}, "missing-binding")),
+        response(*batch),
+        response(*batch),
+    ])
+
+    result = run(client, selected)
+
+    assert result.termination["code"] == "TASK_AGENT_MODEL_BUDGET_EXHAUSTED"
+    assert result.model_turns == result.model_budget["consumed"] == 3
+    assert selected.effects == [] and selected.budget.reads == 4
+    assert client.requests[1].tool_results[0].output["code"] == "TASK_AGENT_SOURCE_ARGUMENTS_INVALID"
+    assert all(item.output["code"] == "TASK_AGENT_READ_BUDGET_EXCEEDED"
+        for item in client.requests[2].tool_results)
 
 
 @pytest.mark.parametrize("fault", ["outside", "duplicate", "identity", "version_after_feedback", "unknown_charge"])

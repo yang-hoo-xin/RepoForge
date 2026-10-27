@@ -191,6 +191,11 @@ class TaskAgentSessionV2:
             origin = {"name": call.name, "call_id": call.call_id,
                 "arguments": deepcopy(call.arguments), "response_ref": reference,
                 "arguments_ref": self.owner._save("model-arguments-" + uuid4().hex + ".json", call.arguments)}
+            turn = getattr(self.owner, "_v2_turn_count", None)
+            if type(turn) is int and turn > 0:
+                # Scope: occurrence identity for repeated stable call IDs; it never changes tool arguments or authority.
+                # 为什么要有它：未派发调用可保留稳定ID，后续执行仍须绑定到当前真实模型轮次而非早期纠错。
+                origin["turn"] = turn
             if self._actual_request_ref is not None:
                 effective, resolution = resolve_tool_arguments(call.name, call.arguments, self._actual_request_ref)
                 origin.update(request_ref=deepcopy(self._actual_request_ref),
@@ -202,6 +207,9 @@ class TaskAgentSessionV2:
         dispatch = getattr(self, "_dispatch_call_id", None)
         if dispatch is not None:
             rows = [row for row in rows if row["call_id"] == dispatch]
+        turn = getattr(self.owner, "_v2_turn_count", None)
+        if type(turn) is int and any("turn" in row for row in rows):
+            rows = [row for row in rows if row.get("turn") == turn]
         if getattr(self.owner, "semantic_state_enabled", True):
             rows = [row for row in rows if resolved_origin_arguments(row) == arguments]
         else:

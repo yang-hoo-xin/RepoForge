@@ -151,7 +151,7 @@ def test_os_lock_excludes_concurrent_owner_but_releases_without_deleting_file(tm
         assert list((tmp_path / "v2/session-locks").glob("*.lock"))
 
 
-@pytest.mark.parametrize("boundary", ["checkpoint_completed", "tool_receipt", "plan_receipt", "provider_receipt", "read_charge", "observation_charge", "resource_ledger", "history_receipt", "projected_provider_receipt", "candidate_not_ready"])
+@pytest.mark.parametrize("boundary", ["checkpoint_completed", "tool_receipt", "plan_receipt", "provider_receipt", "read_charge", "observation_charge", "resource_ledger", "history_receipt", "projected_provider_receipt", "candidate_not_ready", "multiple_safe_corrections", "stable_id_correction"])
 def test_normal_entry_interruption_reconstructs_owner_and_finishes_same_product(repository_workspace, monkeypatch, capsys, boundary,
                                                                                candidate_boundary=None):
     from src.mod_agent.task_agent_v2_execution import TaskAgentExecutionV2
@@ -182,6 +182,19 @@ def test_normal_entry_interruption_reconstructs_owner_and_finishes_same_product(
 
     def interrupt(journal, value):
         ref = original_save(journal, value)
+        if boundary == "multiple_safe_corrections" and value["phase"] == "ready" and not retained:
+            corrections = [row for row in value["call_records"].values()
+                if row.get("result", {}).get("output", {}).get("code") == "TASK_AGENT_CANDIDATE_ARGUMENTS_INVALID"]
+            if len(corrections) == 2:
+                assert all(row["status"] == "not_dispatched" for row in corrections)
+                retained.append((journal.state.store_root, ref, value["model_budget"]["consumed"]))
+                raise KeyboardInterrupt()
+        if boundary == "stable_id_correction" and value["phase"] == "ready" and not retained:
+            records = value["call_records"]
+            if all(records.get(call_id, {}).get("status") == "completed"
+                    for call_id in ("stable-plan", "stable-read")):
+                retained.append((journal.state.store_root, ref, value["model_budget"]["consumed"]))
+                raise KeyboardInterrupt()
         if boundary == "candidate_not_ready" and value["phase"] == "ready" and not retained:
             record = value["call_records"].get("not-ready-candidate_check", {})
             if record.get("result", {}).get("output", {}).get("status") == "not_ready":
@@ -246,9 +259,11 @@ def test_normal_entry_interruption_reconstructs_owner_and_finishes_same_product(
     monkeypatch.setattr(TaskAgentV2State, "record_resources", interrupt_resource)
     with pytest.raises(KeyboardInterrupt):
         test_v2_normal_cli_empty_registry_retarget_and_product_handoff(repository_workspace, monkeypatch, capsys, False,
-            exercise_paging=boundary in {"history_receipt", "projected_provider_receipt"},
+            exercise_paging=boundary in {"history_receipt", "projected_provider_receipt", "multiple_safe_corrections"},
             exercise_history=boundary in {"history_receipt", "projected_provider_receipt"},
-            exercise_candidate_readiness=boundary == "candidate_not_ready")
+            exercise_candidate_readiness=boundary == "candidate_not_ready",
+            exercise_multiple_corrections=boundary == "multiple_safe_corrections",
+            exercise_stable_call_ids=boundary == "stable_id_correction")
     capsys.readouterr()
     monkeypatch.setattr(TaskAgentRecoveryJournal, "save", original_save)
     monkeypatch.setattr(TaskAgentExecutionV2, "record_v2_tool_receipt", original_tool)
@@ -336,10 +351,17 @@ def test_normal_entry_interruption_reconstructs_owner_and_finishes_same_product(
         read_bound_json(turn["response_ref"])
     assert result["request_id"] == host["graph_state"]["request_id"]
     assert result["run_id"] == host["graph_state"]["run_id"]
-    expected_turns = (20 if boundary in {"history_receipt", "projected_provider_receipt"}
+    expected_turns = (22 if boundary == "multiple_safe_corrections"
+        else 14 if boundary == "stable_id_correction"
+        else 20 if boundary in {"history_receipt", "projected_provider_receipt"}
         else 16 if boundary == "candidate_not_ready" else 13)
     assert result["cumulative_resources"]["model_calls"] == expected_turns
-    assert before > 0 if boundary in {"history_receipt", "projected_provider_receipt"} else before == (1 if boundary == "plan_receipt" else 5)
+    if boundary == "multiple_safe_corrections":
+        assert before == 8
+    elif boundary == "stable_id_correction":
+        assert before == 3
+    else:
+        assert before > 0 if boundary in {"history_receipt", "projected_provider_receipt"} else before == (1 if boundary == "plan_receipt" else 5)
     final = load_task_agent_checkpoint(artifact_store_root=store, checkpoint_ref=result["v2_checkpoint_ref"])
     assert len(final["checkpoint"]["session"]["public_checks"]) == 2
     if boundary == "candidate_not_ready":
@@ -347,6 +369,50 @@ def test_normal_entry_interruption_reconstructs_owner_and_finishes_same_product(
         assert final["checkpoint"]["loop"]["tool_argument_correction_used"] is True
         assert sum(row["name"] == "candidate_check" for row in final["checkpoint"]["details"]["completed_tool_records"]) == 2
         assert final["checkpoint"]["loop"]["call_records"]["not-ready-candidate_check"]["status"] == "not_dispatched"
+    if boundary == "multiple_safe_corrections":
+        loop = final["checkpoint"]["loop"]
+        batches = [exchange["tool_results"] for exchange in loop["request"]["historical_tool_exchanges"]]
+        batches.append(loop["request"]["tool_results"])
+        corrections = [result for batch in batches for result in batch
+            if result["output"].get("code") == "TASK_AGENT_CANDIDATE_ARGUMENTS_INVALID"]
+        assert len(corrections) == 2 and all(result["output"]["status"] == "rejected_not_executed"
+            for result in corrections)
+        records = loop["call_records"]
+        assert all(records[result["call_id"]]["status"] == "not_dispatched" for result in corrections)
+        submitted = [row for row in final["checkpoint"]["session"]["actual_calls"]
+            if row["name"] == "candidate_submit"]
+        assert "source_view_ref" not in submitted[0]["arguments"]["edits"][0]
+        assert submitted[1]["arguments"]["edits"][0]["source_view_ref"]
+        completed_ids = {row["call_id"] for row in final["checkpoint"]["details"]["completed_tool_records"]}
+        assert all(result["call_id"] not in completed_ids for result in corrections)
+        forged = deepcopy(final["checkpoint"])
+        first_rejected = next(row for row in forged["session"]["actual_calls"]
+            if row["call_id"] == corrections[0]["call_id"])
+        first_rejected["arguments"]["edits"][0]["source_view_ref"] = "forged-source-view"
+        forged_ref = final["state"].save("session-checkpoint", forged)
+        latest = final["state"].root / "session-checkpoints" / (recovery_hash(final["state"].contract_ref) + ".json")
+        original_pointer = latest.read_bytes()
+        latest.write_text(json.dumps({"checkpoint_ref": forged_ref,
+            "host_config_ref": forged["host_config_ref"]}), encoding="utf-8")
+        with pytest.raises(ValueError, match="CORRECTION_ARGUMENTS_CHANGED"):
+            load_task_agent_checkpoint(artifact_store_root=store, checkpoint_ref=forged_ref)
+        latest.write_bytes(original_pointer)
+    if boundary == "stable_id_correction":
+        loop = final["checkpoint"]["loop"]
+        batches = [exchange["tool_results"] for exchange in loop["request"]["historical_tool_exchanges"]]
+        batches.append(loop["request"]["tool_results"])
+        corrections = [result for batch in batches for result in batch
+            if result["output"].get("code") == "TASK_AGENT_MIXED_TOOL_BATCH"]
+        assert {result["call_id"] for result in corrections} == {"stable-plan", "stable-read"}
+        assert all(loop["call_records"][result["call_id"]]["status"] == "completed" for result in corrections)
+        origins = [row for row in final["checkpoint"]["session"]["actual_calls"]
+            if row["call_id"] in {"stable-plan", "stable-read"}]
+        assert {call_id: sum(row["call_id"] == call_id for row in origins)
+            for call_id in ("stable-plan", "stable-read")} == {"stable-plan": 2, "stable-read": 2}
+        completed = [row for row in final["checkpoint"]["details"]["completed_tool_records"]
+            if row["call_id"] in {"stable-plan", "stable-read"}]
+        assert {row["call_id"] for row in completed} == {"stable-plan", "stable-read"}
+        assert len(completed) == 2
     assert final["checkpoint"]["loop"]["model_turns"] == expected_turns
     assert final["state"].contract_ref == saved["task_contract_ref"]
     assert len(state_views) == expected_turns

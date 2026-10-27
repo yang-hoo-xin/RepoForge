@@ -45,6 +45,36 @@ def _hash(value):
     return hashlib.sha256(_json(value).encode("utf-8")).hexdigest()
 
 
+def is_safe_task_correction_result(output: Mapping[str, Any]) -> bool:
+    """Recognize host feedback that proves its associated tool call was not dispatched.
+
+    Scope: persisted Task Agent tool results only; this predicate grants no retry, authority or budget.
+    为什么要有它：正常执行与恢复必须共享同一安全反馈分类，避免新增纠错码后两条路径漂移。
+    """
+    return bool(isinstance(output, Mapping) and output.get("read_cost") == 0 and (
+        output.get("status") == "rejected_not_executed" and output.get("code") in _CORRECTION_CODES
+        or output.get("status") == "not_ready" and output.get("code") == "TASK_AGENT_CANDIDATE_NOT_READY"
+        and output.get("executed") is False))
+
+
+def _safe_correction_signature(results: Sequence[AgentToolResult],
+                               call_records: Mapping[str, Mapping[str, Any]]) -> str | None:
+    """Identify equivalent consecutive host feedback without using provider call IDs.
+
+    Scope: safe, never-dispatched Task Agent correction results only.
+    为什么要有它：新call ID不能把完全相同的无效动作伪装成技术进展；不同错误仍可在原任务资源内继续修订。
+    """
+    if not results or any(not isinstance(result, AgentToolResult)
+            or not is_safe_task_correction_result(result.output)
+            or type(call_records.get(result.call_id, {}).get("arguments_sha256")) is not str
+            for result in results):
+        return None
+    rows = [{"name": result.name,
+        "arguments_sha256": call_records[result.call_id]["arguments_sha256"],
+        "output": _copy(result.output)} for result in results]
+    return _hash(sorted(rows, key=_json))
+
+
 def measured_turn_usage(response):
     """Keep missing provider measurements unknown instead of charging dataclass zeros.
 
@@ -96,7 +126,7 @@ class TaskCandidateRevisionInputError(ValueError):
     """A candidate owner rejected correctable submission input before dispatch.
 
     Scope: the owner must first validate identity, parent version and edit authority.
-    为什么要有它：格式错误或无变化修改可返回一次明确反馈，但不能把越权或版本冲突降级为可重试输入。
+    为什么要有它：格式错误或无变化修改可返回明确反馈，但不能把越权或版本冲突降级为可重试输入。
     """
 
     def __init__(self, argument_errors: Sequence[str]):
@@ -213,6 +243,8 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
     events, usage = [], []
     seen: dict[str, dict[str, Any]] = {}
     turns = reads = observation_bytes = 0
+    # Scope: retain the public compatibility bit as evidence that at least one correction was admitted, not as a quota.
+    # 为什么要有它：旧检查点和调用方仍可读取既有字段，多次安全纠错则由原任务资源控制。
     argument_used = tool_argument_correction_used
     output_corrected = False
     execution_history = ()
@@ -356,8 +388,8 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
         correction_exchanges = sum(any(isinstance(result.output, Mapping)
             and result.output.get("code") in _CORRECTION_CODES for result in results)
             for results in result_batches)
-        if correction_exchanges > 1:
-            return stop("TASK_AGENT_ARGUMENT_HISTORY_INVALID")
+        # Scope: native result/history binding below validates every exchange; count is evidence, not an allowance.
+        # 为什么要有它：恢复可保留多次已收费的安全纠错，不能因历史数量而重置或终止同一任务。
         argument_used = argument_used or bool(correction_exchanges)
         visible_results = {result.call_id: asdict(result) for result in historical_results}
         if execution_history and set(prior_call_records or {}) != set(visible_results):
@@ -636,8 +668,8 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
 
         if input_errors or correctable_mixed:
             readiness_only = bool(input_errors) and set(input_error_codes.values()) == {"TASK_AGENT_CANDIDATE_NOT_READY"}
-            if argument_used and not readiness_only:
-                return stop("TASK_AGENT_TOOL_ARGUMENT_CORRECTION_EXHAUSTED")
+            # Scope: every admitted correction is still charged to the task's existing call, time and observation owners.
+            # 为什么要有它：确认未派发的普通输入错误可继续修订，不能由全任务布尔记录提前终止。
             if call_allowance(snapshot(), model_role) <= 0:
                 return stop("TASK_AGENT_MODEL_BUDGET_EXHAUSTED")
             corrections = []
@@ -672,6 +704,13 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
                     seen[call.call_id] = {"name": call.name, "arguments_sha256": _hash(call.arguments),
                         "status": "not_dispatched", "version_identity": prepared.version_identity if prepared else None,
                         "result": asdict(corrections[-1])}
+            correction_signature = _safe_correction_signature(corrections, seen)
+            if (correction_signature is not None
+                    and correction_signature == _safe_correction_signature(request.tool_results, seen)):
+                emit({"event": "correction_no_progress", "turn": turns,
+                    "correction_signature": correction_signature, "consecutive_same_feedback": 2})
+                return stop("TASK_AGENT_CORRECTION_NO_PROGRESS", unadmitted=corrections,
+                    detail={"correction_signature": correction_signature, "consecutive_same_feedback": 2})
             size = sum(len(_json(asdict(result)).encode("utf-8")) for result in corrections)
             try:
                 charge(byte_count=size)
@@ -698,16 +737,14 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
                 reads_charged = True
                 checkpoint("dispatch_ready")
         except TaskReadBudgetError as error:
-            # Scope: an entirely legal, never-dispatched read/search batch may shrink once under the same budgets.
-            # 为什么要有它：模型缺少额度信息时可调整调用数量，但不能部分执行、重放历史动作、扩大权限或重新领取纠错机会。
+            # Scope: an entirely legal, never-dispatched read/search batch may shrink under the same task resources.
+            # 为什么要有它：模型缺少额度信息时可继续缩小批次，但不能部分执行、重放历史动作或扩大权限。
             eligible = (error.requested == requested_reads and len(prepared_rows) == len(response.tool_calls)
                 and all(action.role in {"source_read", "source_search"} and action.read_only and prepared.read_cost == 1
                     and mode == "execute" and (call.call_id not in seen or seen[call.call_id]["status"] == "not_dispatched")
                     for call, action, prepared, mode, _proof, _hash_value in prepared_rows))
             if not eligible:
                 return stop("TASK_AGENT_READ_BUDGET_EXHAUSTED")
-            if argument_used:
-                return stop("TASK_AGENT_TOOL_ARGUMENT_CORRECTION_EXHAUSTED")
             if call_allowance(snapshot(), model_role) <= 0:
                 return stop("TASK_AGENT_MODEL_BUDGET_EXHAUSTED")
             read_budget = error.model_view()
@@ -764,7 +801,7 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
                     else:
                         seen[call.call_id] = {"name": call.name, "arguments_sha256": args_hash,
                             "status": "pending", "version_identity": prepared.version_identity}
-                        emit({"event": "tool_dispatch_started", "call_id": call.call_id,
+                        emit({"event": "tool_dispatch_started", "turn": turns, "call_id": call.call_id,
                               "role": action.role, "operation_state": "pending"})
                         started = True
                         output = _copy(action.execute(prepared.value))
@@ -784,7 +821,7 @@ def run_task_agent_loop(*, client: AgentTurnClient, initial_request: AgentTurnRe
                         "status": "completed", "version_identity": prepared.version_identity,
                         "output_format": "task_agent_tool_result_v1", "result": asdict(result)}
                     span.update(execution=result_output["execution"], output_sha256=_hash(result_output))
-                emit({"event": "tool_dispatch_completed", "call_id": call.call_id,
+                emit({"event": "tool_dispatch_completed", "turn": turns, "call_id": call.call_id,
                       "role": action.role, "output_sha256": _hash(result_output), "model_budget": snapshot()})
             except Exception as error:
                 seen[call.call_id] = {"name": call.name, "arguments_sha256": args_hash,
