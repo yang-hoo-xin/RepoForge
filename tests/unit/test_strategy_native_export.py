@@ -1,5 +1,6 @@
 """Normal CLI native artifacts feed the offline evaluation export entry."""
 from copy import deepcopy
+from dataclasses import asdict
 from pathlib import Path
 
 import pytest
@@ -179,4 +180,29 @@ def test_unknown_learning_retains_unknown_usage_from_actual_extraction_receipt(t
         "budget_before": budget, "budget_after": after, "model_calls": 1, "known_usage": [], "unknown_usage_calls": 1,
         "call_receipts": receipts})
     actual_after, known, unknown, _ = _learning(native_ref, native, learning)
+    assert actual_after["consumed"] == 3 and known == [] and unknown == 1
+
+
+def test_unknown_learning_response_is_not_reclassified_as_known_zero_usage(tmp_path):
+    memory = StrategyExperience(ArtifactStore(tmp_path / "experience"))
+    response = memory._write("unknown-response", "response", {"request_ref": {}, "response": {
+        "provider": "openai_responses", "provider_diagnostic": {"measured_usage": None},
+        "usage": {"input_tokens": 0, "output_tokens": 0, "reasoning_tokens": 0,
+            "cached_input_tokens": None}}})
+    budget = {"policy": "meter_only", "maximum": None, "consumed": 2, "remaining": None,
+        "by_stage": {"initial_patch": {"consumed": 2, "maximum": None, "remaining": None}},
+        "count_basis": "reserved_provider_invocations_not_transport_proof"}
+    native = {"budget_after": budget}
+    native_ref = _save(tmp_path / "native-response-reference.json", native)
+    after = deepcopy(budget)
+    after.update(consumed=3)
+    after["by_stage"]["initial_patch"]["consumed"] = 3
+    config = _save(tmp_path / "response-learning-config.json", {"store_root": str(memory.store.root)})
+    learning = _save(tmp_path / "unknown-response-learning.json", {"original_execution_ref": native_ref,
+        "configuration_ref": config, "budget_before": budget, "budget_after": after, "model_calls": 1,
+        "known_usage": [], "unknown_usage_calls": 1,
+        "call_receipts": [{"response_ref": asdict(response), "usage": None}]})
+
+    actual_after, known, unknown, _ = _learning(native_ref, native, learning)
+
     assert actual_after["consumed"] == 3 and known == [] and unknown == 1
