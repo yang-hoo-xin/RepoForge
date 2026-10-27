@@ -165,12 +165,16 @@ class AgentTurnProviderError(RuntimeError):
 
 class _HttpJsonSender:
     def __init__(self, *, api_key: str, timeout_seconds: float = 60.0,
-                 proxy_url: str | None = None, trust_env: bool = True) -> None:
+                 proxy_url: str | None = None, trust_env: bool = True,
+                 capture_request_body: bool = False) -> None:
         if not api_key:
             raise ValueError("Agent provider API key is required.")
+        if type(capture_request_body) is not bool:
+            raise ValueError("External request body capture flag must be boolean.")
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
         self.proxy_url, self.trust_env = proxy_url, trust_env
+        self.capture_request_body = capture_request_body
 
     def __call__(
         self,
@@ -181,9 +185,13 @@ class _HttpJsonSender:
         import httpx
 
         try:
+            # Scope: external body persistence is opt-in for a specifically owned backend, never inherited by all HTTP providers.
+            # 为什么要有它：实际请求证据不能借共享sender扩大其他provider的源码落盘范围。
+            event_hooks = ({"request": [transport_local_request_body]}
+                if self.capture_request_body else None)
             with httpx.Client(timeout=self.timeout_seconds, follow_redirects=False,
                               proxy=self.proxy_url, trust_env=self.trust_env,
-                              event_hooks={"request": [transport_local_request_body]}) as client:
+                              event_hooks=event_hooks) as client:
                 transport_started()
                 response = client.post(url, json=payload, headers=headers)
                 transport_response_received(http_status=response.status_code, response_complete=True)
@@ -866,7 +874,7 @@ class OpenAIResponsesAgentAdapter:
         self.reasoning_effort, self.strict_tools, self.store = reasoning_effort, strict_tools, store
         self.proxy_url = proxy_url
         self._send = request_sender or _HttpJsonSender(api_key=api_key, timeout_seconds=timeout_seconds,
-            proxy_url=proxy_url, trust_env=False)
+            proxy_url=proxy_url, trust_env=False, capture_request_body=True)
 
     def _request_payload(self, request: AgentTurnRequest) -> dict[str, object]:
         """Build the same native payload for context inspection and actual dispatch.
