@@ -156,7 +156,7 @@ def test_full_project_build_failure_is_feedback_and_success_runs_separate_runtim
     calls = []
     files = {"logs/status.json": json.dumps({"restore_exit_code": restore, "publish_exit_code": publish}),
         "logs/sdk-version.txt": "8.0.100", "logs/restore.txt": "restore observation", "logs/publish.txt": "compile observation",
-        "logs/compile-inputs.txt": "/work/repository/Library/Library.csproj|/work/repository/Source.cs\n",
+        "logs/compile-inputs.txt": "\ufeff/work/repository/Library/Library.csproj|/work/repository/源.cs\n",
         "artifacts/RepoForge.Probe.dll": "controlled assembly", "artifacts/RepoForge.Probe.deps.json":
             json.dumps({"libraries": {"Library/1.0": {"type": "project"}}})}
 
@@ -174,6 +174,7 @@ def test_full_project_build_failure_is_feedback_and_success_runs_separate_runtim
     else:
         assert len(calls) == 2 and result["passed"]
         assert set(calls[1]["mounts"]) == {"/candidate", "/assembly"}
+        assert result["compile_inputs"] == ["/work/repository/Library/Library.csproj|/work/repository/源.cs"]
 
 
 def test_container_inspection_rejects_writable_source_and_network(tmp_path):

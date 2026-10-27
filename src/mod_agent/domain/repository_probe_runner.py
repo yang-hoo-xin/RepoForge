@@ -642,7 +642,7 @@ class RepositoryProbeRunner:
                 for name in ("restore", "publish")}, "build_diagnostics_limit_bytes_each": 32768}
         if not succeeded:
             return base
-        compile_inputs = (bundle / "logs/compile-inputs.txt").read_text().splitlines()
+        compile_inputs = (bundle / "logs/compile-inputs.txt").read_text(encoding="utf-8-sig").splitlines()
         _require(any(row.split("|", 1)[0] == "/work/repository/" + self.config["project_path"] for row in compile_inputs), "REFERENCED_PROJECT_NOT_COMPILED")
         assembly = bundle / "artifacts"
         _require((assembly / "RepoForge.Probe.dll").is_file() and (assembly / "RepoForge.Probe.deps.json").is_file(), "PROBE_ASSEMBLY_MISSING")
