@@ -63,11 +63,18 @@ def prepare(selection_path, output_root, *, repository_root=REPO):
     if len(tasks) != 1 or any(tasks[0].get(key) != value for key, value in identity.items()):
         raise ValueError("SELECTED_TASK_CHANGED")
     task = tasks[0]
+    preservation_policy = selection.get("public_preservation_policy", "dataset_pass_to_pass")
     try:
         labels = {key: ast.literal_eval(task[key]) for key in ("FAIL_TO_PASS", "PASS_TO_PASS")}
-        valid_labels = (bool(labels["FAIL_TO_PASS"]) and all(isinstance(values, list)
+        structural_labels = (bool(labels["FAIL_TO_PASS"]) and all(isinstance(values, list)
             and all(isinstance(value, str) and value for value in values) and len(values) == len(set(values))
             for values in labels.values()) and not set(labels["FAIL_TO_PASS"]) & set(labels["PASS_TO_PASS"]))
+        # Scope: the selected task must name the preservation source before evaluation-only material is opened.
+        # 为什么要有它：空PASS_TO_PASS不能静默表示“无需保留”；原生公共套件是更强但不同的显式验收合同。
+        valid_labels = structural_labels and (
+            bool(labels["PASS_TO_PASS"]) and preservation_policy == "dataset_pass_to_pass"
+            or not labels["PASS_TO_PASS"]
+            and preservation_policy == "native_public_suite_excluding_fail_to_pass")
     except (ValueError, SyntaxError, TypeError, KeyError):
         valid_labels = False
     if not valid_labels or not all(isinstance(task.get(key), str) and task[key].strip()
@@ -80,11 +87,13 @@ def prepare(selection_path, output_root, *, repository_root=REPO):
     public = _save(output_root / "solver-input/problem_statement.txt", task["problem_statement"].encode("utf-8"))
     reference = _save(output_root / "evaluation-only/reference.patch", task["patch"].encode("utf-8"))
     tests = _save(output_root / "evaluation-only/test.patch", task["test_patch"].encode("utf-8"))
-    private = _save(output_root / "evaluation-only/task.json", {**identity, **labels})
+    private = _save(output_root / "evaluation-only/task.json", {
+        **identity, **labels, "public_preservation_policy": preservation_policy})
     opening = _save(output_root / "task-opened.json", {
         "schema_version": "external-task-opening.v1", "selection_ref": selection_ref,
         "metadata_ref": metadata_ref, "dataset_ref": dataset_ref, "public_problem_ref": public,
         "reference_patch_ref": reference, "test_patch_ref": tests, "task_ref": private,
+        "public_preservation_policy": preservation_policy,
         "reference_exposed_to_solver": False, "hidden_tests_exposed_to_solver": False,
         "public_extraction_is_not_independence_proof": True, "model_calls": 0, "builds": 0,
         "resource_policy": selection.get("resource_policy", "not_supplied")})

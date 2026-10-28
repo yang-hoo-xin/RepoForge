@@ -8,11 +8,12 @@ import pytest
 from scripts import prepare_repository_task as entry
 
 
-def inputs(root, *, selected="repo_one-1", labels="['target_test']", duplicate=False):
+def inputs(root, *, selected="repo_one-1", labels="['target_test']",
+           pass_labels="['preservation_test']", preservation_policy=None, duplicate=False):
     rows = [{"instance_id": name, "repo": name.split("-")[0] + "/library", "base_commit": "1" * 40,
         "created_at": "2024-01-01T00:00:00Z", "problem_statement": "public request " + name,
         "patch": "PRIVATE_REFERENCE_" + name, "test_patch": "PRIVATE_TEST_" + name,
-        "FAIL_TO_PASS": labels, "PASS_TO_PASS": "['preservation_test']"} for name in ("repo_one-1", "repo_two-2")]
+        "FAIL_TO_PASS": labels, "PASS_TO_PASS": pass_labels} for name in ("repo_one-1", "repo_two-2")]
     if duplicate:
         rows.append(rows[0])
     text = io.StringIO(newline="")
@@ -27,10 +28,12 @@ def inputs(root, *, selected="repo_one-1", labels="['target_test']", duplicate=F
         "source_ref": entry._ref(source)}), encoding="utf-8")
     identity = next({key: row[key] for key in identity_keys} for row in rows if row["instance_id"] == selected)
     selection = root / "selection.json"
-    selection.write_text(json.dumps({**identity, "schema_version": "external-acceptance-selection.v2",
+    selected_value = {**identity, "schema_version": "external-acceptance-selection.v2",
         "status": "metadata_selected_task_content_unopened", "metadata_path": "metadata.json",
-        "metadata_sha256": entry._ref(metadata)["sha256"], "dataset_source_sha256": entry._ref(source)["sha256"]}),
-        encoding="utf-8")
+        "metadata_sha256": entry._ref(metadata)["sha256"], "dataset_source_sha256": entry._ref(source)["sha256"]}
+    if preservation_policy is not None:
+        selected_value["public_preservation_policy"] = preservation_policy
+    selection.write_text(json.dumps(selected_value), encoding="utf-8")
     return selection, source, metadata
 
 
@@ -80,3 +83,22 @@ def test_invalid_private_labels_never_appear_in_cli_error(tmp_path, monkeypatch,
     assert entry.main(["--selection", str(selection), "--output-root", str(output)]) == 2
     assert json.loads(capsys.readouterr().out) == {"status": "failed", "error_type": "ValueError"}
     assert not output.exists()
+
+
+def test_empty_pass_to_pass_requires_explicit_native_public_suite_policy(tmp_path):
+    selection, _, _ = inputs(tmp_path, pass_labels="[]")
+    output = tmp_path / "new-output"
+    with pytest.raises(ValueError, match="SELECTED_TASK_MATERIAL_INVALID"):
+        entry.prepare(selection, output, repository_root=tmp_path)
+    assert not output.exists()
+
+    value = json.loads(selection.read_text(encoding="utf-8"))
+    value["public_preservation_policy"] = "native_public_suite_excluding_fail_to_pass"
+    selection.write_text(json.dumps(value), encoding="utf-8")
+    result = entry.prepare(selection, output, repository_root=tmp_path)
+    opening = json.loads((output / "task-opened.json").read_text(encoding="utf-8"))
+    private = json.loads((output / "evaluation-only/task.json").read_text(encoding="utf-8"))
+    assert result["opening_ref"] == entry._ref(output / "task-opened.json")
+    assert opening["public_preservation_policy"] == private["public_preservation_policy"] == (
+        "native_public_suite_excluding_fail_to_pass")
+    assert private["PASS_TO_PASS"] == []
