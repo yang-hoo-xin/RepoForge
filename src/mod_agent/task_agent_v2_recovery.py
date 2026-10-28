@@ -557,6 +557,7 @@ def _validate_probe_receipt(state, origin, output, *, receipt_ref, model_profile
                     and observed["source_manifest_sha256"] == canonical_hash(executed["source_manifest"])
                     and observed["dependency_manifest_sha256"] == canonical_hash(executed["dependency_manifest"])
                     and observed["observations"] == {"compiled": executed["compiled"], "build_status": executed.get("build_status"),
+                        "dependency_failure": executed.get("dependency_failure"),
                         "build_diagnostics": executed.get("build_diagnostics"), "stdout": runtime["stdout"] if runtime else "",
                         "stderr": runtime["stderr"] if runtime else executed["compile_execution"]["stderr"]},
                     "PROBE_LOG_OBSERVATIONS_CHANGED")
