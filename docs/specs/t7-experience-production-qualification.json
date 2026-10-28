@@ -1,0 +1,245 @@
+{
+  "schema": "repoforge.t7-experience-production-qualification.v1",
+  "generated_at": "2026-10-28T12:16:05.0089372+08:00",
+  "scope": "Pilot Strategy Experience production admission only; this is not a strategy, adoption result, or business capability result.",
+  "contract": {
+    "minimum_qualified_logical_runs": 12,
+    "minimum_development_repositories": 2,
+    "model_origin_required": "gpt-5.6-sol/high",
+    "rules": [
+      {
+        "rule": "Count each run_id once even when more than one public projection is retained.",
+        "why": "为什么要有它：同一运行的过程视图和原生终态视图不是两次独立经历。"
+      },
+      {
+        "rule": "Require an actual request identity, at least one completed tool receipt, selected source-state identity, and a native terminal execution view.",
+        "why": "为什么要有它：外层超时、登记成功和工具请求都不能补写成完整执行终态。"
+      },
+      {
+        "rule": "Stop before extraction when either the run-count or repository-count gate is unmet.",
+        "why": "为什么要有它：不足样本的模型响应不能通过重试或人工补写变成可冻结策略。"
+      }
+    ]
+  },
+  "catalog": {
+    "store_root": "C:\\tmp\\rf1026-episode-catalog-input-v1\\experience",
+    "catalog_id": "repoforge-public-process-learning-v1",
+    "registered_variant_count": 12,
+    "unique_logical_run_count": 9,
+    "repository_count": 4,
+    "repositories": [
+      "Moq",
+      "Polly",
+      "Serilog",
+      "Spectre.Console"
+    ],
+    "frozen_selection_ref": {
+      "path": "C:\\tmp\\rf1026-episode-catalog-input-v1\\experience\\features\\sx_9683526a280b1a81a3d1f698\\r\\strategy_experience\\ce45f19a01f955984de73aa7994b420c.json",
+      "artifact_hash": "ce45f19a01f955984de73aa7994b420c6d19c43e32b957fa21b4048760b4da35",
+      "sha256": "3dfd9678620ec1e42bc30e76cc7d8ef68e5470a5c97820699fbcf8c22816f1f2"
+    },
+    "selection_receipt_ref": {
+      "path": "C:\\tmp\\rf1026-episode-catalog-input-v1\\experience\\features\\sx_34bfceb0765b0890cb7c5fc5\\r\\strategy_experience\\48c756e5e4e07550ca373fe2d37a2b3f.json",
+      "artifact_hash": "48c756e5e4e07550ca373fe2d37a2b3fdbdea3b6f7311bb376a8886d28a9ba0a",
+      "sha256": "27972b72e1d1852f4b90e8a487682af5f5f290071f112c8e0a3f491fca132eeb"
+    },
+    "selection_scope": "All current registrations were re-read and validated. Conflicting views remain retained; explicit choices select the originally frozen projections for dsh_6a7b and dsh_70b7 and the native terminal projection for dsh_86ef. This freeze is an inventory snapshot, not a qualified extraction set."
+  },
+  "logical_runs": [
+    {
+      "run_id": "dsh_c04b4e7d2c1b44fe9a1e3519987b0b12",
+      "repository": "Serilog",
+      "variant_count": 1,
+      "actual_request_identity": true,
+      "completed_tool_receipt": false,
+      "selected_source_state_identity": false,
+      "native_terminal": false,
+      "qualified": false,
+      "disqualification_reasons": [
+        "no_completed_tool_receipt_in_registered_projection",
+        "no_selected_source_state_identity_in_registered_projection",
+        "provider_pending_with_outer_timeout_not_native_terminal"
+      ]
+    },
+    {
+      "run_id": "dsh_fb2b072fba7a4264aafcf806b79ebace",
+      "repository": "Spectre.Console",
+      "variant_count": 1,
+      "actual_request_identity": true,
+      "completed_tool_receipt": false,
+      "selected_source_state_identity": false,
+      "native_terminal": false,
+      "qualified": false,
+      "disqualification_reasons": [
+        "no_completed_tool_receipt_in_registered_projection",
+        "no_selected_source_state_identity_in_registered_projection",
+        "provider_pending_with_outer_timeout_not_native_terminal"
+      ]
+    },
+    {
+      "run_id": "dsh_ba30f8ea75a84cec9793155935786037",
+      "repository": "Spectre.Console",
+      "variant_count": 1,
+      "actual_request_identity": true,
+      "completed_tool_receipt": false,
+      "selected_source_state_identity": false,
+      "native_terminal": false,
+      "qualified": false,
+      "disqualification_reasons": [
+        "no_completed_tool_receipt_in_registered_projection",
+        "no_selected_source_state_identity_in_registered_projection",
+        "provider_pending_with_outer_timeout_not_native_terminal"
+      ]
+    },
+    {
+      "run_id": "dsh_20f44aa92a78475991db4479dac80962",
+      "repository": "Spectre.Console",
+      "variant_count": 1,
+      "actual_request_identity": true,
+      "completed_tool_receipt": false,
+      "selected_source_state_identity": false,
+      "native_terminal": false,
+      "qualified": false,
+      "disqualification_reasons": [
+        "no_completed_tool_receipt_in_registered_projection",
+        "no_selected_source_state_identity_in_registered_projection",
+        "provider_pending_with_outer_timeout_not_native_terminal"
+      ]
+    },
+    {
+      "run_id": "dsh_379b036c2fdd40c8a2c7c7fe18843ab6",
+      "repository": "Polly",
+      "variant_count": 1,
+      "actual_request_identity": false,
+      "completed_tool_receipt": false,
+      "selected_source_state_identity": false,
+      "native_terminal": false,
+      "qualified": false,
+      "disqualification_reasons": [
+        "request_identity_missing",
+        "no_completed_tool_receipt_in_registered_projection",
+        "no_selected_source_state_identity_in_registered_projection",
+        "native_terminal_unproven"
+      ]
+    },
+    {
+      "run_id": "dsh_4184f5a5d24247ef8f8d8f1a50e40a3b",
+      "repository": "Spectre.Console",
+      "variant_count": 1,
+      "actual_request_identity": true,
+      "completed_tool_receipt": true,
+      "selected_source_state_identity": true,
+      "native_terminal": false,
+      "qualified": false,
+      "disqualification_reasons": [
+        "provider_pending_with_outer_timeout_not_native_terminal"
+      ]
+    },
+    {
+      "run_id": "dsh_70b79de0e2ac431eb81fdf97b8c40756",
+      "repository": "Moq",
+      "variant_count": 2,
+      "actual_request_identity": true,
+      "completed_tool_receipt": true,
+      "selected_source_state_identity": true,
+      "native_terminal": false,
+      "qualified": false,
+      "disqualification_reasons": [
+        "native_terminal_unproven"
+      ]
+    },
+    {
+      "run_id": "dsh_6a7b415d13804dca84649fcfbcfdc70a",
+      "repository": "Moq",
+      "variant_count": 2,
+      "actual_request_identity": true,
+      "completed_tool_receipt": true,
+      "selected_source_state_identity": true,
+      "native_terminal": true,
+      "qualified_variant_ref": {
+        "path": "C:\\tmp\\rf1026-semantic-enabled-v1\\RepoForge_B\\runs\\dsh_6a7b415d13804dca84649fcfbcfdc70a\\a\\task-agent-execution\\public-learning-episode-b875df5e2dbd3eeb3578f0886eac4fb94c0250a5c06f7bad937239ca1b47a64d.json",
+        "sha256": "6510b877d45b75870fe0b36a16eb309fdccc67df34c09e53fcfe1746658d8094"
+      },
+      "qualified": true,
+      "disqualification_reasons": []
+    },
+    {
+      "run_id": "dsh_86ef377e52f546d584def1ecc0ab1100",
+      "repository": "Spectre.Console",
+      "variant_count": 2,
+      "actual_request_identity": true,
+      "completed_tool_receipt": true,
+      "selected_source_state_identity": true,
+      "native_terminal": true,
+      "qualified_variant_ref": {
+        "path": "C:\\tmp\\b\\RepoForge_B\\runs\\dsh_86ef377e52f546d584def1ecc0ab1100\\a\\task-agent-execution\\public-learning-episode-29a39708b7f8bb2227e2705b107eb4d612cf2a6402f3d9836247ec59a1209388.json",
+        "sha256": "df1801063ff8cb65edf92cd40b40b65d36f985fcf40b91745439b7d2bd83898a"
+      },
+      "qualified": true,
+      "disqualification_reasons": []
+    }
+  ],
+  "qualification_result": {
+    "qualified_episode_count": 2,
+    "qualified_external_repository_count": 2,
+    "run_shortfall": 10,
+    "repository_shortfall": 0,
+    "disqualified_reason_counts": {
+      "no_completed_tool_receipt_in_registered_projection": 5,
+      "no_selected_source_state_identity_in_registered_projection": 5,
+      "provider_pending_with_outer_timeout_not_native_terminal": 5,
+      "request_identity_missing": 1,
+      "native_terminal_unproven": 2
+    }
+  },
+  "previous_extraction": {
+    "result_ref": {
+      "path": "C:\\tmp\\rf1026-episode-catalog-attempt-v1\\result.json",
+      "sha256": "8d162428c351986a524e6bfc73620a54566009da3d4dbf383ddb9d9a04baeda5"
+    },
+    "status": "insufficient_information",
+    "model_calls_reserved": 1,
+    "known_usage": {
+      "input_tokens": 28337,
+      "output_tokens": 134,
+      "cached_input_tokens": 0,
+      "reasoning_tokens": 0,
+      "total_tokens": 28471
+    },
+    "assessed_episode_count": 0,
+    "unassessed_episode_count": 7,
+    "strategy_ref": null,
+    "interpretation": "The prior response is retained as an unsuccessful extraction attempt and is not retried or promoted."
+  },
+  "registration_attempts": {
+    "new_run_id": "dsh_86ef377e52f546d584def1ecc0ab1100",
+    "correct_catalog_registration_refs": [
+      {
+        "path": "C:\\tmp\\rf1026-episode-catalog-input-v1\\experience\\features\\sx_ec_70fc9737_da5f86d06764615f\\r\\strategy_experience\\6dfaaaadec0e4e0ceef991a50d0cc674.json",
+        "artifact_hash": "6dfaaaadec0e4e0ceef991a50d0cc6746a0265f2de5ae578e4e061de017a3c46",
+        "sha256": "621e388e3c2b7ce82d63c73bec58b0858dd4914f5490ae123060124157d527cb"
+      },
+      {
+        "path": "C:\\tmp\\rf1026-episode-catalog-input-v1\\experience\\features\\sx_ec_70fc9737_7e2f3d87649671d0\\r\\strategy_experience\\3ce54f3c026ae92415b1e5fca74e8d85.json",
+        "artifact_hash": "3ce54f3c026ae92415b1e5fca74e8d85692ade8ff4fbae128cb51ac2e063a4c9",
+        "sha256": "77e956831f8d4793c3cf7aaff0dde09e7105c52dae94c7bba744d7fe040eb5ff"
+      }
+    ],
+    "discarded_catalog_identity_attempt": {
+      "catalog_id": "all-public-runs",
+      "model_calls": 0,
+      "strategy_created": false,
+      "effect": "Two immutable registrations were written under an unrelated catalog identity before the existing catalog_id was re-read. They are retained as evidence but are not selected by this T7 decision."
+    }
+  },
+  "decision": {
+    "status": "completed_negative_Bplus_not_admitted_insufficient_qualified_episodes",
+    "Bplus_admitted": false,
+    "strategy_ref": null,
+    "snapshot_ref": null,
+    "new_extraction_model_calls": 0,
+    "open_T8": false,
+    "next_action": "Return to the original queue and complete real T1/T2/T3 acceptance before any new experience collection campaign.",
+    "why": "为什么要有它：补齐十条合格运行是新的数据采集工作链，不能用今晚的资格审计自动扩张原目标或继续消耗模型调用。"
+  }
+}
