@@ -70,9 +70,34 @@ _STAGES = frozenset({
 
 
 @dataclass(frozen=True)
+class _BoundOpenTaskRun:
+    execution_config_ref: dict[str, str]
+    intent: str
+    business_argv: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class OpenTaskRun:
     execution_config_ref: dict[str, str]
     intent: str
+
+    def bind(self) -> _BoundOpenTaskRun:
+        """Return one exact allocated Task Run command without starting it.
+
+        Scope: configuration binding for adapters that must freeze inputs before execution.
+        为什么要有它：pilot可以冻结Task Run身份与原始argv，但不能再知道prepare/build的调用顺序。
+        """
+        base = _verify_ref(self.execution_config_ref)
+        _arguments, options = _configuration_arguments(str(base))
+        selected = (str(base) if options.get("--run-id") is not None else
+            prepare_new_task(execution_config=str(base), description=self.intent))
+        reference = _file_ref(Path(selected))
+        _intent_ref, bound_intent = _task_run_intent(reference)
+        if bound_intent != self.intent:
+            raise ValueError("DSH_TASK_RUN_INTENT_CHANGED")
+        business = build_product_argv(execution_config=selected, description=self.intent)
+        return _BoundOpenTaskRun(execution_config_ref=reference, intent=self.intent,
+            business_argv=tuple(business))
 
 
 @dataclass(frozen=True)
@@ -110,7 +135,9 @@ def _configuration_arguments(execution_config: str) -> tuple[list[str], dict[str
     if not selected.is_absolute():
         raise ValueError("DSH_RUN_CONFIGURATION_PATH_MUST_BE_ABSOLUTE")
     document = read_json_object(selected)
-    if (not {"arguments"}.issubset(document) or set(document) - {"arguments", "worker_path_bindings", "new_project_binding", "followup_binding", "dependency_api_binding", "knowledge_evidence_binding", "repository_profile_binding", "external_profile_binding"}
+    if (not {"arguments"}.issubset(document) or set(document) - {"arguments", "worker_path_bindings",
+            "new_project_binding", "followup_binding", "dependency_api_binding", "knowledge_evidence_binding",
+            "repository_profile_binding", "external_profile_binding", "task_run_intent_ref"}
             or not isinstance(document["arguments"], list)):
         raise ValueError("DSH_RUN_CONFIGURATION_SHAPE_INVALID")
     arguments = document["arguments"]
@@ -332,6 +359,13 @@ def prepare_new_task(*, execution_config: str, description: str, project_name: s
     if not isinstance(description, str) or not description.strip() or "\0" in description or len(description.encode("utf-8")) > MAX_REQUEST_BYTES:
         raise ValueError("DSH_RUN_REQUEST_INVALID")
     input_root.mkdir(parents=True, exist_ok=False)
+    intent_path = input_root / "task_run_intent.json"
+    intent_path.write_text(json.dumps({"schema": "task-run-intent-binding.v1",
+        "run_id": run_id, "request_id": request_id, "intent": description},
+        ensure_ascii=False, sort_keys=True), encoding="utf-8")
+    # Scope: immutable Intent identity for the selected execution config, not an Open/Resume command schema.
+    # 为什么要有它：Suspended和Completed必须与最初Intent逐字绑定，manifest非空文本不能替代原请求身份。
+    task_run_intent_ref = _file_ref(intent_path)
     project_binding = None
     followup_binding = None
     if followup_parent is not None:
@@ -390,6 +424,7 @@ def prepare_new_task(*, execution_config: str, description: str, project_name: s
             followup_binding["worker_ref"] = _file_ref(input_root / "worker.json")
     selected = input_root / "execution.json"
     selected.write_text(json.dumps({"arguments": arguments,
+        "task_run_intent_ref": task_run_intent_ref,
         **({"dependency_api_binding": api_binding} if api_binding is not None else {}),
         **({"knowledge_evidence_binding": knowledge_binding} if knowledge_binding is not None else {}),
         **({"repository_profile_binding": repository_binding} if repository_binding is not None else {}),
@@ -913,6 +948,10 @@ def _invoke_product(argv: list[str]) -> tuple[int, dict | None, str]:
 
 
 def _task_run_location(run_ref: dict[str, str]) -> tuple[Path, str, str, Path, Path]:
+    """Resolve one exact registered Task Run without discovering a latest directory.
+
+    为什么要有它：Open与Resume必须共享原run/request身份和workspace，普通文件引用不能冒充Task Run。
+    """
     selected = _verify_ref(run_ref)
     _, options = _configuration_arguments(str(selected))
     run_id, request_id = options.get("--run-id"), options.get("--request-id")
@@ -924,13 +963,32 @@ def _task_run_location(run_ref: dict[str, str]) -> tuple[Path, str, str, Path, P
     return selected, run_id, request_id, run_root, run_root / "a"
 
 
+def _task_run_intent(run_ref: dict[str, str]) -> tuple[dict[str, str], str]:
+    selected = _verify_ref(run_ref)
+    document = read_json_object(selected)
+    reference = document.get("task_run_intent_ref")
+    path = _verify_ref(reference, root=selected.parent)
+    value = read_json_object(path)
+    _, options = _configuration_arguments(str(selected))
+    if (value.get("schema") != "task-run-intent-binding.v1"
+            or value.get("run_id") != options.get("--run-id")
+            or value.get("request_id") != options.get("--request-id")
+            or not isinstance(value.get("intent"), str) or not value["intent"].strip()):
+        raise ValueError("DSH_TASK_RUN_INTENT_BINDING_INVALID")
+    return deepcopy(reference), value["intent"]
+
+
 def _suspended_task_run(run_ref: dict[str, str]) -> TaskRunSuspended:
     from src.mod_agent.model_qualification import canonical_hash
+    from src.mod_agent.task_agent_v2_state import TaskAgentV2State
 
     _selected, run_id, request_id, run_root, store = _task_run_location(run_ref)
     manifest = read_json_object(run_root / "run_manifest.json")
     if manifest.get("run_id") != run_id or manifest.get("request_id") != request_id:
         raise ValueError("DSH_TASK_RUN_MANIFEST_IDENTITY_CHANGED")
+    _intent_ref, intent = _task_run_intent(run_ref)
+    if manifest.get("request") != intent:
+        raise ValueError("DSH_TASK_RUN_INTENT_CHANGED")
     pointers = list((store / "v2/session-checkpoints").glob("*.json"))
     if len(pointers) != 1:
         raise ValueError("DSH_TASK_RUN_RESUME_POINT_AMBIGUOUS")
@@ -946,7 +1004,12 @@ def _suspended_task_run(run_ref: dict[str, str]) -> TaskRunSuspended:
         raise ValueError("DSH_TASK_RUN_RECEIPT_OUTSIDE_STORE")
     receipt_path = output_root / ("tool-receipt-" + canonical_hash(pending[0]) + ".json")
     receipt = read_json_object(receipt_path)
-    if receipt.get("origin", {}).get("call_id") != pending[0]:
+    origins = [row for row in checkpoint["session"]["actual_calls"] if row.get("call_id") == pending[0]]
+    state = TaskAgentV2State(store, checkpoint["task_contract_ref"])
+    expected_origin = ({key: value for key, value in origins[0].items() if key != "execution_receipt_ref"}
+        if len(origins) == 1 else None)
+    if (expected_origin is None or receipt.get("origin") != expected_origin
+            or receipt.get("task_head") != state.head):
         raise ValueError("DSH_TASK_RUN_EFFECT_RECEIPT_CHANGED")
     # Scope: only an interrupted Effect with a durable Receipt is exposed as recoverable.
     # 为什么要有它：任意进程中断不能被补写成安全恢复点，未知效果必须先由原回执对账。
@@ -954,13 +1017,85 @@ def _suspended_task_run(run_ref: dict[str, str]) -> TaskRunSuspended:
         resume_ref=_file_ref(checkpoint_path), progress_receipt_ref=_file_ref(receipt_path))
 
 
+def _task_run_store_ref(store: Path, value) -> dict[str, str]:
+    if isinstance(value, dict):
+        path = _verify_ref(value, root=store)
+        return _file_ref(path)
+    if not isinstance(value, str) or not value:
+        raise ValueError("DSH_TASK_RUN_EVIDENCE_REFERENCE_REQUIRED")
+    path = Path(value)
+    return _file_ref(_contained_record_path(path if path.is_absolute() else store / path, store))
+
+
+def _validate_task_run_evidence_bundle(*, manifest: dict, result: dict, outcome: dict,
+                                       run_root: Path, store: Path, status: str) -> None:
+    """Verify that the manifest root reaches every required Task Run fact class.
+
+    Scope: completed repository Task Agent v2 runs returned by execute_task_run.
+    为什么要有它：manifest只有能追溯Intent、Authority、Binding、Receipt、Observation、checkpoint和Outcome时才是Evidence Bundle。
+    """
+    terminal_ref = manifest.get("terminal_record")
+    terminal = {}
+    if terminal_ref is not None:
+        _verify_ref(terminal_ref, root=run_root)
+        terminal = read_json_object(terminal_ref["path"])
+    elif not outcome.get("boundary_refs"):
+        raise ValueError("DSH_TASK_RUN_TERMINAL_EVIDENCE_REQUIRED")
+    technical = result.get("task_agent_outcome") or terminal.get("task_agent_outcome") or {}
+    native_ref = technical.get("execution_ref") if isinstance(technical, dict) else None
+    if native_ref is None:
+        if status in {"awaiting_delivery", "candidate_ready"}:
+            raise ValueError("DSH_TASK_RUN_TECHNICAL_EXECUTION_REQUIRED")
+        if (not isinstance(manifest.get("request"), str) or not manifest["request"].strip()
+                or manifest.get("initial_task_authority_status") != "not_established"
+                or manifest.get("initial_task_binding_status") != "source_revision_only"):
+            raise ValueError("DSH_TASK_RUN_PREAUTHORITY_EVIDENCE_REQUIRED")
+        for reference in outcome.get("boundary_refs", []):
+            _verify_ref(reference, root=run_root)
+        return
+    native_ref = _task_run_store_ref(store, native_ref)
+    native = read_json_object(native_ref["path"])
+    contract_ref = _task_run_store_ref(store, native.get("task_contract_ref"))
+    contract = read_json_object(contract_ref["path"])
+    intent_ref = _task_run_store_ref(store, contract.get("original_request_ref"))
+    intent = read_json_object(intent_ref["path"])
+    if (intent.get("original_request") != contract.get("task_requirements", {}).get("original_request")
+            or intent.get("original_request") != manifest.get("request")
+            or not isinstance(intent.get("original_request"), str)):
+        raise ValueError("DSH_TASK_RUN_INTENT_CHANGED")
+    _task_run_store_ref(store, contract.get("authority_ref"))
+    _task_run_store_ref(store, native.get("binding_registry_ref"))
+    if native.get("candidate_ref") is not None:
+        _task_run_store_ref(store, native["candidate_ref"])
+    if native.get("check_ref") is not None:
+        _task_run_store_ref(store, native["check_ref"])
+    names = set()
+    for record in native.get("completed_tool_records", []):
+        names.add(record.get("name"))
+        _task_run_store_ref(store, record.get("execution_receipt_ref"))
+    if (status in {"awaiting_delivery", "candidate_ready"}
+            and (native.get("candidate_ref") is None or native.get("check_ref") is None
+                 or not {"candidate_submit", "candidate_check"} <= names)):
+        raise ValueError("DSH_TASK_RUN_EFFECT_RECEIPTS_INCOMPLETE")
+    checkpoint = result.get("v2_checkpoint_ref", result.get("v2_delivery_checkpoint_ref"))
+    if checkpoint is not None:
+        _task_run_store_ref(store, checkpoint)
+    elif status in {"awaiting_delivery", "candidate_ready"}:
+        raise ValueError("DSH_TASK_RUN_CHECKPOINT_REQUIRED")
+    for reference in outcome.get("boundary_refs", []):
+        _verify_ref(reference, root=run_root)
+
+
 def _completed_task_run(run_ref: dict[str, str], result: dict) -> TaskRunCompleted:
-    _selected, run_id, request_id, run_root, _store = _task_run_location(run_ref)
+    _selected, run_id, request_id, run_root, store = _task_run_location(run_ref)
     manifest_path = run_root / "run_manifest.json"
     manifest = read_json_object(manifest_path)
+    _intent_ref, intent = _task_run_intent(run_ref)
     if (manifest.get("run_id") != run_id or manifest.get("request_id") != request_id
             or result.get("run_id", run_id) != run_id or result.get("request_id", request_id) != request_id):
         raise ValueError("DSH_TASK_RUN_RESULT_IDENTITY_CHANGED")
+    if manifest.get("request") != intent:
+        raise ValueError("DSH_TASK_RUN_INTENT_CHANGED")
     outcome_ref = result.get("outcome_summary_ref", manifest.get("outcome_summary_ref"))
     if not isinstance(outcome_ref, dict):
         raise ValueError("DSH_TASK_RUN_OUTCOME_MISSING: " + str({key: result.get(key)
@@ -971,6 +1106,8 @@ def _completed_task_run(run_ref: dict[str, str], result: dict) -> TaskRunComplet
     if (outcome.get("run_id") != run_id or outcome.get("request_id") != request_id
             or not isinstance(status, str) or not status):
         raise ValueError("DSH_TASK_RUN_OUTCOME_INVALID")
+    _validate_task_run_evidence_bundle(manifest=manifest, result=result, outcome=outcome,
+        run_root=run_root, store=store, status=status)
     # Scope: the existing manifest is the Evidence Bundle root for this slice.
     # 为什么要有它：它已绑定终态、continuation 与Run Outcome，首切片无需复制原件或新增持久化bundle schema。
     return TaskRunCompleted(run_ref=deepcopy(run_ref), run_id=run_id, request_id=request_id,
@@ -984,10 +1121,9 @@ def execute_task_run(command: TaskRunCommand) -> TaskRunExecution:
     为什么要有它：调用者只选择Open或Resume，生命周期、恢复点和唯一结果引用由同一deep module负责。
     """
     if isinstance(command, OpenTaskRun):
-        base = _verify_ref(command.execution_config_ref)
-        selected = prepare_new_task(execution_config=str(base), description=command.intent)
-        run_ref = _file_ref(Path(selected))
-        argv = build_product_argv(execution_config=selected, description=command.intent)
+        bound = command.bind()
+        run_ref = deepcopy(bound.execution_config_ref)
+        argv = list(bound.business_argv)
         try:
             _status, result, raw = _invoke_product(argv)
         except KeyboardInterrupt:
@@ -1005,6 +1141,18 @@ def execute_task_run(command: TaskRunCommand) -> TaskRunExecution:
         result = resume_v2_task_agent(artifact_store_root=store, checkpoint_ref=str(checkpoint))
         return _completed_task_run(command.run_ref, result)
     raise TypeError("DSH_TASK_RUN_COMMAND_REQUIRED")
+
+
+def _task_run_projection(execution: TaskRunExecution) -> dict:
+    common = {"run_ref": deepcopy(execution.run_ref), "run_id": execution.run_id,
+        "request_id": execution.request_id}
+    if isinstance(execution, TaskRunSuspended):
+        return {**common, "status": "suspended", "resume_ref": deepcopy(execution.resume_ref),
+            "progress_receipt_ref": deepcopy(execution.progress_receipt_ref),
+            "whole_task_delivered": False}
+    return {**common, "status": execution.status,
+        "run_outcome_ref": deepcopy(execution.run_outcome_ref),
+        "evidence_bundle_ref": deepcopy(execution.evidence_bundle_ref)}
 
 
 def _dispatch_product(argv: list[str], *, execution_config: str) -> int:
@@ -1039,6 +1187,9 @@ def list_runs(*, execution_config: str) -> dict:
 def advance_task(*, execution_config: str, run_id: str, allocation_config: str | None = None) -> dict:
     """Start a prepared project or consume one supported, already authorized task revision."""
     selected = task_execution_config(execution_config=execution_config, run_id=run_id)
+    _, selected_options = _configuration_arguments(selected)
+    task_run_v2 = (selected_options.get("--technical-executor") == "task_agent"
+        and selected_options.get("--task-agent-protocol") == "v2")
     record = inspect_run(execution_config=selected, run_id=run_id)
     if record["status"] == "not_found":
         if "followup_binding" in read_json_object(selected):
@@ -1049,6 +1200,11 @@ def advance_task(*, execution_config: str, run_id: str, allocation_config: str |
         else:
             preview = preview_new_project(execution_config=execution_config, run_id=run_id)
             description = preview["description"]
+        if task_run_v2:
+            # Scope: advance consumes an existing Task Run; it never chooses Open for a missing v2 run.
+            # 为什么要有它：Open与Resume选择属于唯一Task Run interface，advance不能恢复成第二个启动入口。
+            return {**record, "status": "task_not_started_use_open_task_run",
+                "reason": "DSH_TASK_RUN_OPEN_REQUIRED", "automatic_execution_started": False}
         output = io.StringIO()
         with redirect_stdout(output):
             cli.main(build_product_argv(execution_config=selected, description=description))
@@ -1069,6 +1225,14 @@ def advance_task(*, execution_config: str, run_id: str, allocation_config: str |
             return resume_interrupted_patch(execution_config=selected, run_root=record["run_root"],
                 run_id=run_id, recovery_config=allocation["interrupted_patch"])
     if record["manifest"] is None or record["result"] is None:
+        if task_run_v2 and record["manifest"] is not None and allocation_config is None:
+            try:
+                suspended = _suspended_task_run(_file_ref(Path(selected)))
+                return _task_run_projection(execute_task_run(ResumeTaskRun(
+                    run_ref=suspended.run_ref, resume_ref=suspended.resume_ref)))
+            except (OSError, KeyError, TypeError, ValueError) as error:
+                return {**record, "status": "task_incomplete_inspect_before_retry",
+                    "reason": str(error), "automatic_execution_started": False}
         return {**record, "status": "task_incomplete_inspect_before_retry",
                 "reason": "DSH_TASK_PROGRESS_INCOMPLETE", "automatic_execution_started": False}
     if allocation_config is None:
@@ -1166,7 +1330,8 @@ def main(argv: list[str] | None = None) -> int:
             result = advance_task(execution_config=args.execution_config, run_id=args.advance_task,
                 allocation_config=args.findings_allocation_config)
             print(json.dumps(_with_inspection(result, args.execution_config), ensure_ascii=True))
-            return 0 if result.get("status") == "awaiting_approval" else 2
+            return 0 if result.get("status") in {
+                "awaiting_approval", "awaiting_delivery", "candidate_ready", "suspended"} else 2
         if args.preview_project is not None:
             print(json.dumps(preview_new_project(execution_config=args.execution_config,
                 run_id=args.preview_project), ensure_ascii=True))
@@ -1222,6 +1387,18 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(preview_new_project(execution_config=args.execution_config,
                 run_id=options["--run-id"]), ensure_ascii=True))
             return 0
+        _arguments, configured = _configuration_arguments(args.execution_config)
+        if (configured.get("--technical-executor") == "task_agent"
+                and configured.get("--task-agent-protocol") == "v2"):
+            # Scope: the normal registered repository Task Agent v2 path; legacy continuations retain their selectors above.
+            # 为什么要有它：DSH只编码Intent并投影结果，Open/Resume选择和生命周期不能再经过第二个公开dispatch路径。
+            execution = execute_task_run(OpenTaskRun(
+                execution_config_ref=_file_ref(Path(args.execution_config)), intent=description))
+            projected = _with_inspection(_task_run_projection(execution), execution.run_ref["path"])
+            print(json.dumps(projected, ensure_ascii=True))
+            if isinstance(execution, TaskRunSuspended):
+                return 0
+            return 0 if execution.status in {"awaiting_approval", "awaiting_delivery", "candidate_ready"} else 2
         selected = (prepare_new_task(execution_config=args.execution_config, description=description)
                     if args.new_task else args.execution_config)
         product_argv = build_product_argv(execution_config=selected, description=description)

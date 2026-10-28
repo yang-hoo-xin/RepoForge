@@ -23,10 +23,13 @@ if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.dsh_run_request import (
+    OpenTaskRun,
+    TaskRunCompleted,
+    TaskRunSuspended,
     _configuration_arguments,
-    build_product_argv,
+    _task_run_projection,
     evidence_locator,
-    prepare_new_task,
+    execute_task_run,
     validate_external_settings_credentials,
 )
 from scripts.run_benchmark_arm import codex_argv, codex_events, execute
@@ -54,6 +57,104 @@ _NATIVE_CONFLICT_ENV = frozenset({
     "openai_api_key", "codex_api_key", "dashscope_api_key", "openai_base_url", "dashscope_base_url",
     "openai_api_base", "dashscope_api_base", "repoforge_openai_base_url",
 })
+
+# Scope: bootstrap one frozen Task Run child before importing any snapshot-owned module.
+# 为什么要有它：未验证的snapshot源码不能获得执行权，Task Run seam必须保留原fresh-process身份约束。
+TASK_RUN_CHILD_CODE = """
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1]).resolve()
+manifest = Path(sys.argv[2])
+raw = manifest.read_bytes()
+if hashlib.sha256(raw).hexdigest() != sys.argv[3]:
+    raise ValueError("FROZEN_EXECUTION_MANIFEST_CHANGED")
+document = json.loads(raw)
+if root != Path(document["snapshot_root"]).resolve() or manifest.resolve().parent != root:
+    raise ValueError("FROZEN_EXECUTION_BOOTSTRAP_OUTSIDE_SNAPSHOT")
+for name, expected in document["files"].items():
+    target = root / name
+    if not target.resolve().is_relative_to(root) or target.is_symlink():
+        raise ValueError("FROZEN_EXECUTION_SNAPSHOT_PATH_ESCAPE")
+    if hashlib.sha256(target.read_bytes()).hexdigest() != expected["sha256"]:
+        raise ValueError("FROZEN_EXECUTION_SOURCE_CHANGED: " + name)
+sys.path.insert(0, str(root))
+from scripts.run_repository_product_pilot import run_task_run_snapshot
+raise SystemExit(run_task_run_snapshot({"path": sys.argv[2], "sha256": sys.argv[3]}))
+"""
+
+
+def frozen_task_run_command(platform_ref):
+    root = Path(platform_ref["path"]).resolve().parent
+    return [sys.executable, "-I", "-B", "-c", TASK_RUN_CHILD_CODE,
+        str(root), platform_ref["path"], platform_ref["sha256"]]
+
+
+def run_task_run_snapshot(platform_ref):
+    """Invoke the shared Task Run seam from its frozen platform snapshot.
+
+    Scope: Task Agent product arms whose original business argv is one registered run-request.
+    为什么要有它：pilot必须保留冻结源码身份，同时不能继续成为第二个Task Run生命周期实现。
+    """
+    frozen = FrozenExecution(platform_ref)
+    frozen.verify_files()
+    business = frozen.document.get("business_argv")
+    if (not isinstance(business, list) or business[:1] != ["run-request"]
+            or business.count("--") != 1):
+        raise ValueError("PILOT_TASK_RUN_BUSINESS_COMMAND_INVALID")
+    separator = business.index("--")
+    if len(business[separator + 1:]) != 1:
+        raise ValueError("PILOT_TASK_RUN_INTENT_INVALID")
+    arguments, intent = business[1:separator], business[separator + 1]
+    matches = []
+    for external in frozen.document.get("external_refs", []):
+        if external.get("role") != "bound_input":
+            continue
+        reference = {key: external[key] for key in ("path", "sha256")}
+        try:
+            document = read_bound_json(reference)
+        except (OSError, ValueError, TypeError):
+            continue
+        if isinstance(document, dict) and document.get("arguments") == arguments:
+            matches.append(reference)
+    if len(matches) != 1:
+        raise ValueError("PILOT_TASK_RUN_CONFIGURATION_MISSING_OR_AMBIGUOUS")
+    execution = execute_task_run(OpenTaskRun(execution_config_ref=matches[0], intent=intent))
+    print(json.dumps(_task_run_projection(execution), ensure_ascii=False))
+    if isinstance(execution, TaskRunSuspended):
+        return 0
+    return 0 if isinstance(execution, TaskRunCompleted) and execution.status in {
+        "awaiting_approval", "awaiting_delivery", "candidate_ready"} else 2
+
+
+def _task_run_process_result(process, plan):
+    """Validate the frozen child's reference-only Task Run result.
+
+    Scope: successful Task Agent pilot child processes only.
+    为什么要有它：pilot只能聚合与冻结execution config同一run/request的权威引用，不能信任子进程自报身份。
+    """
+    reference = process.get("stdout_ref")
+    if not isinstance(reference, dict):
+        raise ValueError("PILOT_TASK_RUN_STDOUT_REQUIRED")
+    _verify(reference)
+    try:
+        value = json.loads(Path(reference["path"]).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as error:
+        raise ValueError("PILOT_TASK_RUN_RESULT_INVALID") from error
+    required = {"run_ref", "run_id", "request_id", "status"}
+    if (not isinstance(value, dict) or not required <= set(value)
+            or value["run_ref"] != plan["execution_config_ref"]
+            or value["run_id"] != plan["run_id"]):
+        raise ValueError("PILOT_TASK_RUN_RESULT_IDENTITY_CHANGED")
+    _, options = _configuration_arguments(plan["execution_config_ref"]["path"])
+    if value["request_id"] != options.get("--request-id"):
+        raise ValueError("PILOT_TASK_RUN_RESULT_IDENTITY_CHANGED")
+    for key in (("resume_ref", "progress_receipt_ref") if value["status"] == "suspended"
+            else ("run_outcome_ref", "evidence_bundle_ref")):
+        _verify(value.get(key))
+    return value
 
 
 def source_snapshot(root):
@@ -511,8 +612,9 @@ def freeze(configuration_ref):
             if experience_ref is not None:
                 arguments.extend(["--task-agent-experience-config", experience_ref["path"]])
             execution = _save(arm_root / "base-execution.json", {"arguments": arguments})
-            selected = prepare_new_task(execution_config=execution["path"], description=common)
-            business = build_product_argv(execution_config=selected, description=common)
+            open_command = OpenTaskRun(execution_config_ref=execution, intent=common).bind()
+            selected = open_command.execution_config_ref["path"]
+            business = list(open_command.business_argv)
             _, options = _configuration_arguments(selected)
             run_root = arm_root / "runs" / options["--run-id"]
             bound = [_ref(selected), _ref(settings_path), profile.reference, common_ref, configuration_ref, _ref(__file__)]
@@ -537,8 +639,7 @@ def freeze(configuration_ref):
                 configuration_difference=model_description + "; semantic working state="
                     + semantic_state + ("; host experience policy explicitly bound" if experience_ref is not None
                         else "; no injected strategy or terminal extraction configured"),
-                command=[sys.executable, "-I", "-B", str(root / "platform/scripts/run_frozen_product.py"),
-                    "--_child", platform["path"], platform["sha256"]])
+                command=frozen_task_run_command(platform))
             if experience_ref is not None:
                 # 为什么要有它：显式配置须同时进入真实请求、冻结输入和可核验计划，不能静默漏传或在派发前变更。
                 base.update(experience_config_ref=experience_ref,
@@ -714,8 +815,7 @@ def freeze_strategy_pair(configuration_ref, config):
             "policy_id": policy_id, "bound_inputs": bound,
             "inspection": evidence_locator(execution_config=trial["execution_config_ref"]["path"], run_id=trial["run_id"]),
             "configuration_difference": "frozen strategy snapshot only; original prepared argv retained",
-            "command": [sys.executable, "-I", "-B", str(platform_root / "scripts/run_frozen_product.py"),
-                "--_child", platform["path"], platform["sha256"]]}
+            "command": frozen_task_run_command(platform)}
         plans[arm] = _save(arm_root / "frozen-plan.json", plan)
     result = _save(root / "frozen-pilot.json", {"configuration_ref": configuration_ref,
         "prepared_ref": config["prepared_ref"], "order": [t["arm"] for t in trials],
@@ -856,6 +956,10 @@ def run(pilot_ref, arm, *, native_admission_ref=None):
         FrozenExecution(plan["platform_ref"]).verify_files()
         for reference in plan["bound_inputs"]:
             _verify(reference)
+        # Scope: Task Agent product arms only; native Codex has its separately validated command below.
+        # 为什么要有它：签名plan也不能把冻结Task Run child替换为另一条执行路径或未验证bootstrap。
+        if native is None and plan.get("command") != frozen_task_run_command(plan["platform_ref"]):
+            raise ValueError("PILOT_TASK_RUN_COMMAND_CHANGED")
     external = external_pilot_profile(config)
     if native is not None:
         # 为什么要有它：实际派发须复核冻结的权限、二进制及公开输入；元数据验证不派发模型，也不从环境继承另一提供方。
@@ -927,8 +1031,13 @@ def run(pilot_ref, arm, *, native_admission_ref=None):
         environment = native_reference_environment(environment, native, workspace=plan["workspace"])
     process = execute(plan["command"], cwd=plan["workspace"], stdin_path=plan.get("prompt_path"),
         output=root / "execution", deadline=deadline, environment=environment)
+    task_run_execution = None
+    if ("platform_ref" in plan and process.get("started") is True and process.get("exit_code") == 0
+            and process.get("timeout") is False):
+        task_run_execution = _task_run_process_result(process, plan)
     delivery_process = None
-    if "platform_ref" in plan and not process.get("timeout") and deadline > time.monotonic():
+    if ("platform_ref" in plan and not process.get("timeout") and deadline > time.monotonic()
+            and task_run_execution is not None and task_run_execution["status"] != "suspended"):
         delivery_process = execute([sys.executable, "-B", str(Path(plan["platform_ref"]["path"]).parent /
             "scripts/run_repository_product_pilot.py"), "deliver", "--reference", plan_ref["path"], "--sha256", plan_ref["sha256"]],
             cwd=plan["workspace"], stdin_path=None, output=root / "delivery-process", deadline=deadline, environment=environment)
@@ -941,6 +1050,10 @@ def run(pilot_ref, arm, *, native_admission_ref=None):
         "source_after": after, "task_wall_seconds": time.monotonic() - clock,
         "independent_business_result": None, "correct_delivery": None,
         "scope": "execution facts only; native claims do not prove independent acceptance or same-version delivery"}
+    if task_run_execution is not None:
+        # Scope: pilot aggregates the shared interface's references and does not reinterpret run_result fields.
+        # 为什么要有它：评测adapter必须消费唯一Run Outcome/Evidence Bundle，不能成为第二个结果所有者。
+        facts["task_run_execution"] = task_run_execution
     if arm in {ORDER[0], NATIVE_ARM} and process.get("started"):
         facts["native_events_ref"] = _save(root / "native-events.json", codex_events(process["stdout_ref"]["path"]))
     if native is not None:

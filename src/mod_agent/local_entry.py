@@ -7500,6 +7500,11 @@ def run_local_request(
 
         initial_manifest = {
             **({"technical_execution": technical_execution} if technical_execution is not None else {}),
+            **({"initial_task_authority_status": "not_established",
+                "initial_task_binding_status": "source_revision_only"}
+               if technical_executor == "task_agent" else {}),
+            # Scope: facts at manifest admission before a Task Agent contract or registry exists.
+            # 为什么要有它：pre-Authority失败也必须显式保留Authority/Binding未建立，不能在Evidence Bundle中静默省略。
             "dependency_api": dependency_api_binding,
             **({"knowledge_evidence": knowledge_binding} if knowledge_binding is not None else {}),
             "small_project_context_policy": small_project_context_configuration,

@@ -4,7 +4,10 @@
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -29,6 +32,62 @@ def _filesystem(command):
 def test_absolute_real_b_does_not_require_external_product_readiness():
     assert "codex_executable_ref" not in pilot.configuration_keys({"mode": "absolute_real_B"})
     assert "codex_executable_ref" in pilot.configuration_keys({"mode": "matched_product_pair"})
+
+
+def test_frozen_task_run_adapter_calls_the_shared_interface(tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    assert not hasattr(pilot, "prepare_new_task") and not hasattr(pilot, "build_product_argv")
+    arguments = ["--run-id", "dsh-controlled", "--request-id", "request-controlled",
+        "--workspace-root", str(tmp_path / "runs")]
+    execution_ref = _save(tmp_path / "execution.json", {"arguments": arguments})
+    platform_ref = _save(tmp_path / "platform.json", {"controlled": True})
+    document = {"business_argv": ["run-request", *arguments, "--", "Controlled intent"],
+        "external_refs": [{"role": "bound_input", **execution_ref,
+            "retained_path": "external/" + execution_ref["sha256"] + "/execution.json"}]}
+    monkeypatch.setattr(pilot, "FrozenExecution", lambda _ref: SimpleNamespace(
+        document=document, verify_files=lambda: None))
+    observed = []
+    expected = pilot.TaskRunCompleted(run_ref=execution_ref, run_id="dsh-controlled",
+        request_id="request-controlled", status="awaiting_delivery",
+        run_outcome_ref=_save(tmp_path / "outcome.json", {"run_id": "dsh-controlled"}),
+        evidence_bundle_ref=_save(tmp_path / "manifest.json", {"run_id": "dsh-controlled"}))
+    monkeypatch.setattr(pilot, "execute_task_run", lambda command: observed.append(command) or expected)
+
+    assert pilot.run_task_run_snapshot(platform_ref) == 0
+    assert observed == [pilot.OpenTaskRun(execution_config_ref=execution_ref, intent="Controlled intent")]
+    raw = capsys.readouterr().out
+    projected = json.loads(raw)
+    assert projected == pilot._task_run_projection(expected)
+    stdout = tmp_path / "stdout.json"
+    stdout.write_text(raw, encoding="utf-8")
+    process = {"stdout_ref": _ref(stdout)}
+    plan = {"execution_config_ref": execution_ref, "run_id": "dsh-controlled"}
+    assert pilot._task_run_process_result(process, plan) == projected
+    stdout.write_text(json.dumps({**projected, "request_id": "forged-request"}), encoding="utf-8")
+    process = {"stdout_ref": _ref(stdout)}
+    with pytest.raises(ValueError, match="RESULT_IDENTITY_CHANGED"):
+        pilot._task_run_process_result(process, plan)
+
+
+def test_frozen_task_run_bootstrap_rejects_changed_source_before_import(tmp_path):
+    root = tmp_path / "snapshot"
+    script = root / "scripts/run_repository_product_pilot.py"
+    script.parent.mkdir(parents=True)
+    marker = tmp_path / "imported.txt"
+    script.write_text("from pathlib import Path\nPath(" + repr(str(marker))
+        + ").write_text('imported')\ndef run_task_run_snapshot(_ref): return 0\n", encoding="utf-8")
+    manifest = root / "execution_snapshot.json"
+    document = {"snapshot_root": str(root), "files": {
+        "scripts/run_repository_product_pilot.py": {"sha256": "0" * 64}}}
+    manifest.write_text(json.dumps(document), encoding="utf-8")
+    digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
+
+    result = subprocess.run([sys.executable, "-I", "-B", "-c", pilot.TASK_RUN_CHILD_CODE,
+        str(root), str(manifest), digest], capture_output=True, text=True)
+
+    assert result.returncode != 0
+    assert not marker.exists()
 
 
 def test_native_reference_requires_own_profile_and_no_api_settings():
@@ -82,7 +141,6 @@ def native_reference(tmp_path, monkeypatch):
     monkeypatch.setattr(pilot, "validate_frozen_evaluator", lambda _qualification: None)
     monkeypatch.setattr(pilot, "read_ollama_model_identity", lambda *_args: pytest.fail("Native reference cannot contact Ollama"))
     monkeypatch.setattr(pilot, "external_pilot_identity", lambda *_args: pytest.fail("Native reference cannot contact API"))
-    monkeypatch.setattr(pilot, "prepare_new_task", lambda **_kwargs: pytest.fail("Native result is not TaskAgent"))
     return config
 
 
@@ -427,6 +485,8 @@ def test_semantic_state_reaches_generated_configuration_and_product_argv(tmp_pat
     assert plan["task_agent_semantic_state"] == expected
     assert plan["configuration_ref"] == configuration
     assert configuration in plan["bound_inputs"]
+    assert plan["command"] == pilot.frozen_task_run_command(plan["platform_ref"])
+    assert not any("run_frozen_product.py" in part for part in plan["command"])
     assert frozen["model_calls"] == 0 and not (Path(plan["root"]) / "started.json").exists()
     if external:
         from types import SimpleNamespace
@@ -809,11 +869,25 @@ def test_strategy_pair_cli_uses_one_deadline_for_execution_and_delivery(tmp_path
     monkeypatch.setattr(pilot.time, "monotonic", lambda: now["clock"])
     monkeypatch.setattr(pilot.time, "time", lambda: now["utc"])
     monkeypatch.setenv("REPOFORGE_TASK_DEADLINE_UTC", "1000")
+    frozen = pilot.read_bound_json(frozen_ref)
+    plans = {arm: pilot.read_bound_json(plan_ref) for arm, plan_ref in frozen["plans"].items()}
 
     def execute(argv, **kwargs):
         calls.append((argv, kwargs))
         now["clock"] += 25
+        kwargs["output"].mkdir(parents=True, exist_ok=True)
         receipt = {"started": True, "timeout": False, "exit_code": 0}
+        selected = next((plan for plan in plans.values() if plan["command"] == argv), None)
+        if selected is not None:
+            _, options = pilot._configuration_arguments(selected["execution_config_ref"]["path"])
+            outcome = _save(kwargs["output"] / "outcome.json", {"run_id": selected["run_id"]})
+            manifest = _save(kwargs["output"] / "manifest.json", {"run_id": selected["run_id"]})
+            stdout = kwargs["output"] / "stdout.bin"
+            stdout.write_text(json.dumps({"run_ref": selected["execution_config_ref"],
+                "run_id": selected["run_id"], "request_id": options["--request-id"],
+                "status": "awaiting_delivery", "run_outcome_ref": outcome,
+                "evidence_bundle_ref": manifest}), encoding="utf-8")
+            receipt["stdout_ref"] = _ref(stdout)
         _save(kwargs["output"] / "process.json", receipt)
         return receipt
 

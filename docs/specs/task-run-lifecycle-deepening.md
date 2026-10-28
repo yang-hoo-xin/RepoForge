@@ -39,6 +39,7 @@ Provide one deep Task Run module with one execute interface. It accepts an in-pr
 - The result is either Suspended with the exact resume reference or Completed with one Run Outcome reference and one Evidence Bundle reference. 为什么要有它：可恢复中断不能伪装成失败，完成结果也不能由多个 adapter 重写。
 - The Task Run module owns open-versus-resume selection and terminal finalization. The Task Agent execution module owns the technical state machine; the recovery journal owns checkpoint reconciliation and idempotency. 为什么要有它：所有权应集中但不把所有实现塞进一个函数。
 - Action execution crosses one internal Effect admission seam. Authority, Binding, source preimage, version and stable operation identity are verified before the Effect; the Effect owner records a Receipt before creating an Observation. 为什么要有它：工具可用和 Action 请求都不是副作用授权或执行事实。
+- A Task Run that fails before Task Authority or the edit Binding registry is created still completes with its Intent, Authority status set to not established, and Binding status set to source-revision-only; it does not invent missing edit Binding references. 为什么要有它：失败也属于Task Run，Evidence Bundle必须保留已建立的源码Binding以及尚未建立的权限事实。
 - Action extensibility remains behind the seam through internal handlers; handler registration is not part of the external interface. 为什么要有它：未来 Action 不应扩大每个调用者必须理解的 interface。
 - DSH and pilot remain two adapters. DSH handles human-facing command encoding and inspection; pilot handles frozen batch conditions, ordering and measurement. 为什么要有它：两个真实调用场景证明 seam 有价值，合并 adapter 只会制造更大的条件分支。
 - Product graph behavior may remain behind a local adapter, but it no longer owns a parallel public Task Run entry or a second technical outcome projection. 为什么要有它：大文件不是首要问题，重复生命周期所有权才是接线成本来源。
@@ -57,7 +58,7 @@ Provide one deep Task Run module with one execute interface. It accepts an in-pr
 
 ## Testing Decisions
 
-- The confirmed external seam is execute_task_run; tests do not call the Task Agent execution owner, Action handlers or recovery journal directly. 为什么要有它：interface 是测试面，内部实现必须能够继续深化。
+- The confirmed external seam is execute_task_run; tests invoke behavior only through DSH Open/Resume. Deterministic provider, evaluator and Effect-interruption adapters may be injected behind the seam, but tests do not call or assert the Task Agent owner, Action handlers, recovery journal or checkpoint layout directly. 为什么要有它：interface 是测试面，同时受控中断需要一个可替换的内部Effect adapter。
 - The tracer bullet opens one repository Task Run, reads source, executes one Action, records one Observation, forms a Patch Candidate, runs the public check, interrupts after an Effect Receipt, resumes through the same interface, and returns one completed result. 为什么要有它：只有完整纵向切片能证明正常入口、Effect 和恢复真的接通。
 - The deterministic provider and evaluator are existing local-substitutable adapters; the test does not require a live model or Docker. 为什么要有它：架构行为应在 CI 中稳定复现，真实模型收益属于 T1/T2/T3 队列。
 - The test asserts stable run/request identity, one execution of the interrupted Effect, no duplicated cumulative resource charge, candidate/check identity, one Run Outcome and one Evidence Bundle containing Intent, Authority, Binding, Receipt, Observation, checkpoint and outcome references. 为什么要有它：这些是 deep module 的外部不变量，而不是文件布局断言。

@@ -51,6 +51,56 @@ def _call(config, description, monkeypatch):
     return bridge.main(["--execution-config", str(config)])
 
 
+@pytest.mark.parametrize("missing", [None, "request", "initial_task_authority_status",
+    "initial_task_binding_status", "wrong_request"])
+def test_task_run_failure_without_candidate_returns_completed(execution_config, monkeypatch, missing):
+    def invoke(argv):
+        parsed = cli.build_parser().parse_args(argv)
+        run_root = Path(parsed.workspace_root) / parsed.run_id
+        continuation = run_root / "run-continuations/failure.json"
+        continuation.parent.mkdir(parents=True)
+        continuation.write_text(json.dumps({"schema": "run_outcome_boundary_v1",
+            "run_id": parsed.run_id, "request_id": parsed.request_id,
+            "status": "blocked", "result": {"status": "blocked"}}), encoding="utf-8")
+        boundary_ref = bridge._file_ref(continuation)
+        outcome_path = run_root / "run-outcomes/failure.json"
+        outcome_path.parent.mkdir()
+        outcome_path.write_text(json.dumps({"schema": "run_outcome_summary_v1",
+            "run_id": parsed.run_id, "request_id": parsed.request_id,
+            "boundary_refs": [boundary_ref], "outcome": {}}), encoding="utf-8")
+        outcome_ref = bridge._file_ref(outcome_path)
+        terminal = run_root / "run_failure.json"
+        terminal.write_text(json.dumps({"run_id": parsed.run_id,
+            "request_id": parsed.request_id, "status": "blocked"}), encoding="utf-8")
+        manifest = {"run_id": parsed.run_id,
+            "request_id": parsed.request_id, "status": "blocked",
+            "request": "Controlled failed task", "initial_task_authority_status": "not_established",
+            "initial_task_binding_status": "source_revision_only",
+            "terminal_record": bridge._file_ref(terminal), "outcome_summary_ref": outcome_ref}
+        if missing == "wrong_request":
+            manifest["request"] = "Forged different intent"
+        elif missing is not None:
+            manifest.pop(missing)
+        (run_root / "run_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        result = {"status": "blocked", "run_id": parsed.run_id,
+            "request_id": parsed.request_id, "outcome_summary_ref": outcome_ref}
+        return 2, result, json.dumps(result)
+
+    monkeypatch.setattr(bridge, "_invoke_product", invoke)
+    command = bridge.OpenTaskRun(
+        execution_config_ref=bridge._file_ref(execution_config), intent="Controlled failed task")
+    if missing is not None:
+        with pytest.raises(ValueError, match=("INTENT_CHANGED" if missing in {"request", "wrong_request"}
+                else "PREAUTHORITY_EVIDENCE_REQUIRED")):
+            bridge.execute_task_run(command)
+        return
+    completed = bridge.execute_task_run(command)
+
+    assert isinstance(completed, bridge.TaskRunCompleted)
+    assert completed.status == "blocked"
+    assert json.loads(Path(completed.evidence_bundle_ref["path"]).read_text(encoding="utf-8"))["status"] == "blocked"
+
+
 def _dependency_api_config(execution_config):
     from tests.unit.test_dependency_api_config import configuration
     from tests.unit.test_local_entry import _game_folder_binding, _game_folder_dependency
