@@ -1,0 +1,31 @@
+{
+  "repository": "yang-hoo-xin/RepoForge",
+  "issue": 15,
+  "parent_issue": 3,
+  "blocks_issue": 7,
+  "title": "恢复竞争性评测集成分支的绿色 CI 基线",
+  "labels": ["ready-for-agent"],
+  "status": "code_completed_issue_sync_blocked_by_github_write_permission",
+  "result": {
+    "isolated_commits": ["b04eeb2", "ed48a4c"],
+    "integration_commits": ["495ebc5", "0b679f9"],
+    "tree_sha": "53177fa08b80c711451fa770429d063c2d874a25",
+    "workflow_run": "https://github.com/yang-hoo-xin/RepoForge/actions/runs/40553786166",
+    "workflow_conclusion": "success",
+    "issue_update_attempt": "GitHub connector returned HTTP 403 for both comment and close; no issue mutation occurred."
+  },
+  "retro": {
+    "root_causes": [
+      "Tests still asserted a mandatory working_state sentence and total_tokens convenience field after their public contracts changed.",
+      "Strategy export reconstructed provider usage instead of reusing the execution owner's measured-usage contract.",
+      "OpenAI Responses request-body capture was attached to the shared external HTTP sender and silently expanded to Qwen."
+    ],
+    "mechanical_prevention": [
+      "The exact unknown-usage response case is now a selected CI regression.",
+      "Provider execution and export share measured_turn_usage.",
+      "External request-body persistence is explicit opt-in and jointly tests Qwen exclusion plus Responses retention."
+    ],
+    "why": "为什么要有它：绿色 CI 应来自同一合同的生产与测试，而不是删除门禁或把未知值补成成功。"
+  },
+  "body": "## Parent\n\n#3\n\n## What to build\n\n在干净的失败提交上复现 Continuous repository task and strategy contracts 的三类失败，区分过期测试合同与生产消费者缺陷，恢复可信的绿色集成基线。\n\n为什么要有它：红色基线无法区分新功能退化和已有合同漂移，不能支撑批次准入、经验评测或交付结论。\n\n## Acceptance criteria\n\n- [ ] 在干净工作区复现 semantic work state、delivery export 和 experience usage 三类失败。\n- [ ] 每个失败都有当前权威合同依据，测试更新和生产修复不相互冒充。\n- [ ] 三个受影响测试文件全部通过。\n- [ ] CI 的 Continuous repository task and strategy contracts 完整选集通过。\n- [ ] 原 workflow run、JUnit 和首次失败原件保留。\n- [ ] 完成后执行 retro，并把可机械预防的合同漂移转为检查。"
+}
