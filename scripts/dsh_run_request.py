@@ -1187,9 +1187,16 @@ def list_runs(*, execution_config: str) -> dict:
 def advance_task(*, execution_config: str, run_id: str, allocation_config: str | None = None) -> dict:
     """Start a prepared project or consume one supported, already authorized task revision."""
     selected = task_execution_config(execution_config=execution_config, run_id=run_id)
-    _, selected_options = _configuration_arguments(selected)
-    task_run_v2 = (selected_options.get("--technical-executor") == "task_agent"
-        and selected_options.get("--task-agent-protocol") == "v2")
+    task_run_v2 = None
+
+    def is_task_run_v2():
+        nonlocal task_run_v2
+        if task_run_v2 is None:
+            _, selected_options = _configuration_arguments(selected)
+            task_run_v2 = (selected_options.get("--technical-executor") == "task_agent"
+                and selected_options.get("--task-agent-protocol") == "v2")
+        return task_run_v2
+
     record = inspect_run(execution_config=selected, run_id=run_id)
     if record["status"] == "not_found":
         if "followup_binding" in read_json_object(selected):
@@ -1200,7 +1207,7 @@ def advance_task(*, execution_config: str, run_id: str, allocation_config: str |
         else:
             preview = preview_new_project(execution_config=execution_config, run_id=run_id)
             description = preview["description"]
-        if task_run_v2:
+        if is_task_run_v2():
             # Scope: advance consumes an existing Task Run; it never chooses Open for a missing v2 run.
             # 为什么要有它：Open与Resume选择属于唯一Task Run interface，advance不能恢复成第二个启动入口。
             return {**record, "status": "task_not_started_use_open_task_run",
@@ -1225,7 +1232,7 @@ def advance_task(*, execution_config: str, run_id: str, allocation_config: str |
             return resume_interrupted_patch(execution_config=selected, run_root=record["run_root"],
                 run_id=run_id, recovery_config=allocation["interrupted_patch"])
     if record["manifest"] is None or record["result"] is None:
-        if task_run_v2 and record["manifest"] is not None and allocation_config is None:
+        if is_task_run_v2() and record["manifest"] is not None and allocation_config is None:
             try:
                 suspended = _suspended_task_run(_file_ref(Path(selected)))
                 return _task_run_projection(execute_task_run(ResumeTaskRun(
