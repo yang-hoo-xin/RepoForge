@@ -1,0 +1,72 @@
+{
+  "schema": "repoforge.task-run-lifecycle-tickets.v1",
+  "parent_spec": "docs/specs/task-run-lifecycle-deepening.md",
+  "parent_issue": null,
+  "publication": {
+    "tracker": "GitHub Issues",
+    "repository": "yang-hoo-xin/RepoForge",
+    "status": "blocked",
+    "reason": "GitHub integration returned HTTP 403 Resource not accessible by integration; browser submission requires action-time confirmation.",
+    "why": "为什么要有它：本地工单可以继续约束实现，但不能伪称已发布到外部 tracker。"
+  },
+  "scope": "One expand-migrate-contract tracer bullet for the normal repository Task Agent v2 path across the six approved architecture modules.",
+  "tickets": [
+    {
+      "key": "TRL1",
+      "title": "Expand one Task Run interface through a recoverable tracer path",
+      "status": "ready-for-agent",
+      "blocked_by": [],
+      "github_issue": null,
+      "what_to_build": "Introduce one in-process Task Run execute interface with Open and Resume commands, then drive the complete repository Task Agent v2 tracer scenario through it while existing callers remain temporarily compatible.",
+      "acceptance_criteria": [
+        "The only new external seam is execute_task_run; no persisted command schema or CLI parameter is added.",
+        "Open derives Task Authority and initial Binding from verified host inputs rather than accepting caller-defined Authority.",
+        "One external-seam test opens a Task Run, reads source, performs an Action, records a Receipt and Observation, creates a Patch Candidate, checks it, interrupts, resumes and completes.",
+        "Resume preserves run/request identity, cumulative resources and the exact current resume reference; the interrupted Effect executes once.",
+        "The completed result contains exactly one Run Outcome reference and one Evidence Bundle reference whose bound originals include Intent, Authority, Binding, Receipt, Observation, checkpoint, candidate and check facts.",
+        "Existing forged preimage, permission, Receipt and superseded checkpoint counterexamples remain green."
+      ],
+      "why": "为什么要有它：先用一条完整 tracer bullet 证明 interface 有 depth，再迁移生产 adapter，避免先造空 facade。"
+    },
+    {
+      "key": "TRL2",
+      "title": "Migrate the normal DSH and pilot adapters to the Task Run seam",
+      "status": "blocked",
+      "blocked_by": [
+        "TRL1"
+      ],
+      "github_issue": null,
+      "what_to_build": "Route normal repository Task Run opening and recovery from both DSH and pilot through the new Task Run interface, while retaining each adapter's human-facing or batch-specific responsibilities.",
+      "acceptance_criteria": [
+        "The normal DSH path calls the Task Run interface once and returns its Suspended or Completed result without a second public dispatch path.",
+        "The pilot adapter calls the same interface and aggregates only Run Outcome and Evidence Bundle references; it no longer sequences task preparation and command construction itself.",
+        "The task-advance interface no longer starts a missing v2 task; Open and Resume selection belongs to the Task Run module.",
+        "The product graph adapter and recovery implementation pass authoritative outcome/evidence references instead of rebuilding another technical outcome dictionary.",
+        "Existing routing, strategy-preparation and legacy continuation callers outside the approved six-module scope keep their current behavior and do not become a second normal DSH/pilot path.",
+        "Normal entry status, inspection commands, task identity and accumulated cost remain unchanged."
+      ],
+      "why": "为什么要有它：两个真实 adapter 必须证明 seam 的 leverage，迁移也必须保持现有产品行为。"
+    },
+    {
+      "key": "TRL3",
+      "title": "Contract the replaced normal Task Run interfaces",
+      "status": "blocked",
+      "blocked_by": [
+        "TRL2"
+      ],
+      "github_issue": null,
+      "what_to_build": "Delete every compatibility path replaced for the normal DSH/pilot Task Run use case, delete its interface-specific tests, and prove the single external seam in remote CI.",
+      "acceptance_criteria": [
+        "The secondary product-dispatch interface is deleted from the normal Task Agent v2 path.",
+        "Pilot direct task-preparation, command-construction, process-execution and run-result interpretation paths are deleted for Task Agent B/B+ runs.",
+        "The task-advance auto-start branch and normal-path direct recovery projection are deleted.",
+        "Duplicate technical Run Outcome assembly in the approved modules is deleted; only the Task Run owner seals the Run Outcome and Evidence Bundle.",
+        "Tests that only freeze deleted interfaces are removed after equivalent execute_task_run coverage exists.",
+        "Search confirms no approved-module normal caller bypasses execute_task_run.",
+        "Focused tests, affected regressions, Ruff, Standards review, Spec review and the complete remote CI workflow pass.",
+        "After CI is green, the architecture chain stops and T1, T2 and T3 are reselected."
+      ],
+      "why": "为什么要有它：兼容路径会恢复并行入口，TRL3 必须阻塞整个架构事项完成。"
+    }
+  ]
+}
