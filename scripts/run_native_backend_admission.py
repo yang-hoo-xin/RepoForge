@@ -171,7 +171,13 @@ def run(plan_ref: dict[str, str], baseline_ref: dict[str, str], permission_matri
     ):
         raise ValueError("NATIVE_ADMISSION_BASELINE_IDENTITY_CHANGED")
     stages = [stage for stage in baseline.get("stages", []) if stage.get("label") == "cmd"]
-    if len(stages) != 1 or not isinstance(stages[0].get("first_output_elapsed_seconds"), (int, float)):
+    baseline_seconds = stages[0].get("first_output_elapsed_seconds") if len(stages) == 1 else None
+    # Scope: the plan-bound full-policy baseline used only by the permission-scale comparison.
+    # 为什么要有它：失败、超时或未观察到目标输出的基线不能支持“已测量”结论，更不能帮助业务准入。
+    if (len(stages) != 1 or type(baseline_seconds) not in (int, float)
+            or not math.isfinite(baseline_seconds) or baseline_seconds < 0
+            or stages[0].get("exit_code") != 0 or stages[0].get("timeout") is not False
+            or stages[0].get("payload_observed") is not True):
         raise ValueError("NATIVE_ADMISSION_FULL_POLICY_BASELINE_INVALID")
     raw_matrix = permission_result.get("permission_matrix")
     if not isinstance(raw_matrix, dict) or not isinstance(raw_matrix.get("checks"), list):
@@ -254,10 +260,19 @@ def run(plan_ref: dict[str, str], baseline_ref: dict[str, str], permission_matri
         raise ValueError("NATIVE_ADMISSION_PROBE_SIDE_EFFECT_DETECTED")
     if any(observation["owned_process_residuals"] for observation in observations):
         raise ValueError("NATIVE_ADMISSION_OWNED_PROCESS_RESIDUAL_DETECTED")
-    comparisons_measured = all(observation["started"] and observation["exit_code"] == 0
-        and observation["timeout"] is False and observation["payload_observed"] for observation in observations)
     baseline_stage = stages[0]
     full_observations, narrowed_observations = observations[:3], observations[3:]
+    # Scope: comparison-axis completeness; admission timing still uses only the three full-policy trials.
+    # 为什么要有它：一个对照失败只能使依赖它的轴未知，不能抹掉其他已有完整回执的比较。
+    def completed(observation):
+        seconds = observation["first_output_seconds"]
+        return (observation["started"] and observation["exit_code"] == 0
+            and observation["timeout"] is False and observation["payload_observed"]
+            and type(seconds) in (int, float) and math.isfinite(seconds) and seconds >= 0)
+
+    permission_scale_measured = completed(narrowed_observations[0])
+    cold_vs_repeated_measured = all(completed(row) for row in narrowed_observations[:2])
+    cmd_vs_powershell_measured = all(completed(row) for row in narrowed_observations[1:])
     permission_checks = [{"name": row.get("name"), "passed": row.get("passed") is True}
         for row in matrix["checks"]]
     measurement = {
@@ -280,7 +295,7 @@ def run(plan_ref: dict[str, str], baseline_ref: dict[str, str], permission_matri
             "evidence_ref": permission_matrix_ref,
         },
         "comparison_axes": {
-            "permission_scale": {"status": "measured" if comparisons_measured else "not_measured",
+            "permission_scale": {"status": "measured" if permission_scale_measured else "not_measured",
                 "full_permission_leaf_count": len(full_leaves),
                 "narrowed_permission_leaf_count": len(narrowed_leaves),
                 "narrowing": "nested write grants removed; no read, deny, or top-level temporary write rule changed",
@@ -289,10 +304,10 @@ def run(plan_ref: dict[str, str], baseline_ref: dict[str, str], permission_matri
                 "narrowed_observation": narrowed_observations[0],
                 "evidence_refs": [baseline_ref, full_observations[0]["process_ref"],
                     narrowed_observations[0]["process_ref"]]},
-            "cold_vs_repeated": {"status": "measured" if comparisons_measured else "not_measured",
+            "cold_vs_repeated": {"status": "measured" if cold_vs_repeated_measured else "not_measured",
                 "observations": narrowed_observations[:2],
                 "evidence_refs": [narrowed_observations[0]["process_ref"], narrowed_observations[1]["process_ref"]]},
-            "cmd_vs_powershell": {"status": "measured" if comparisons_measured else "not_measured",
+            "cmd_vs_powershell": {"status": "measured" if cmd_vs_powershell_measured else "not_measured",
                 "observations": narrowed_observations[1:],
                 "evidence_refs": [narrowed_observations[1]["process_ref"], narrowed_observations[2]["process_ref"]]},
         },

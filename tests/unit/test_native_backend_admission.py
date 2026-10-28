@@ -113,6 +113,38 @@ def _save(path: Path, value: object) -> dict:
     return {"path": str(path.resolve()), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
+def _native_run_inputs(tmp_path: Path, baseline_change: dict | None = None) -> tuple[dict, dict, dict]:
+    workspace, source, codex_home = (tmp_path / name for name in ("workspace", "source", "codex-home"))
+    for path in (workspace, source, codex_home):
+        path.mkdir()
+    (source / "Example.cs").write_text("public class Example {}", encoding="utf-8")
+    shell = tmp_path / "pwsh.exe"
+    shell.write_bytes(b"controlled shell; never executed")
+    policy = codex_home / "permission.config.toml"
+    policy.write_text(
+        'permissions.benchmark.filesystem={":root"="deny","C:/workspace"={"."="read","out"="write"}}\n',
+        encoding="utf-8",
+    )
+    policy_ref = {"path": str(policy.resolve()), "sha256": hashlib.sha256(policy.read_bytes()).hexdigest()}
+    profile_ref = _save(tmp_path / "native-profile.json", {"codex_home": str(codex_home)})
+    command = ["codex", "--no-daemon", "exec", "--cd", str(workspace), "--profile", "permission",
+        "-c", 'shell_environment_policy.set={"DOTNET_ROOT"="C:/dotnet"}', "-"]
+    plan_ref = _save(tmp_path / "plan.json", {"native_permission_profile_ref": policy_ref,
+        "workspace": str(workspace), "source_root": str(source), "native_reference_profile_ref": profile_ref,
+        "environment": {}, "command": command, "native_shell_ref": {
+            "path": str(shell.resolve()), "sha256": hashlib.sha256(shell.read_bytes()).hexdigest()}})
+    baseline_process_ref = _save(tmp_path / "baseline-process.json", {"first_output_seconds": 172.0})
+    stage = {"label": "cmd", "first_output_elapsed_seconds": 172.0, "exit_code": 0,
+        "timeout": False, "payload_observed": True, "process_ref": baseline_process_ref}
+    stage.update(baseline_change or {})
+    baseline_ref = _save(tmp_path / "baseline.json", {"plan_ref": plan_ref, "policy_ref": policy_ref,
+        "stages": [stage]})
+    permission_ref = _save(tmp_path / "permission-matrix.json", {"plan_ref": plan_ref,
+        "policy_ref": policy_ref, "passed": True, "permission_matrix": {"passed": True,
+            "checks": [{"name": "allowed", "passed": True}, {"name": "denied", "passed": True}]}})
+    return plan_ref, baseline_ref, permission_ref
+
+
 def test_frozen_admission_is_bound_to_plan_policy_and_original_evidence(tmp_path: Path) -> None:
     plan_ref = _save(tmp_path / "plan.json", {"kind": "controlled-plan"})
     policy_ref = _save(tmp_path / "policy.json", {"kind": "exact-policy"})
@@ -188,6 +220,25 @@ def test_native_admission_probe_rejects_unknown_frozen_command_option() -> None:
         admission_runner._sandbox_base(command, {"C:/workspace": "read"})
 
 
+@pytest.mark.parametrize("baseline_change", [
+    {"exit_code": 1},
+    {"timeout": True},
+    {"payload_observed": False},
+    {"first_output_elapsed_seconds": True},
+    {"first_output_elapsed_seconds": float("nan")},
+    {"first_output_elapsed_seconds": -0.1},
+])
+def test_native_admission_rejects_unsuccessful_or_invalid_plan_bound_baseline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, baseline_change: dict,
+) -> None:
+    plan_ref, baseline_ref, permission_ref = _native_run_inputs(tmp_path, baseline_change)
+    monkeypatch.setattr(admission_runner, "execute", lambda *_args, **_kwargs:
+        pytest.fail("Invalid baseline must fail before a sandbox process starts"))
+
+    with pytest.raises(ValueError, match="NATIVE_ADMISSION_FULL_POLICY_BASELINE_INVALID"):
+        admission_runner.run(plan_ref, baseline_ref, permission_ref, tmp_path / "admission-run")
+
+
 def test_native_admission_probe_classifies_every_supported_exec_option() -> None:
     command = ["codex", "--no-daemon", "exec", "--ignore-rules", "--strict-config",
         "--skip-git-repo-check", "--json", "--color", "never", "--model", "gpt-5.6-sol",
@@ -257,7 +308,7 @@ def test_native_admission_run_uses_three_current_full_policy_trials(
     baseline_process_ref = _save(tmp_path / "historical-process.json", {"first_output_seconds": 221.0})
     baseline_ref = _save(tmp_path / "baseline.json", {"plan_ref": plan_ref, "policy_ref": policy_ref,
         "stages": [{"label": "cmd", "first_output_elapsed_seconds": 221.0, "exit_code": 0,
-            "timeout": False, "process_ref": baseline_process_ref}]})
+            "timeout": False, "payload_observed": True, "process_ref": baseline_process_ref}]})
     permission_ref = _save(tmp_path / "permission-matrix.json", {"plan_ref": plan_ref,
         "policy_ref": policy_ref, "passed": True, "permission_matrix": {"passed": True,
             "checks": [{"name": "allowed", "passed": True}, {"name": "denied", "passed": True}]}})
@@ -303,3 +354,75 @@ def test_native_admission_run_uses_three_current_full_policy_trials(
         if value.startswith("permissions.benchmark.filesystem=")) for call in calls[3:])
     assert measurement["comparison_axes"]["permission_scale"]["historical_full_first_output_seconds"] == 221.0
     assert admission["decision"] == "admitted" and admission["business_runs_allowed"] is True
+
+
+def test_successful_narrowed_comparisons_survive_full_policy_timeouts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan_ref, baseline_ref, permission_ref = _native_run_inputs(tmp_path)
+    narrowed_seconds = [0.5, 0.4, 0.8]
+    calls = []
+
+    def execute(argv, **kwargs):
+        sequence = len(calls)
+        calls.append(argv)
+        output = Path(kwargs["output"])
+        output.mkdir()
+        stdout = output / "stdout.bin"
+        timed_out = sequence < 3
+        stdout.write_bytes(b"" if timed_out else admission_runner.READY_MARKER + b"\n")
+        receipt = {"started": True, "exit_code": 124 if timed_out else 0, "timeout": timed_out,
+            "stdout_ref": {"path": str(stdout.resolve()), "sha256": hashlib.sha256(stdout.read_bytes()).hexdigest()},
+            "phase_timing": {"stdout_first_output_seconds": None if timed_out else narrowed_seconds[sequence - 3]},
+            "owned_process_residuals": []}
+        _save(output / "process.json", receipt)
+        return receipt
+
+    monkeypatch.setattr(admission_runner, "execute", execute)
+    result_ref = admission_runner.run(plan_ref, baseline_ref, permission_ref, tmp_path / "admission-run")
+    result = json.loads(Path(result_ref["path"]).read_text(encoding="utf-8"))
+    measurement = json.loads(Path(result["measurement_ref"]["path"]).read_text(encoding="utf-8"))
+    admission = json.loads(Path(result["admission_ref"]["path"]).read_text(encoding="utf-8"))
+
+    assert [measurement["comparison_axes"][name]["status"] for name in (
+        "permission_scale", "cold_vs_repeated", "cmd_vs_powershell")] == ["measured"] * 3
+    assert admission["reasons"] == ["THREE_CONSECUTIVE_COMMANDS_NOT_ESTABLISHED"]
+    assert admission["decision"] == "not_admitted" and admission["business_runs_allowed"] is False
+
+
+@pytest.mark.parametrize(("failed_index", "expected_statuses"), [
+    (3, {"permission_scale": "not_measured", "cold_vs_repeated": "not_measured", "cmd_vs_powershell": "measured"}),
+    (4, {"permission_scale": "measured", "cold_vs_repeated": "not_measured", "cmd_vs_powershell": "not_measured"}),
+    (5, {"permission_scale": "measured", "cold_vs_repeated": "measured", "cmd_vs_powershell": "not_measured"}),
+])
+def test_one_failed_narrowed_probe_only_invalidates_dependent_comparisons(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failed_index: int, expected_statuses: dict,
+) -> None:
+    plan_ref, baseline_ref, permission_ref = _native_run_inputs(tmp_path)
+    seconds = [1.0, 2.0, 3.0, 0.5, 0.4, 0.8]
+    calls = []
+
+    def execute(argv, **kwargs):
+        sequence = len(calls)
+        calls.append(argv)
+        output = Path(kwargs["output"])
+        output.mkdir()
+        stdout = output / "stdout.bin"
+        failed = sequence == failed_index
+        stdout.write_bytes(b"" if failed else admission_runner.READY_MARKER + b"\n")
+        receipt = {"started": True, "exit_code": 124 if failed else 0, "timeout": failed,
+            "stdout_ref": {"path": str(stdout.resolve()), "sha256": hashlib.sha256(stdout.read_bytes()).hexdigest()},
+            "phase_timing": {"stdout_first_output_seconds": None if failed else seconds[sequence]},
+            "owned_process_residuals": []}
+        _save(output / "process.json", receipt)
+        return receipt
+
+    monkeypatch.setattr(admission_runner, "execute", execute)
+    result_ref = admission_runner.run(plan_ref, baseline_ref, permission_ref, tmp_path / "admission-run")
+    result = json.loads(Path(result_ref["path"]).read_text(encoding="utf-8"))
+    measurement = json.loads(Path(result["measurement_ref"]["path"]).read_text(encoding="utf-8"))
+    admission = json.loads(Path(result["admission_ref"]["path"]).read_text(encoding="utf-8"))
+
+    assert {name: axis["status"] for name, axis in measurement["comparison_axes"].items()} == expected_statuses
+    assert admission["decision"] == "not_admitted"
+    assert "REQUIRED_STARTUP_COMPARISON_NOT_ESTABLISHED" in admission["reasons"]

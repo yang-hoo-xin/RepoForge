@@ -1,0 +1,100 @@
+{
+  "schema": "repoforge.t3-native-backend-admission-result.v1",
+  "generated_at": "2026-10-28T12:48:11.0622651+08:00",
+  "scope": "Zero-model admission of the frozen gpt-5.6-sol/high native Codex backend; no business task was started.",
+  "frozen_configuration": {
+    "plan_ref": {
+      "path": "C:\\tmp\\rf-t3-gpt56-native-v1\\Codex_reference\\frozen-plan.json",
+      "sha256": "2052b7f8c26fac27e92002c5f10dc79a97cebc3c805ad6222f790cd019340ad9"
+    },
+    "model": "gpt-5.6-sol",
+    "reasoning_effort": "high",
+    "authentication": "existing ChatGPT login",
+    "model_availability_ref": {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261027\\backend-route\\codex-model-availability-gpt-5.6-sol.json",
+      "sha256": "324e8ce1704361efb22065cc8a83f6d119623681f540c513509ca0a4b1b12181"
+    },
+    "permission_profile_ref": {
+      "path": "C:\\Users\\10160\\.codex\\repoforge-native-a3d50a186a26e343cd9b.config.toml",
+      "sha256": "a3d50a186a26e343cd9bef882afb850736960e23f6fee94a95b3ef5878e09697"
+    },
+    "permission_leaf_count": 1204,
+    "permission_leaf_counts": {
+      "write": 1123,
+      "read": 68,
+      "deny": 13,
+      "nested_exact_write": 1119
+    }
+  },
+  "evidence": {
+    "result_ref": {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261027\\backend-route\\native-admission-gpt56-v2\\result.json",
+      "sha256": "bb171c7012a5383bd74b433927321969eab6b49a76fc58f1b1d5b675f08d7b4f"
+    },
+    "measurement_ref": {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261027\\backend-route\\native-admission-gpt56-v2\\measurement.json",
+      "sha256": "4304924b3d74b61851a7167cc4285059f2d66ffafce8ec3caaa9f75c583c27b6"
+    },
+    "admission_ref": {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261027\\backend-route\\native-admission-gpt56-v2\\admission.json",
+      "sha256": "83fdf94f6ff8b4143333e697a5c94678523b745d6898d5ecf1e078e772a4f0d3"
+    },
+    "plan_bound_baseline_first_output_seconds": 172.17199999999866,
+    "full_policy_trials": [
+      {
+        "sequence": 1,
+        "timeout_seconds": 35.0,
+        "first_output_seconds": null,
+        "exit_code": 124,
+        "timeout": true
+      },
+      {
+        "sequence": 2,
+        "timeout_seconds": 35.0,
+        "first_output_seconds": null,
+        "exit_code": 124,
+        "timeout": true
+      },
+      {
+        "sequence": 3,
+        "timeout_seconds": 35.0,
+        "first_output_seconds": null,
+        "exit_code": 124,
+        "timeout": true
+      }
+    ],
+    "permission_matrix": {
+      "passed_checks": 9,
+      "required_checks": 9,
+      "sdk_version": "8.0.302"
+    },
+    "narrowed_comparisons": {
+      "permission_leaf_count": 85,
+      "cold_cmd_first_output_seconds": 0.46899999999732245,
+      "repeated_cmd_first_output_seconds": 0.43699999999807915,
+      "repeated_powershell_first_output_seconds": 0.7660000000032596,
+      "permission_scale_status": "measured",
+      "cold_vs_repeated_status": "measured",
+      "cmd_vs_powershell_status": "measured"
+    },
+    "model_calls": 0,
+    "task_runs": 0,
+    "source_unchanged": true,
+    "permission_profile_unchanged": true,
+    "owned_process_residuals": 0
+  },
+  "decision": {
+    "status": "completed_negative_gpt_5_6_native_not_admitted",
+    "business_runs_allowed": false,
+    "reason": "THREE_CONSECUTIVE_COMMANDS_NOT_ESTABLISHED",
+    "technical_interpretation": "The full named permission profile is operationally unusable on this Windows native route. The bounded comparison associates the delay with the full permission expression and named-profile initialization path; it does not distinguish leaf count, the 1,119 exact-write rules, write semantics, or named-versus-inline loading.",
+    "why": "为什么要有它：权限反例通过不能抵消分钟级启动，收窄配置变快也不能直接授权使用更小权限集合。"
+  },
+  "next_experiment": {
+    "expected_effect": "Separate named-profile loading, permission leaf count, and exact-write semantics while preserving the same allowed files and denied effects for every causal comparison.",
+    "comparison_baseline": "The current named 1,204-leaf profile has a 172.172-second plan-bound first output and three 35-second timeouts; the inline 85-leaf profile returns in 0.469 seconds but changes both authority and loading form.",
+    "verification": "First compare named and inline loading with one authority-equivalent table where the supported command length permits it. Then compare supported alternative shapes with identical exact-file write authority, run the same permission counterexamples, and measure three cmd starts per profile. If no authority-equivalent representation meets the limit, evaluate a two-phase native route: read-only investigation followed by a separately bound small write set and exact source preimages.",
+    "stop_condition": "Do not start a business task until one authority-equivalent profile passes all permission counterexamples and the 15-second median/30-second maximum startup contract.",
+    "why": "为什么要有它：下一步必须改变被证据指向的权限技术路线，同时继续保持源码写入范围可核验。"
+  }
+}
