@@ -11,6 +11,7 @@ import pytest
 
 from scripts import run_repository_product_pilot as pilot
 from src.mod_agent.domain.full_project_compilation import _ref, _save
+from src.mod_agent.evaluation.native_backend_admission import freeze_native_backend_admission
 
 
 def _filesystem(command):
@@ -64,7 +65,7 @@ def native_reference(tmp_path, monkeypatch):
     problem, contract = tmp_path / "problem.txt", tmp_path / "contract.txt"
     problem.write_text("Controlled new public task.", encoding="utf-8")
     contract.write_text("Modify only the registered public source.", encoding="utf-8")
-    profile = {"schema_version": "codex_native_reference_profile_v1", "model": "gpt-6-astra",
+    profile = {"schema_version": "codex_native_reference_profile_v1", "model": "gpt-5.6-sol",
         "reasoning_effort": "high", "authentication": "chatgpt",
         "codex_home": str(Path(pilot.os.environ.get("CODEX_HOME") or Path.home() / ".codex").resolve())}
     config = {"mode": "native_reference", "root": str(tmp_path / "pilot"), "public_source_root": str(source),
@@ -77,12 +78,38 @@ def native_reference(tmp_path, monkeypatch):
         "native_reference_profile_ref": _save(tmp_path / "native-profile.json", profile),
         "codex_model_availability_ref": _save(tmp_path / "availability.json", {
             "status": "listed", "binary_ref": _ref(executable), "model_generations": 0, "threads_created": 0,
-            "models": [{"model": "gpt-6-astra", "hidden": False, "supportedReasoningEfforts": [{"reasoningEffort": "high"}]}]})}
+            "models": [{"model": "gpt-5.6-sol", "hidden": False, "supportedReasoningEfforts": [{"reasoningEffort": "high"}]}]})}
     monkeypatch.setattr(pilot, "validate_frozen_evaluator", lambda _qualification: None)
     monkeypatch.setattr(pilot, "read_ollama_model_identity", lambda *_args: pytest.fail("Native reference cannot contact Ollama"))
     monkeypatch.setattr(pilot, "external_pilot_identity", lambda *_args: pytest.fail("Native reference cannot contact API"))
     monkeypatch.setattr(pilot, "prepare_new_task", lambda **_kwargs: pytest.fail("Native result is not TaskAgent"))
     return config
+
+
+def _native_admission(tmp_path, plan_ref, plan, first_outputs=(1.0, 2.0, 3.0)):
+    matrix_ref = _save(tmp_path / "native-matrix.json", {"passed": True})
+    trials = []
+    for sequence, seconds in enumerate(first_outputs, 1):
+        process_ref = _save(tmp_path / f"native-process-{sequence}.json", {
+            "sequence": sequence, "first_output_seconds": seconds, "exit_code": 0, "timeout": False})
+        trials.append({"sequence": sequence, "configuration_identity": plan_ref["sha256"],
+            "command_kind": "cmd", "first_output_seconds": seconds, "exit_code": 0,
+            "timeout": False, "process_ref": process_ref})
+    measurement = {
+        "schema_version": "native_backend_admission_measurement_v1",
+        "configuration_identity": plan_ref["sha256"], "plan_ref": plan_ref,
+        "permission_profile_ref": plan["native_permission_profile_ref"],
+        "thresholds": {"consecutive_commands": 3, "first_output_median_seconds_max": 15.0,
+            "first_output_single_seconds_max": 30.0},
+        "admission_trials": trials,
+        "permission_matrix": {"passed": True, "required_checks": ["allow", "deny"],
+            "checks": [{"name": "allow", "passed": True}, {"name": "deny", "passed": True}],
+            "evidence_ref": matrix_ref},
+        "comparison_axes": {name: {"status": "measured", "evidence_refs": []}
+            for name in ("permission_scale", "cold_vs_repeated", "cmd_vs_powershell")},
+    }
+    measurement_ref = _save(tmp_path / "native-measurement.json", measurement)
+    return freeze_native_backend_admission(measurement_ref, tmp_path / "native-admission.json")
 
 
 def test_native_reference_cli_freeze_run_records_native_facts_and_child_only_auth_route(tmp_path, monkeypatch, capsys, native_reference):
@@ -92,12 +119,13 @@ def test_native_reference_cli_freeze_run_records_native_facts_and_child_only_aut
     assert frozen["mode"] == "native_reference" and frozen["order"] == [pilot.NATIVE_ARM]
     assert frozen["model_calls"] == 0
     plan = pilot.read_bound_json(frozen["plans"][pilot.NATIVE_ARM])
+    admission_ref = _native_admission(tmp_path, frozen["plans"][pilot.NATIVE_ARM], plan)
     assert "platform_ref" not in plan and "execution_config_ref" not in plan and "run_id" not in plan
     assert plan["product_kind"] == "native_codex_reference"
     assert plan["evaluator_ref"] == pilot.read_bound_json(config["qualification_ref"])["evaluator_ref"]
     assert Path(plan["prompt_path"]).read_text(encoding="utf-8") == "Controlled new public task.\n\nModify only the registered public source."
     command = plan["command"]
-    assert command[command.index("--model") + 1] == "gpt-6-astra"
+    assert command[command.index("--model") + 1] == "gpt-5.6-sol"
     assert 'model_reasoning_effort="high"' in command and 'forced_login_method="chatgpt"' in command
     assert "--ephemeral" in command and "--ignore-user-config" not in command and "--ignore-rules" in command
     assert "mcp_servers.openaiDeveloperDocs.enabled=false" in command and "mcp_servers.node_repl.enabled=false" in command
@@ -155,7 +183,7 @@ def test_native_reference_cli_freeze_run_records_native_facts_and_child_only_aut
         return receipt
 
     monkeypatch.setattr(pilot, "execute", execute)
-    result_ref = _cli(monkeypatch, capsys, "run", frozen_ref, pilot.NATIVE_ARM)["result_ref"]
+    result_ref = _cli(monkeypatch, capsys, "run", frozen_ref, pilot.NATIVE_ARM, admission_ref)["result_ref"]
     result = pilot.read_bound_json(result_ref)
     assert len(calls) == 1 and result["changed_source_paths"] == ["src/Example/Allowed.cs"]
     assert result["forbidden_source_changes"] == []
@@ -167,8 +195,24 @@ def test_native_reference_cli_freeze_run_records_native_facts_and_child_only_aut
     assert pilot.os.environ["OPENAI_API_KEY"] == "CONTROLLED-DO-NOT-COPY"
     assert "CONTROLLED-DO-NOT-COPY" not in Path(frozen["plans"][pilot.NATIVE_ARM]["path"]).read_text(encoding="utf-8")
     with pytest.raises(ValueError, match="ALREADY_STARTED"):
-        _cli(monkeypatch, capsys, "run", frozen_ref, pilot.NATIVE_ARM)
+        _cli(monkeypatch, capsys, "run", frozen_ref, pilot.NATIVE_ARM, admission_ref)
     assert len(calls) == 1
+
+
+def test_native_reference_not_admitted_stops_before_started_record_or_model(
+    tmp_path, monkeypatch, capsys, native_reference,
+):
+    frozen_ref = _cli(monkeypatch, capsys, "freeze", _save(tmp_path / "config.json", native_reference))["pilot_ref"]
+    frozen = pilot.read_bound_json(frozen_ref)
+    plan_ref = frozen["plans"][pilot.NATIVE_ARM]
+    plan = pilot.read_bound_json(plan_ref)
+    admission_ref = _native_admission(tmp_path, plan_ref, plan, (12.0, 14.0, 31.0))
+    monkeypatch.setattr(pilot, "execute", lambda *_args, **_kwargs: pytest.fail("Not-admitted route cannot execute"))
+
+    with pytest.raises(ValueError, match="NATIVE_BACKEND_NOT_ADMITTED"):
+        _cli(monkeypatch, capsys, "run", frozen_ref, pilot.NATIVE_ARM, admission_ref)
+
+    assert not (Path(plan["root"]) / "started.json").exists()
 
 
 def test_native_reference_freeze_reuses_public_snapshot_preparation_and_protects_copies(tmp_path, monkeypatch, capsys, native_reference):
@@ -693,9 +737,11 @@ def strategy_pilot(tmp_path, monkeypatch):
     return config, prepared, calls
 
 
-def _cli(monkeypatch, capsys, mode, reference, arm=None):
+def _cli(monkeypatch, capsys, mode, reference, arm=None, native_admission=None):
     monkeypatch.setattr(pilot.sys, "argv", ["pilot", mode, "--reference", reference["path"],
-        "--sha256", reference["sha256"], *(["--arm", arm] if arm else [])])
+        "--sha256", reference["sha256"], *(["--arm", arm] if arm else []),
+        *(["--native-admission-reference", native_admission["path"],
+            "--native-admission-sha256", native_admission["sha256"]] if native_admission else [])])
     pilot.main()
     return json.loads(capsys.readouterr().out)
 

@@ -37,6 +37,7 @@ from src.mod_agent.domain.csharp_repository_backend import (
     _snapshot,
 )
 from src.mod_agent.domain.full_project_compilation import _ref, _save
+from src.mod_agent.evaluation.native_backend_admission import require_native_backend_admission
 from src.mod_agent.evaluation.strategy_trial_preparation import verify_strategy_trials
 from src.mod_agent.evaluation.trial_comparison_identity import platform_identity
 from src.mod_agent.model_admission import read_ollama_model_identity
@@ -158,7 +159,7 @@ def native_reference_profile(config):
     profile = read_bound_json(config["native_reference_profile_ref"])
     if (set(profile) != {"schema_version", "model", "reasoning_effort", "authentication", "codex_home"}
             or profile.get("schema_version") != "codex_native_reference_profile_v1"
-            or profile.get("model") != "gpt-6-astra" or profile.get("reasoning_effort") != "high"
+            or profile.get("model") != "gpt-5.6-sol" or profile.get("reasoning_effort") != "high"
             or profile.get("authentication") != "chatgpt"
             or not isinstance(profile.get("codex_home"), str) or not Path(profile["codex_home"]).is_absolute()):
         raise ValueError("NATIVE_REFERENCE_PROFILE_INVALID")
@@ -472,7 +473,7 @@ def freeze(configuration_ref):
                 native_user_configuration=native_user, native_shell_ref=config["native_shell_ref"],
                 product_kind="native_codex_reference", public_material_refs=[_ref(materials / "request.txt"), _ref(public_profile_path)],
                 native_runtime_refs=[_ref(REPO / "scripts/run_benchmark_arm.py"), profile.data["dotnet_ref"], config["native_shell_ref"]],
-                configuration_difference="Native Codex with existing ChatGPT login, gpt-6-astra/high; ephemeral session; "
+                configuration_difference=f"Native Codex with existing ChatGPT login, {native['model']}/{native['reasoning_effort']}; ephemeral session; "
                     "native context/output policy; exact provider wire and send count not instrumented; not RepoForge TaskAgent or B/B+")
         elif arm == "Codex_local":
             deny = [REPO, Path.home() / ".codex", Path.home() / ".ssh", Path.home() / ".aws"]
@@ -833,7 +834,7 @@ def seal_stopped_process(plan, process_ref, *, plan_ref):
             "model_calls": 0, "resumed": False}
 
 
-def run(pilot_ref, arm):
+def run(pilot_ref, arm, *, native_admission_ref=None):
     pilot = read_bound_json(pilot_ref)
     plan_ref = pilot["plans"][arm]
     plan = read_bound_json(plan_ref)
@@ -886,6 +887,11 @@ def run(pilot_ref, arm):
                 _verify(reference)
         if Path(plan["prompt_path"]).resolve() != Path(plan["common_request_ref"]["path"]).resolve():
             raise ValueError("NATIVE_REFERENCE_PROMPT_CHANGED")
+        if not isinstance(native_admission_ref, dict):
+            raise ValueError("NATIVE_BACKEND_ADMISSION_REQUIRED")
+        require_native_backend_admission(native_admission_ref, plan_ref=plan_ref,
+            permission_profile_ref=plan["native_permission_profile_ref"],
+            configuration_identity=plan_ref["sha256"])
     elif external is not None:
         if plan.get("external_profile_ref") != config["external_profile_ref"]:
             raise ValueError("PILOT_EXTERNAL_PROFILE_BINDING_CHANGED")
@@ -910,6 +916,7 @@ def run(pilot_ref, arm):
         raise ValueError("INHERITED_DEADLINE_EXHAUSTED")
     started = {"plan_ref": plan_ref, "deadline_utc": deadline_utc,
         **({"run_id": plan["run_id"]} if "run_id" in plan else {}),
+        **({"native_admission_ref": native_admission_ref} if native is not None else {}),
         "human_active_seconds": None, "technical_hint_or_patch": False, "scope": "one registered attempt; no automatic retry"}
     # 为什么要有它：同一臂的并发派发也不能通过先检查后覆盖的竞态获得第二次执行。
     with (root / "started.json").open("x", encoding="utf-8") as stream:
@@ -938,6 +945,7 @@ def run(pilot_ref, arm):
         facts["native_events_ref"] = _save(root / "native-events.json", codex_events(process["stdout_ref"]["path"]))
     if native is not None:
         facts.update(product_kind="native_codex_reference", task_agent_success=None, experience_comparison=None,
+            native_admission_ref=native_admission_ref,
             credential_values_recorded=False, authentication="existing ChatGPT login",
             provider_send_count=None, scope="native Codex reference execution; independent judge remains required; not RepoForge TaskAgent or B/B+")
         changed_expected = []
@@ -959,6 +967,8 @@ def main():
     parser.add_argument("--reference", required=True)
     parser.add_argument("--sha256", required=True)
     parser.add_argument("--arm", choices=(*ORDER, NATIVE_ARM, "B", "B+"))
+    parser.add_argument("--native-admission-reference")
+    parser.add_argument("--native-admission-sha256")
     args = parser.parse_args()
     reference = {"path": args.reference, "sha256": args.sha256}
     if args.mode == "freeze":
@@ -966,7 +976,11 @@ def main():
     elif args.mode == "run":
         if args.arm is None:
             parser.error("--arm required for run")
-        run(reference, args.arm)
+        if bool(args.native_admission_reference) != bool(args.native_admission_sha256):
+            parser.error("both native admission reference and sha256 are required")
+        native_admission = ({"path": args.native_admission_reference, "sha256": args.native_admission_sha256}
+            if args.native_admission_reference else None)
+        run(reference, args.arm, native_admission_ref=native_admission)
     else:
         result = deliver(reference)
         plan = read_bound_json(reference)

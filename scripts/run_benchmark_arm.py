@@ -97,6 +97,7 @@ class WindowsJob:
         self.kernel.SetInformationJobObject.argtypes = [w.HANDLE, ctypes.c_int, ctypes.c_void_p, w.DWORD]
         self.kernel.AssignProcessToJobObject.argtypes = [w.HANDLE, w.HANDLE]
         self.kernel.TerminateJobObject.argtypes = [w.HANDLE, w.UINT]
+        self.kernel.QueryInformationJobObject.argtypes = [w.HANDLE, ctypes.c_int, ctypes.c_void_p, w.DWORD, ctypes.POINTER(w.DWORD)]
         self.kernel.CloseHandle.argtypes = [w.HANDLE]
         self.handle = self.kernel.CreateJobObjectW(None, None)
         settings = Extended()
@@ -118,11 +119,50 @@ class WindowsJob:
         if not self.kernel.TerminateJobObject(self.handle, 124):
             raise ctypes.WinError(ctypes.get_last_error())
 
+    def active_process_ids(self):
+        """Return active PIDs owned by this job before its kill-on-close handle closes."""
+        from ctypes import wintypes as w
+        buffer = ctypes.create_string_buffer(65536)
+        returned = w.DWORD()
+        if not self.kernel.QueryInformationJobObject(
+            self.handle, 3, buffer, len(buffer), ctypes.byref(returned)
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+        assigned = w.DWORD.from_buffer(buffer, 0).value
+        count = w.DWORD.from_buffer(buffer, ctypes.sizeof(w.DWORD)).value
+        if count > assigned or 8 + count * ctypes.sizeof(ctypes.c_size_t) > len(buffer):
+            raise ValueError("BENCHMARK_JOB_PROCESS_LIST_INVALID")
+        values = (ctypes.c_size_t * count).from_buffer(buffer, 8)
+        return [int(value) for value in values]
+
     def close(self):
         self.kernel.CloseHandle(self.handle)
 
 
-def execute(argv, *, cwd, stdin_path, output, deadline, environment=None):
+def _running_process_ids(process_ids):
+    if os.name != "nt":
+        return []
+    from ctypes import wintypes as w
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.argtypes = [w.DWORD, w.BOOL, w.DWORD]
+    kernel.OpenProcess.restype = w.HANDLE
+    kernel.WaitForSingleObject.argtypes = [w.HANDLE, w.DWORD]
+    kernel.WaitForSingleObject.restype = w.DWORD
+    kernel.CloseHandle.argtypes = [w.HANDLE]
+    running = []
+    for process_id in process_ids:
+        handle = kernel.OpenProcess(0x00100000, False, process_id)  # SYNCHRONIZE
+        if not handle:
+            continue
+        try:
+            if kernel.WaitForSingleObject(handle, 0) == 0x00000102:  # WAIT_TIMEOUT
+                running.append(process_id)
+        finally:
+            kernel.CloseHandle(handle)
+    return running
+
+
+def execute(argv, *, cwd, stdin_path, output, deadline, environment=None, observe_output=False):
     if os.name != "nt":
         raise ValueError("BENCHMARK_RUNNER_CURRENTLY_VERIFIED_FOR_WINDOWS_ONLY")
     if type(deadline) not in (int, float) or not math.isfinite(deadline):
@@ -150,20 +190,55 @@ def execute(argv, *, cwd, stdin_path, output, deadline, environment=None):
     job, process = WindowsJob(), None
     result = {"argv": argv, "cwd": str(cwd), "started_at": started, "timeout": False, "started": False,
         "deadline_utc": deadline_utc, "deadline_scope": "owned_process_tree; inherited_earlier_deadline_retained"}
+    phases = {"controller_start_utc": started, "process_created_seconds": None, "job_started_seconds": None,
+        "first_output_seconds": None, "first_output_stream": None,
+        "stdout_first_output_seconds": None, "stderr_first_output_seconds": None, "process_finished_seconds": None,
+        "cleanup_finished_seconds": None}
+    owned_before_close = []
     try:
         with (output / "stdout.bin").open("xb") as stdout, (output / "stderr.bin").open("xb") as stderr:
             with Path(stdin_path).open("rb") if stdin_path else open(os.devnull, "rb") as stdin:
                 # 为什么要有它：600秒截止必须覆盖整棵自有进程树；先加入Job再运行，不能只杀父CLI却让编译或工具继续修改。
                 process = subprocess.Popen(argv, cwd=cwd, stdin=stdin, stdout=stdout, stderr=stderr,
                     env=child_environment, creationflags=subprocess.CREATE_NO_WINDOW | 0x00000004)
+                phases["process_created_seconds"] = time.monotonic() - clock
                 job.start(process)
+                phases["job_started_seconds"] = time.monotonic() - clock
                 result.update(started=True, process_id=process.pid, process_tree_ownership="Windows Job Object")
                 try:
-                    process.wait(timeout=max(0.001, deadline - time.monotonic()))
+                    if observe_output:
+                        while process.poll() is None:
+                            for stream_name in ("stdout", "stderr"):
+                                stream_key = stream_name + "_first_output_seconds"
+                                stream_path = output / (stream_name + ".bin")
+                                if phases[stream_key] is None and stream_path.exists() and stream_path.stat().st_size:
+                                    observed = time.monotonic() - clock
+                                    phases[stream_key] = observed
+                                    if phases["first_output_seconds"] is None:
+                                        phases["first_output_seconds"] = observed
+                                        phases["first_output_stream"] = stream_name
+                            remaining = deadline - time.monotonic()
+                            if remaining <= 0:
+                                raise subprocess.TimeoutExpired(argv, max(0, deadline - clock))
+                            try:
+                                process.wait(timeout=min(0.02, remaining))
+                            except subprocess.TimeoutExpired:
+                                continue
+                        for stream_name in ("stdout", "stderr"):
+                            stream_key = stream_name + "_first_output_seconds"
+                            if phases[stream_key] is None and (output / (stream_name + ".bin")).stat().st_size:
+                                observed = time.monotonic() - clock
+                                phases[stream_key] = observed
+                                if phases["first_output_seconds"] is None:
+                                    phases["first_output_seconds"] = observed
+                                    phases["first_output_stream"] = stream_name
+                    else:
+                        process.wait(timeout=max(0.001, deadline - time.monotonic()))
                 except subprocess.TimeoutExpired:
                     result["timeout"] = True
                     job.terminate()
                     process.wait(timeout=15)
+                phases["process_finished_seconds"] = time.monotonic() - clock
                 result["exit_code"] = process.returncode
     except Exception as error:
         result.update(error_type=type(error).__name__, error=str(error), status="infrastructure_failed")
@@ -171,7 +246,20 @@ def execute(argv, *, cwd, stdin_path, output, deadline, environment=None):
         if process is not None and process.poll() is None:
             process.kill()
             process.wait(timeout=15)
+        try:
+            owned_before_close = job.active_process_ids()
+        except OSError:
+            owned_before_close = [process.pid] if process is not None and process.poll() is None else []
         job.close()
+        residuals = _running_process_ids(owned_before_close)
+        until = time.monotonic() + 2
+        while residuals and time.monotonic() < until:
+            time.sleep(0.02)
+            residuals = _running_process_ids(residuals)
+        result["owned_process_residuals"] = residuals
+        phases["cleanup_finished_seconds"] = time.monotonic() - clock
+        if observe_output:
+            result["phase_timing"] = phases
     result.update(status=result.get("status", "timed_out" if result["timeout"] else "exited"), finished_at=datetime.now(timezone.utc).isoformat(),
         wall_seconds=time.monotonic() - clock, stdout_ref=ref(output / "stdout.bin"), stderr_ref=ref(output / "stderr.bin"),
         owned_process_tree_cleanup="job_closed_kill_on_close",

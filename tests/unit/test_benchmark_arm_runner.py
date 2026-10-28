@@ -83,6 +83,25 @@ def test_owned_process_passes_actual_utc_deadline_without_extending_inherited_wi
     assert float((tmp_path / 'bounded/stdout.bin').read_text()) == inherited
 
 
+@pytest.mark.skipif(os.name != 'nt', reason='Windows Job Object contract')
+def test_zero_model_execution_records_first_output_and_cleanup_phases(tmp_path):
+    child = 'import time;time.sleep(.15);print("ready",flush=True);time.sleep(.1)'
+
+    result = execute([sys.executable, '-I', '-B', '-c', child], cwd=tmp_path, stdin_path=None,
+        output=tmp_path / 'timed', deadline=time.monotonic() + 5, observe_output=True)
+
+    phases = result['phase_timing']
+    assert result['exit_code'] == 0 and result['timeout'] is False
+    assert 0.1 <= phases['first_output_seconds'] < 2
+    assert (0 <= phases['process_created_seconds'] <= phases['job_started_seconds']
+            <= phases['first_output_seconds'] <= phases['process_finished_seconds']
+            <= phases['cleanup_finished_seconds'])
+    assert phases['first_output_stream'] == 'stdout'
+    assert phases['stdout_first_output_seconds'] == phases['first_output_seconds']
+    assert phases['stderr_first_output_seconds'] is None
+    assert result['owned_process_residuals'] == []
+
+
 def test_source_audit_ignores_build_outputs_but_catches_protected_edits(tmp_path):
     (tmp_path / 'Plugin.cs').write_text('before')
     (tmp_path / 'Project.csproj').write_text('fixed')
