@@ -11,6 +11,7 @@
   },
   "scope": "One expand-migrate-contract tracer bullet for the normal repository Task Agent v2 path across the six approved architecture modules.",
   "architecture_item_status": "contract_blocked_by_scope_limited_legacy_outcome_consumers",
+  "latest_checkpoint": "ce1d241",
   "tickets": [
     {
       "key": "TRL1",
@@ -39,6 +40,7 @@
         "TRL1"
       ],
       "github_issue": null,
+      "implementation_checkpoint": "ce1d241",
       "verification_result": "Normal DSH Open and --advance-task Resume plus the frozen pilot child use the shared Task Run seam; 64 DSH/Responses, 85 pilot and the original tool-receipt recovery regression passed.",
       "what_to_build": "Route normal repository Task Run opening and recovery from both DSH and pilot through the new Task Run interface, while retaining each adapter's human-facing or batch-specific responsibilities.",
       "acceptance_criteria": [
