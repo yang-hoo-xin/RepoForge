@@ -27,7 +27,7 @@ Provide one deep Task Run module with one execute interface. It accepts an in-pr
 15. As a pilot runner, I want only Run Outcome and Evidence Bundle references, so that pilot aggregation does not reinterpret internal result files.
 16. As a maintainer, I want the technical state machine to have one owner, so that a new Action does not require changes in every adapter.
 17. As a maintainer, I want recovery and idempotency to remain behind the Task Run seam, so that tests do not depend on checkpoint file layout.
-18. As a maintainer, I want the replaced preparation, dispatch, resume and result-projection interfaces deleted, so that the deepening does not create a third execution path.
+18. As a maintainer, I want the replaced preparation, dispatch and result interpretation removed from the normal DSH/pilot path, so that the scoped deepening does not create a third execution path.
 19. As a maintainer, I want one vertical external-seam test, so that internal refactoring does not rewrite the test contract.
 20. As a project owner, I want the architecture chain to stop after this tracer bullet is green, so that T1, T2 and T3 return to the active queue.
 
@@ -42,9 +42,9 @@ Provide one deep Task Run module with one execute interface. It accepts an in-pr
 - A Task Run that fails before Task Authority or the edit Binding registry is created still completes with its Intent, Authority status set to not established, and Binding status set to source-revision-only; it does not invent missing edit Binding references. 为什么要有它：失败也属于Task Run，Evidence Bundle必须保留已建立的源码Binding以及尚未建立的权限事实。
 - Action extensibility remains behind the seam through internal handlers; handler registration is not part of the external interface. 为什么要有它：未来 Action 不应扩大每个调用者必须理解的 interface。
 - DSH and pilot remain two adapters. DSH handles human-facing command encoding and inspection; pilot handles frozen batch conditions, ordering and measurement. 为什么要有它：两个真实调用场景证明 seam 有价值，合并 adapter 只会制造更大的条件分支。
-- Product graph behavior may remain behind a local adapter, but it no longer owns a parallel public Task Run entry or a second technical outcome projection. 为什么要有它：大文件不是首要问题，重复生命周期所有权才是接线成本来源。
+- Product graph behavior may remain behind a local adapter, while normal DSH and pilot callers consume the Task Run Run Outcome and Evidence Bundle references instead of interpreting run-result fields. 为什么要有它：大文件不是首要问题，正常入口中的重复生命周期所有权才是接线成本来源。
 - The first slice ends at Patch Candidate, public check, interruption recovery, Run Outcome and Evidence Bundle. Delivery and deployment are not implied. 为什么要有它：候选交接与正确交付是不同结果，首条切片不能扩大主张。
-- Expand, migrate and contract work may land sequentially, but the architecture item remains incomplete until the compatibility interfaces and their interface-specific tests are deleted. 为什么要有它：expand-only 兼容层会形成第三条长期运行链。
+- Expand, migrate and scoped contract work may land sequentially; this architecture item completes when the normal DSH/pilot compatibility paths and their interface-specific tests are deleted. Global legacy outcome consumer migration is a separate follow-up under ADR-0003. 为什么要有它：防止 expand-only 兼容层留在正常路径，同时避免把有界 tracer bullet 扩成全库迁移。
 
 ### Required deletion list
 
@@ -52,7 +52,7 @@ Provide one deep Task Run module with one execute interface. It accepts an in-pr
 - Remove the normal Task Agent v2 path that publicly wraps product dispatch through a second command entry. 为什么要有它：正常执行只能有一个外部 seam。
 - Remove the task-advance branch that starts a missing v2 task; Open and Resume must select through the Task Run interface. 为什么要有它：启动与恢复分支不能在另一个 shallow interface 中继续增长。
 - Remove direct use of the recovery entry from the normal DSH and pilot path; Resume invokes the existing recovery implementation behind the Task Run seam and consumes its authoritative references. 为什么要有它：恢复不应在正常链中产生第二个结果所有者。
-- Remove local duplicate assembly of the Task Agent technical outcome; it passes the unique outcome and evidence references. 为什么要有它：最后一次字段复制会重新引入结果漂移。
+- Stop normal DSH and pilot adapters from consuming duplicate Task Agent technical outcome dictionaries; they pass the unique outcome and evidence references. Legacy delivery, handoff, outcome-ledger and Dashboard consumers are tracked separately. 为什么要有它：正常路径中的字段复制会重新引入结果漂移，范围外消费者也不能被假装已经迁移。
 - Remove pilot logic that executes a Task Agent plan and then interprets the run result independently. 为什么要有它：评测 adapter 不能成为第二个产品实现。
 - Remove tests that exist only for deleted interfaces after equivalent external-seam coverage exists. 为什么要有它：旧测试会把已删除的 interface 继续冻结成隐式合同。
 
@@ -73,7 +73,8 @@ Provide one deep Task Run module with one execute interface. It accepts an in-pr
 - The work does not split the full local entry module into smaller files merely to reduce line count. 为什么要有它：文件拆分本身不增加 module depth 或 locality。
 - The work does not add speculative Action types, event buses, persisted schemas or CLI parameters. 为什么要有它：首条切片只实现已确认用例。
 - Existing routing, strategy-preparation and main-CLI callers outside the six-module architecture scope may retain lower-level preparation or recovery helpers, but those helpers cannot remain a normal DSH/pilot Task Run path. 为什么要有它：删除范围必须真实，不能为了全局改名突破本次限定模块。
+- Migration of legacy Task Agent outcome dictionaries used by delivery, handoff, outcome ledger and Dashboard is a deferred follow-up under ADR-0003. 为什么要有它：后续清理必须继续可见，但不再阻塞 T1、T2 和 T3 的真实能力工作。
 
 ## Further Notes
 
-The fixed starting point is commit 3240c27699619aaafcb4c55dfc55d193a5d8c949. Historical Task Runs and evaluation attempts remain immutable and are not restarted. After the contract ticket deletes the compatibility interfaces and CI is green, stop this architecture chain and reselect T1, T2 or T3.
+The fixed starting point is commit 3240c27699619aaafcb4c55dfc55d193a5d8c949. The scoped architecture slice completed at commit da6822c6c5ff6e8778561ee85a5951fcaf438e79 with CI run 40649694005. Historical Task Runs and evaluation attempts remain immutable and are not restarted. The architecture chain stops here and T1, T2 or T3 returns to the active queue. 为什么要有它：完成点、禁止重跑项和返回点必须同时固定，防止范围调整改写历史或产生新的无限工作链。

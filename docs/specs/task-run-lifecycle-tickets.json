@@ -10,8 +10,48 @@
     "why": "为什么要有它：本地工单可以继续约束实现，但不能伪称已发布到外部 tracker。"
   },
   "scope": "One expand-migrate-contract tracer bullet for the normal repository Task Agent v2 path across the six approved architecture modules.",
-  "architecture_item_status": "contract_blocked_by_scope_limited_legacy_outcome_consumers",
-  "latest_checkpoint": "9b6ff73",
+  "architecture_item_status": "completed_with_deferred_legacy_outcome_followup",
+  "latest_checkpoint": "da6822c",
+  "decision_history": [
+    {
+      "date": "2026-10-28",
+      "previous_status": "contract_blocked_by_scope_limited_legacy_outcome_consumers",
+      "decision": "Accept the normal DSH/pilot Task Run slice as complete and defer global legacy outcome consumer migration.",
+      "why": "为什么要有它：保留原阻塞判断及其解除理由，避免把范围调整误写成从未存在过的完成状态。"
+    }
+  ],
+  "return_point": {
+    "status": "reached",
+    "checkpoint": "da6822c",
+    "selected_ticket": "T2",
+    "queue_order": [
+      "T2",
+      "T1"
+    ],
+    "do_not_reopen_automatically": [
+      "T3"
+    ],
+    "next_action": "Run the bounded T2 real-model correction contrast; return to T1 real acceptance when the Docker engine is admitted. Keep the completed T3 versioned not-admitted result unless new authority-equivalent permission evidence justifies a separate experiment.",
+    "selection_basis": "T2 has green implementation and controlled verification but lacks its real-model contrast. T1 has green implementation but its last real acceptance stopped before a Task Run because Docker was not admitted. T3 already satisfies its ticket by a versioned negative admission result.",
+    "why": "为什么要有它：架构插队到达约定停止点后必须按真实剩余门返回原队列，不能自动延伸成新清理链或重开已收口的负实验。"
+  },
+  "deferred_followup": {
+    "title": "Migrate legacy Task Agent outcome consumers",
+    "status": "deferred",
+    "blocks": [],
+    "scope": [
+      "main CLI",
+      "delivery",
+      "handoff",
+      "outcome ledger",
+      "Dashboard"
+    ],
+    "work": [
+      "Migrate consumers to the authoritative Task Run Run Outcome and Evidence Bundle references.",
+      "Delete the legacy recovery result dictionary after its remaining consumers are migrated."
+    ],
+    "why": "为什么要有它：范围外消费者仍需真实迁移，但这项全局清理不应阻塞当前 T1、T2 和 T3 能力实验。"
+  },
   "tickets": [
     {
       "key": "TRL1",
@@ -35,19 +75,19 @@
     {
       "key": "TRL2",
       "title": "Migrate the normal DSH and pilot adapters to the Task Run seam",
-      "status": "partially_implemented_blocked_by_scope",
+      "status": "completed",
       "blocked_by": [
         "TRL1"
       ],
       "github_issue": null,
-      "implementation_checkpoint": "9b6ff73",
+      "implementation_checkpoint": "da6822c",
       "verification_result": "Normal DSH Open and --advance-task Resume plus the frozen pilot child use the shared Task Run seam; 64 DSH/Responses, 85 pilot and the original tool-receipt recovery regression passed.",
       "what_to_build": "Route normal repository Task Run opening and recovery from both DSH and pilot through the new Task Run interface, while retaining each adapter's human-facing or batch-specific responsibilities.",
       "acceptance_criteria": [
         "The normal DSH path calls the Task Run interface once and returns its Suspended or Completed result without a second public dispatch path.",
         "The pilot adapter calls the same interface and aggregates only Run Outcome and Evidence Bundle references; it no longer sequences task preparation and command construction itself.",
         "The task-advance interface no longer starts a missing v2 task; Open and Resume selection belongs to the Task Run module.",
-        "The product graph adapter and recovery implementation pass authoritative outcome/evidence references instead of rebuilding another technical outcome dictionary.",
+        "Normal DSH and pilot adapters pass authoritative outcome/evidence references; legacy internal dictionaries remain a separate follow-up under ADR-0003.",
         "Existing routing, strategy-preparation and legacy continuation callers outside the approved six-module scope keep their current behavior and do not become a second normal DSH/pilot path.",
         "Normal entry status, inspection commands, task identity and accumulated cost remain unchanged."
       ],
@@ -56,34 +96,30 @@
     {
       "key": "TRL3",
       "title": "Contract the replaced normal Task Run interfaces",
-      "status": "blocked",
+      "status": "completed_for_scoped_normal_paths",
       "blocked_by": [
         "TRL2"
       ],
       "github_issue": null,
-      "blocking_condition": "The approved normal DSH/pilot adapter paths are removed, but duplicate legacy technical outcome fields remain consumed by delivery, handoff, outcome-ledger and dashboard owners outside the six-module architecture scope.",
+      "completion_scope": "Normal DSH and pilot Task Run paths in the approved six-module architecture scope.",
       "completed_deletions": [
         "Normal DSH Task Agent v2 no longer uses the secondary dispatch interface.",
         "Pilot no longer imports or directly sequences task preparation and product argv construction.",
         "Pilot frozen Task Agent execution now invokes execute_task_run from the verified platform snapshot and aggregates only its references.",
         "The v2 task-advance not-found branch no longer starts a Task Run and returns DSH_TASK_RUN_OPEN_REQUIRED; existing incomplete runs Resume through execute_task_run."
       ],
-      "remaining_deletions": [
-        "Remove duplicate Task Agent technical outcome assembly after every delivery, handoff, ledger and dashboard consumer is migrated.",
-        "Remove the legacy recovery result dictionary after the main CLI caller outside the approved scope consumes Task Run result references."
-      ],
-      "what_to_build": "Delete every compatibility path replaced for the normal DSH/pilot Task Run use case, delete its interface-specific tests, and prove the single external seam in remote CI.",
+      "what_to_build": "Delete every compatibility path replaced for the normal DSH/pilot Task Run use case, delete its interface-specific tests, and prove the single external seam in remote CI. Global legacy outcome consumer migration is tracked by the deferred follow-up.",
       "acceptance_criteria": [
         "The secondary product-dispatch interface is deleted from the normal Task Agent v2 path.",
         "Pilot direct task-preparation, command-construction, process-execution and run-result interpretation paths are deleted for Task Agent B/B+ runs.",
         "The task-advance auto-start branch and normal-path direct recovery projection are deleted.",
-        "Duplicate technical Run Outcome assembly in the approved modules is deleted; only the Task Run owner seals the Run Outcome and Evidence Bundle.",
+        "Normal DSH and pilot adapters no longer assemble or interpret a duplicate technical Run Outcome; only the Task Run owner seals their Run Outcome and Evidence Bundle.",
         "Tests that only freeze deleted interfaces are removed after equivalent execute_task_run coverage exists.",
         "Search confirms no approved-module normal caller bypasses execute_task_run.",
         "Focused tests, affected regressions, Ruff, Standards review, Spec review and the complete remote CI workflow pass.",
         "After CI is green, the architecture chain stops and T1, T2 and T3 are reselected."
       ],
-      "why": "为什么要有它：兼容路径会恢复并行入口，TRL3 必须阻塞整个架构事项完成。"
+      "why": "为什么要有它：正常路径的兼容接口必须删除才能完成 tracer bullet；范围外旧消费者保留为独立后续项，不能无限扩大当前架构事项。"
     }
   ]
 }

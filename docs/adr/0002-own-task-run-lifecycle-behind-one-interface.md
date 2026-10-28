@@ -2,6 +2,8 @@
 
 Status: accepted
 
+Completion scope amended by ADR-0003; the single-interface decision remains active. 为什么要有它：范围调整只停止全局迁移，不撤销已经验证的正常入口所有权。
+
 RepoForge will expose one normal Task Run interface, conceptually `execute_task_run(OpenTaskRun | ResumeTaskRun)`, to both the DSH and pilot adapters. `OpenTaskRun` carries a bound execution configuration and Task Intent; Task Authority is derived from host-bound configuration rather than supplied by the caller. `ResumeTaskRun` carries the existing Task Run identity and exact current resume reference. 为什么要有它：打开与恢复必须保持同一运行身份、权限和累计资源，调用者不能通过另一入口扩张权限或重开一次尝试。
 
 The interface returns either a recoverable suspended result or a completed result containing exactly one Run Outcome reference and one Evidence Bundle reference. The Task Run module owns lifecycle selection and finalization; the Task Agent execution state machine remains its internal implementation, the recovery journal owns checkpoint reconciliation and idempotency, and Action execution crosses one internal Effect admission seam that records a Receipt before exposing an Observation. 为什么要有它：中断不是失败或第二个结果，效果事实也不能由动作请求或模型陈述推断。
