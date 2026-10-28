@@ -28,6 +28,7 @@ from tests.unit.test_csharp_repository_product_entry import (
 @pytest.mark.parametrize("boundary", ["provider_receipt", "tool_receipt"])
 def test_responses_normal_cli_failure_revision_and_receipt_recovery(
     repository_workspace, monkeypatch, capsys, record_property, boundary, registered_entry=False, omit_host_ids=False,
+    task_run_entry=False,
 ):
     root = repository_workspace
     profile, source = _profile(root)
@@ -60,7 +61,10 @@ def test_responses_normal_cli_failure_revision_and_receipt_recovery(
     def interrupt_tool(owner, origin, output, session):
         reference = original_receipt(owner, origin, output, session)
         receipts.append({"origin": deepcopy(origin), "receipt_ref": reference})
-        if boundary == "tool_receipt" and origin["name"] == "source_read" and not interruptions:
+        candidate_receipts = sum(row["origin"]["name"] == "candidate_submit" for row in receipts)
+        interrupt_now = (task_run_entry and origin["name"] == "candidate_submit" and candidate_receipts == 2
+            or not task_run_entry and origin["name"] == "source_read")
+        if boundary == "tool_receipt" and interrupt_now and not interruptions:
             interruptions.append((owner.store.root, owner.v2_checkpoint_ref))
             raise KeyboardInterrupt()
         return reference
@@ -217,17 +221,29 @@ def test_responses_normal_cli_failure_revision_and_receipt_recovery(
         description = arguments[-1]
         registered = bridge.prepare_new_task(execution_config=str(configuration), description=description)
         arguments = bridge.build_product_argv(execution_config=registered, description=description)
-    with pytest.raises(KeyboardInterrupt):
-        if registered is None:
-            cli.main(arguments)
-        else:
-            bridge._dispatch_product(arguments, execution_config=registered)
-    capsys.readouterr()
-    assert len(requests) == 1
-    store, checkpoint_ref = interruptions[0]
-    code = cli.main(["run-request", "--resume-task-agent", checkpoint_ref, "--artifact-store-root", str(store)])
-    result = json.loads(capsys.readouterr().out)
-    assert code == 0 and result["status"] == "awaiting_delivery", result
+    suspended = completed = None
+    if task_run_entry:
+        assert registered is not None
+        suspended = bridge.execute_task_run(bridge.OpenTaskRun(
+            execution_config_ref=bridge._file_ref(Path(registered)), intent=description))
+        assert isinstance(suspended, bridge.TaskRunSuspended)
+        assert len(requests) == 6 and checks == [False]
+        completed = bridge.execute_task_run(bridge.ResumeTaskRun(
+            run_ref=suspended.run_ref, resume_ref=suspended.resume_ref))
+        assert isinstance(completed, bridge.TaskRunCompleted)
+        result = None
+    else:
+        with pytest.raises(KeyboardInterrupt):
+            if registered is None:
+                cli.main(arguments)
+            else:
+                bridge._dispatch_product(arguments, execution_config=registered)
+        capsys.readouterr()
+        assert len(requests) == 1
+        store, checkpoint_ref = interruptions[0]
+        code = cli.main(["run-request", "--resume-task-agent", checkpoint_ref, "--artifact-store-root", str(store)])
+        result = json.loads(capsys.readouterr().out)
+        assert code == 0 and result["status"] == "awaiting_delivery", result
     assert len(requests) == 8 and checks == [False, True]
     assert sum(row["origin"]["name"] == "source_read" for row in receipts) == 1
     owner = owners[-1]
@@ -253,6 +269,19 @@ def test_responses_normal_cli_failure_revision_and_receipt_recovery(
         diagnostic = response["provider_diagnostic"]
         assert diagnostic["usage_available"] is True
         assert diagnostic["request_identity"]["provider_body_sha256"] == request["sha256"]
+    if task_run_entry:
+        assert suspended is not None and completed is not None
+        manifest = read_bound_json(completed.evidence_bundle_ref)
+        outcome = read_bound_json(completed.run_outcome_ref)
+        assert completed.run_id == suspended.run_id == manifest["run_id"] == outcome["run_id"]
+        assert completed.request_id == suspended.request_id == manifest["request_id"]
+        assert manifest["outcome_summary_ref"] == completed.run_outcome_ref
+        interrupted_submissions = [row for row in receipts
+            if row["origin"]["name"] == "candidate_submit" and row["origin"]["call_id"] == "call-6"]
+        assert len(interrupted_submissions) == 1
+        assert suspended.progress_receipt_ref == interrupted_submissions[0]["receipt_ref"]
+        assert completed.status == "awaiting_delivery"
+        return
     assert result["v2_delivery_checkpoint_ref"]
     registered_evidence = None
     if registered is not None:
@@ -281,6 +310,14 @@ def test_registered_responses_entry_and_read_only_evidence(
 ):
     test_responses_normal_cli_failure_revision_and_receipt_recovery(
         repository_workspace, monkeypatch, capsys, record_property, "tool_receipt", registered_entry=True)
+
+
+def test_task_run_interface_opens_reconciles_effect_receipt_and_returns_one_outcome(
+    repository_workspace, monkeypatch, capsys, record_property,
+):
+    test_responses_normal_cli_failure_revision_and_receipt_recovery(
+        repository_workspace, monkeypatch, capsys, record_property, "tool_receipt",
+        registered_entry=True, task_run_entry=True)
 
 
 @pytest.mark.parametrize("boundary", ["provider_receipt", "tool_receipt"])

@@ -17,6 +17,7 @@ import stat
 import sys
 from contextlib import redirect_stdout
 from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
@@ -66,6 +67,41 @@ _PATHS = frozenset({
 _STAGES = frozenset({
     "requirement_projection", "requirement_findings", "planning", "initial_patch", "repair",
 })
+
+
+@dataclass(frozen=True)
+class OpenTaskRun:
+    execution_config_ref: dict[str, str]
+    intent: str
+
+
+@dataclass(frozen=True)
+class ResumeTaskRun:
+    run_ref: dict[str, str]
+    resume_ref: dict[str, str]
+
+
+@dataclass(frozen=True)
+class TaskRunSuspended:
+    run_ref: dict[str, str]
+    run_id: str
+    request_id: str
+    resume_ref: dict[str, str]
+    progress_receipt_ref: dict[str, str]
+
+
+@dataclass(frozen=True)
+class TaskRunCompleted:
+    run_ref: dict[str, str]
+    run_id: str
+    request_id: str
+    status: str
+    run_outcome_ref: dict[str, str]
+    evidence_bundle_ref: dict[str, str]
+
+
+TaskRunCommand = OpenTaskRun | ResumeTaskRun
+TaskRunExecution = TaskRunSuspended | TaskRunCompleted
 
 
 def _configuration_arguments(execution_config: str) -> tuple[list[str], dict[str, str | None]]:
@@ -864,8 +900,7 @@ def _with_inspection(result: dict, execution_config: str) -> dict:
     return result
 
 
-def _dispatch_product(argv: list[str], *, execution_config: str) -> int:
-    # 为什么要有它：新运行返回可用查询入口，但不能把产品失败或待批准状态改写为成功。
+def _invoke_product(argv: list[str]) -> tuple[int, dict | None, str]:
     output = io.StringIO()
     with redirect_stdout(output):
         status = cli.main(argv)
@@ -874,6 +909,107 @@ def _dispatch_product(argv: list[str], *, execution_config: str) -> int:
         result = json.loads(raw)
     except ValueError:
         result = None
+    return status, result if isinstance(result, dict) else None, raw
+
+
+def _task_run_location(run_ref: dict[str, str]) -> tuple[Path, str, str, Path, Path]:
+    selected = _verify_ref(run_ref)
+    _, options = _configuration_arguments(str(selected))
+    run_id, request_id = options.get("--run-id"), options.get("--request-id")
+    workspace = Path(options.get("--workspace-root") or "")
+    if (not isinstance(run_id, str) or not isinstance(request_id, str)
+            or not workspace.is_absolute()):
+        raise ValueError("DSH_TASK_RUN_IDENTITY_REQUIRED")
+    run_root = _contained_record_path(workspace / run_id, workspace)
+    return selected, run_id, request_id, run_root, run_root / "a"
+
+
+def _suspended_task_run(run_ref: dict[str, str]) -> TaskRunSuspended:
+    from src.mod_agent.model_qualification import canonical_hash
+
+    _selected, run_id, request_id, run_root, store = _task_run_location(run_ref)
+    manifest = read_json_object(run_root / "run_manifest.json")
+    if manifest.get("run_id") != run_id or manifest.get("request_id") != request_id:
+        raise ValueError("DSH_TASK_RUN_MANIFEST_IDENTITY_CHANGED")
+    pointers = list((store / "v2/session-checkpoints").glob("*.json"))
+    if len(pointers) != 1:
+        raise ValueError("DSH_TASK_RUN_RESUME_POINT_AMBIGUOUS")
+    pointer = read_json_object(pointers[0])
+    checkpoint_path = _contained_record_path(store / pointer["checkpoint_ref"], store)
+    checkpoint = read_json_object(checkpoint_path)
+    pending = [call_id for call_id, row in checkpoint["loop"]["call_records"].items()
+        if row.get("status") == "pending"]
+    if checkpoint["loop"].get("phase") != "tool_pending" or len(pending) != 1:
+        raise ValueError("DSH_TASK_RUN_EFFECT_RECEIPT_REQUIRED")
+    output_root = Path(checkpoint["owner"]["output_root"])
+    if not output_root.is_absolute() or not output_root.resolve().is_relative_to(store.resolve()):
+        raise ValueError("DSH_TASK_RUN_RECEIPT_OUTSIDE_STORE")
+    receipt_path = output_root / ("tool-receipt-" + canonical_hash(pending[0]) + ".json")
+    receipt = read_json_object(receipt_path)
+    if receipt.get("origin", {}).get("call_id") != pending[0]:
+        raise ValueError("DSH_TASK_RUN_EFFECT_RECEIPT_CHANGED")
+    # Scope: only an interrupted Effect with a durable Receipt is exposed as recoverable.
+    # 为什么要有它：任意进程中断不能被补写成安全恢复点，未知效果必须先由原回执对账。
+    return TaskRunSuspended(run_ref=deepcopy(run_ref), run_id=run_id, request_id=request_id,
+        resume_ref=_file_ref(checkpoint_path), progress_receipt_ref=_file_ref(receipt_path))
+
+
+def _completed_task_run(run_ref: dict[str, str], result: dict) -> TaskRunCompleted:
+    _selected, run_id, request_id, run_root, _store = _task_run_location(run_ref)
+    manifest_path = run_root / "run_manifest.json"
+    manifest = read_json_object(manifest_path)
+    if (manifest.get("run_id") != run_id or manifest.get("request_id") != request_id
+            or result.get("run_id", run_id) != run_id or result.get("request_id", request_id) != request_id):
+        raise ValueError("DSH_TASK_RUN_RESULT_IDENTITY_CHANGED")
+    outcome_ref = result.get("outcome_summary_ref", manifest.get("outcome_summary_ref"))
+    if not isinstance(outcome_ref, dict):
+        raise ValueError("DSH_TASK_RUN_OUTCOME_MISSING: " + str({key: result.get(key)
+            for key in ("status", "reason", "current_stage")}))
+    _verify_ref(outcome_ref)
+    outcome = read_json_object(outcome_ref["path"])
+    status = result.get("status")
+    if (outcome.get("run_id") != run_id or outcome.get("request_id") != request_id
+            or not isinstance(status, str) or not status):
+        raise ValueError("DSH_TASK_RUN_OUTCOME_INVALID")
+    # Scope: the existing manifest is the Evidence Bundle root for this slice.
+    # 为什么要有它：它已绑定终态、continuation 与Run Outcome，首切片无需复制原件或新增持久化bundle schema。
+    return TaskRunCompleted(run_ref=deepcopy(run_ref), run_id=run_id, request_id=request_id,
+        status=status, run_outcome_ref=deepcopy(outcome_ref), evidence_bundle_ref=_file_ref(manifest_path))
+
+
+def execute_task_run(command: TaskRunCommand) -> TaskRunExecution:
+    """Open or resume one repository Task Run behind the same interface.
+
+    Scope: the registered repository Task Agent v2 path; legacy continuations remain outside this slice.
+    为什么要有它：调用者只选择Open或Resume，生命周期、恢复点和唯一结果引用由同一deep module负责。
+    """
+    if isinstance(command, OpenTaskRun):
+        base = _verify_ref(command.execution_config_ref)
+        selected = prepare_new_task(execution_config=str(base), description=command.intent)
+        run_ref = _file_ref(Path(selected))
+        argv = build_product_argv(execution_config=selected, description=command.intent)
+        try:
+            _status, result, raw = _invoke_product(argv)
+        except KeyboardInterrupt:
+            try:
+                return _suspended_task_run(run_ref)
+            except (OSError, KeyError, TypeError, ValueError):
+                raise KeyboardInterrupt() from None
+        if result is None:
+            raise ValueError("DSH_TASK_RUN_PRODUCT_RESULT_INVALID: " + raw[:256])
+        return _completed_task_run(run_ref, result)
+    if isinstance(command, ResumeTaskRun):
+        _selected, _run_id, _request_id, _run_root, store = _task_run_location(command.run_ref)
+        checkpoint = _verify_ref(command.resume_ref, root=store)
+        from src.mod_agent.task_agent_v2_recovery import resume_v2_task_agent
+        result = resume_v2_task_agent(artifact_store_root=store, checkpoint_ref=str(checkpoint))
+        return _completed_task_run(command.run_ref, result)
+    raise TypeError("DSH_TASK_RUN_COMMAND_REQUIRED")
+
+
+def _dispatch_product(argv: list[str], *, execution_config: str) -> int:
+    # 为什么要有它：新运行返回可用查询入口，但不能把产品失败或待批准状态改写为成功。
+    status, result, raw = _invoke_product(argv)
     if isinstance(result, dict):
         print(json.dumps(_with_inspection(result, execution_config), ensure_ascii=True))
     else:
