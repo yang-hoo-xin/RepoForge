@@ -10,6 +10,7 @@ import io
 import json
 import os
 import re
+import stat
 import subprocess
 import tarfile
 from copy import deepcopy
@@ -17,6 +18,7 @@ from pathlib import Path, PurePosixPath
 from uuid import uuid4
 from xml.etree import ElementTree
 
+from src.mod_agent import execution_workspace as execution_workspace_module
 from src.mod_agent.evaluation import restricted_csharp as restricted
 from src.mod_agent.model_qualification import canonical_hash, read_bound_json
 from src.mod_agent.task_agent_v2_state import _no_links, _path
@@ -427,6 +429,8 @@ class RepositoryProbeRunner:
         self.config = validate_probe_runner_config(backend.profile.data["probe_runner"])
         self.root = state.root / "repository-probes"
         self.root.mkdir(parents=True, exist_ok=True)
+        self.execution_workspaces = execution_workspace_module.ExecutionWorkspaceManager(
+            state=state, evidence_root=self.root)
         self._capability = None
         self._attempted = False
         self._qualification_attempt_ref = None
@@ -462,6 +466,7 @@ class RepositoryProbeRunner:
         return {"kind": _KIND, "config_sha256": canonical_hash(configuration),
             "environment": {key: value for key, value in environment.items() if key not in {"evidence_refs", "image_environment"}},
             "runner_ref": _ref(__file__), "restricted_transport_ref": _ref(restricted.__file__),
+            "execution_workspace_ref": _ref(execution_workspace_module.__file__),
             "repository_execution_profile_sha256": canonical_hash(execution_profile), "platform": "linux/amd64"}
 
     def _verify_qualification_execution(self, captured, *, environment, mounts, runtime):
@@ -522,7 +527,23 @@ class RepositoryProbeRunner:
             and result.get("runtime_execution") is not None, "QUALIFICATION_EXECUTION_FAILED")
         expected_refs = [result["compile_execution"]["receipt_ref"], result["runtime_execution"]["receipt_ref"]]
         _require(proof.get("execution_refs") == expected_refs and expected_refs[0] != expected_refs[1], "QUALIFICATION_EXECUTION_REFS_REQUIRED")
-        root = Path(proof["qualification_attempt_ref"]["path"]).parent
+        workspace_reference = proof.get("workspace_mapping_ref")
+        if workspace_reference is None:
+            root = Path(proof["qualification_attempt_ref"]["path"]).parent
+        else:
+            try:
+                mapping_path = Path(workspace_reference["path"]).resolve()
+                mapping_ref = mapping_path.relative_to(self.state.store_root).as_posix()
+                workspace = self.execution_workspaces.recover(mapping_ref=mapping_ref, kind="qualification",
+                    operation_id=canonical_hash({"runner_identity": identity, "profile_ref": probe_profile_ref}))
+                _require(_ref(mapping_path) == workspace_reference
+                    and workspace.evidence_root.resolve()
+                        == Path(proof["qualification_attempt_ref"]["path"]).parent.resolve()
+                    and attempt.get("workspace_mapping_ref") == workspace_reference,
+                    "QUALIFICATION_WORKSPACE_MAPPING_CHANGED")
+            except (KeyError, OSError, ValueError, execution_workspace_module.ExecutionWorkspaceError):
+                raise ValueError("QUALIFICATION_WORKSPACE_MAPPING_CHANGED") from None
+            root = workspace.execution_root
         candidate, harness, packages, bundle = root / "candidate", root / "harness", root / "offline", root / "bundle"
         _require(_tree(candidate) == result["source_manifest"] and _tree(bundle) == result["bundle_manifest"],
             "QUALIFICATION_INPUT_OR_ARTIFACT_CHANGED")
@@ -574,21 +595,59 @@ class RepositoryProbeRunner:
                 "profile_ref": probe_profile_ref, "environment_inspected": True,
                 "qualification_attempt_ref": self._qualification_attempt_ref}
 
-    def _packages(self, root):
-        root.mkdir()
+    def _bound_packages(self):
         binding = self.config.get("offline_packages")
         if binding is None:
-            return []
+            return None, [], []
         source = Path(binding["path"])
-        rows = offline_package_manifest(source)
+        try:
+            _require(stat.S_ISDIR(source.stat().st_mode), "OFFLINE_PACKAGE_SOURCE_MISSING")
+            rows = offline_package_manifest(source)
+        except FileNotFoundError as error:
+            raise ValueError("REPOSITORY_PROBE_OFFLINE_PACKAGE_SOURCE_MISSING") from error
+        except PermissionError as error:
+            raise ValueError("REPOSITORY_PROBE_OFFLINE_PACKAGE_SOURCE_PERMISSION_DENIED") from error
         _require(canonical_hash(rows) == binding["manifest_sha256"], "OFFLINE_PACKAGES_CHANGED")
         names = set()
+        materialized = []
         for row in rows:
             name = PurePosixPath(row["path"]).name
             _require(name.casefold() not in names, "OFFLINE_PACKAGE_COLLISION")
             names.add(name.casefold())
-            (root / name).write_bytes((source / row["path"]).read_bytes())
+            materialized.append(name)
+        return source, rows, materialized
+
+    def _packages(self, root, prepared=None):
+        source, rows, names = prepared or self._bound_packages()
+        try:
+            root.mkdir()
+        except PermissionError as error:
+            raise ValueError("REPOSITORY_PROBE_EXECUTION_TARGET_PERMISSION_DENIED") from error
+        except OSError as error:
+            raise ValueError("REPOSITORY_PROBE_EXECUTION_TARGET_WRITE_FAILED") from error
+        if source is None:
+            return []
+        for row, name in zip(rows, names):
+            origin, target = source / row["path"], root / name
+            try:
+                data = origin.read_bytes()
+            except FileNotFoundError as error:
+                raise ValueError("REPOSITORY_PROBE_OFFLINE_PACKAGE_SOURCE_MISSING") from error
+            except PermissionError as error:
+                raise ValueError("REPOSITORY_PROBE_OFFLINE_PACKAGE_SOURCE_PERMISSION_DENIED") from error
+            try:
+                target.write_bytes(data)
+            except PermissionError as error:
+                raise ValueError("REPOSITORY_PROBE_EXECUTION_TARGET_PERMISSION_DENIED") from error
+            except OSError as error:
+                raise ValueError("REPOSITORY_PROBE_EXECUTION_TARGET_WRITE_FAILED") from error
+            _require(len(data) == row["bytes"] and hashlib.sha256(data).hexdigest() == row["sha256"],
+                "OFFLINE_PACKAGE_SOURCE_CHANGED")
         _require(offline_package_manifest(source) == rows, "OFFLINE_PACKAGES_CHANGED")
+        copied = offline_package_manifest(root)
+        _require({row["path"]: (row["sha256"], row["bytes"]) for row in copied}
+            == {name: (row["sha256"], row["bytes"]) for row, name in zip(rows, names)},
+            "OFFLINE_PACKAGE_COPY_CHANGED")
         return rows
 
     def _harness(self, root, files):
@@ -619,12 +678,14 @@ class RepositoryProbeRunner:
             flags.append("-p:" + key + "=" + value)
         (root / "build-flags.txt").write_bytes(("\n".join(flags) + "\n").encode())
 
-    def _compile_and_run(self, root, candidate, files, docker, environment):
+    def _compile_and_run(self, root, candidate, files, docker, environment, *, evidence_root=None,
+                         prepared_packages=None):
+        evidence_root = Path(evidence_root) if evidence_root is not None else Path(root)
         harness, packages = root / "harness", root / "offline"
         self._harness(harness, files)
-        dependencies = self._packages(packages)
+        dependencies = self._packages(packages, prepared_packages)
         inputs = {"candidate": _tree(candidate), "harness": _tree(harness), "offline": _tree(packages)}
-        compiled = execute_sdk_container(root=root / "compile", docker=docker, environment=environment, image=self.config["image"],
+        compiled = execute_sdk_container(root=evidence_root / "compile", docker=docker, environment=environment, image=self.config["image"],
             mounts={"/candidate": candidate, "/harness": harness, "/offline": packages}, runtime=False)
         _require(inputs == {"candidate": _tree(candidate), "harness": _tree(harness), "offline": _tree(packages)}, "BUILD_INPUT_MUTATED")
         if not compiled["completed"] or compiled["exit_code"] != 0:
@@ -635,11 +696,20 @@ class RepositoryProbeRunner:
         status = json.loads((bundle / "logs/status.json").read_text())
         sdk = (bundle / "logs/sdk-version.txt").read_text().strip()
         succeeded = status["restore_exit_code"] == status["publish_exit_code"] == 0 and sdk == self.config["sdk_version"]
+        diagnostics = {name: (bundle / ("logs/" + name + ".txt")).read_bytes()[:32768].decode("utf-8", "replace")
+            for name in ("restore", "publish")}
+        diagnostic_codes = sorted(set(re.findall(r"\bNU[0-9]{4}\b", diagnostics["restore"])))
+        dependency_failure = None
+        if status["restore_exit_code"] != 0:
+            dependency_failure = {"kind": "offline_package_missing"
+                if set(diagnostic_codes) & {"NU1101", "NU1102"} else "restore_failed",
+                "diagnostic_codes": diagnostic_codes}
         base = {"compile_execution": compiled, "runtime_execution": None, "source_manifest": inputs["candidate"],
             "dependency_manifest": dependencies, "bundle_manifest": manifest, "build_status": status, "sdk_version": sdk,
             "compiled": succeeded, "passed": False, "exit_code": status["publish_exit_code"] or status["restore_exit_code"],
-            "build_diagnostics": {name: (bundle / ("logs/" + name + ".txt")).read_bytes()[:32768].decode("utf-8", "replace")
-                for name in ("restore", "publish")}, "build_diagnostics_limit_bytes_each": 32768}
+            "build_diagnostics": diagnostics, "build_diagnostics_limit_bytes_each": 32768}
+        if dependency_failure is not None:
+            base["dependency_failure"] = dependency_failure
         if not succeeded:
             return base
         compile_inputs = (bundle / "logs/compile-inputs.txt").read_text(encoding="utf-8-sig").splitlines()
@@ -649,7 +719,7 @@ class RepositoryProbeRunner:
         deps = json.loads((assembly / "RepoForge.Probe.deps.json").read_text())
         _require(any(value.get("type") == "project" and not name.startswith("RepoForge.Probe/")
             for name, value in deps["libraries"].items()), "PROJECT_REFERENCE_DEPENDENCY_MISSING")
-        runtime = execute_sdk_container(root=root / "runtime", docker=docker, environment=environment, image=self.config["image"],
+        runtime = execute_sdk_container(root=evidence_root / "runtime", docker=docker, environment=environment, image=self.config["image"],
             mounts={"/candidate": candidate, "/assembly": assembly}, runtime=True)
         _require(_tree(bundle) == manifest and _tree(candidate) == inputs["candidate"], "RUNTIME_INPUT_MUTATED")
         return {**base, "runtime_execution": runtime, "compile_inputs": compile_inputs,
@@ -657,16 +727,35 @@ class RepositoryProbeRunner:
             "exit_code": runtime["exit_code"] if runtime["exit_code"] is not None else -1}
 
     def _qualify(self, docker, environment, identity, probe_profile_ref):
-        root = self.root / ("qualification-" + uuid4().hex)
+        prepared_packages = self._bound_packages()
+        projected = ["offline/" + name for name in prepared_packages[2]]
+        projected.extend(("candidate/" + self.config["project_path"], "harness/probe/Program.cs",
+            "harness/RepoForge.Probe.csproj", "bundle/artifacts/RepoForge.Probe.dll"))
+        workspace = self.execution_workspaces.allocate(kind="qualification",
+            operation_id=canonical_hash({"runner_identity": identity, "profile_ref": probe_profile_ref}),
+            projected_paths=projected)
+        root, evidence_root = workspace.execution_root, workspace.evidence_root
+        mapping_ref = _ref(self.state.store_root / workspace.mapping_ref)
+        completed = evidence_root / "qualification.json"
+        attempted = evidence_root / "qualification-attempt.json"
+        if workspace.recovered:
+            _require(completed.is_file() and attempted.is_file(), "QUALIFICATION_WORKSPACE_INCOMPLETE")
+            proof_ref = _ref(completed)
+            proof = read_bound_json(proof_ref)
+            self._qualification_attempt_ref = proof.get("qualification_attempt_ref")
+            return proof, proof_ref
         candidate = root / "candidate"
         project = candidate / self.config["project_path"]
         project.parent.mkdir(parents=True)
         project.write_text('<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>' + self.config["target_framework"]
             + '</TargetFramework><AssemblyName>RepoForgeQualificationTarget</AssemblyName></PropertyGroup></Project>', encoding="utf-8")
         (project.parent / "Value.cs").write_text('namespace RepoForgeQualificationTarget { public static class Value { public static int Get() => 7; } }', encoding="utf-8")
-        result = self._compile_and_run(root, candidate, [{"relative_path": "probe/Program.cs", "content": _QUALIFICATION_SOURCE}], docker, environment)
-        self._qualification_attempt_ref = _save(root / "qualification-attempt.json", {"runner_identity": identity,
-            "result": result, "qualification_candidate": "trusted_control_fixture"})
+        result = self._compile_and_run(root, candidate,
+            [{"relative_path": "probe/Program.cs", "content": _QUALIFICATION_SOURCE}], docker, environment,
+            evidence_root=evidence_root, prepared_packages=prepared_packages)
+        self._qualification_attempt_ref = _save(attempted, {"runner_identity": identity,
+            "result": result, "qualification_candidate": "trusted_control_fixture",
+            "workspace_mapping_ref": mapping_ref})
         _require(result["passed"] and result["runtime_execution"] is not None, "QUALIFICATION_EXECUTION_FAILED")
         observed = json.loads(result["runtime_execution"]["stdout"])
         _verify_cgroup_controls(observed)
@@ -680,9 +769,9 @@ class RepositoryProbeRunner:
             "runner_identity": identity, "execution_kind": "isolated",
             "boundaries": {"filesystem": "isolated", "network": "denied", "process": "isolated"},
             "controls": observed, "execution_refs": [result["compile_execution"]["receipt_ref"], result["runtime_execution"]["receipt_ref"]],
-            "qualification_attempt_ref": self._qualification_attempt_ref,
+            "qualification_attempt_ref": self._qualification_attempt_ref, "workspace_mapping_ref": mapping_ref,
             "scope": "linux_amd64_sdk_project_graph_with_frozen_offline_packages", "qualification_candidate": "trusted_control_fixture"}
-        return proof, _save(root / "qualification.json", proof)
+        return proof, _save(completed, proof)
 
     def run_probe(self, *, state, source_revision_ref, probe, capability, operation_id):
         from src.mod_agent.task_agent_v2_experiments import _source
@@ -695,20 +784,31 @@ class RepositoryProbeRunner:
         _require(Path(baseline["source_root"]).resolve() == self.backend.source_root
             and state.contract["execution_profile_ref"] == self.backend.profile.reference, "CANDIDATE_PROJECT_CHANGED")
         self.backend.profile.verify_fixed_inputs(self.backend.source_root, self.backend.fixed_inputs)
-        root = self.root / ("run-" + uuid4().hex)
-        candidate = root / "candidate"
-        candidate.mkdir(parents=True)
-        original = []
-        total = 0
+        source_paths = []
         for path in sorted(self.backend.source_root.rglob("*")):
             relative = path.relative_to(self.backend.source_root)
             if any(part.casefold() in _IGNORED or part.casefold().startswith(".env.") for part in relative.parts):
                 continue
             _no_links(path)
-            if not path.is_file():
-                continue
-            name = relative.as_posix()
-            _require(not re.search(r"[|\x00-\x1f]", name), "SOURCE_PATH_UNSUPPORTED")
+            if path.is_file():
+                name = relative.as_posix()
+                _require(not re.search(r"[|\x00-\x1f]", name), "SOURCE_PATH_UNSUPPORTED")
+                source_paths.append((path, relative, name))
+        prepared_packages = self._bound_packages()
+        projected = ["candidate/" + name for _path_value, _relative_value, name in source_paths]
+        projected.extend("offline/" + name for name in prepared_packages[2])
+        projected.extend(("harness/RepoForge.Probe.csproj", "harness/NuGet.Config",
+            "harness/capture.targets", "harness/build-flags.txt", "bundle/artifacts/RepoForge.Probe.dll"))
+        projected.extend("harness/" + _path(row["relative_path"]) for row in probe["files"])
+        workspace = self.execution_workspaces.allocate(kind="probe", operation_id=operation_id,
+            source_revision_ref=reference, source_identity=source_id, projected_paths=projected)
+        _require(not workspace.recovered, "EXECUTION_WORKSPACE_ALREADY_USED")
+        root, evidence_root = workspace.execution_root, workspace.evidence_root
+        candidate = root / "candidate"
+        candidate.mkdir(parents=True)
+        original = []
+        total = 0
+        for path, relative, name in source_paths:
             _require(total + path.stat().st_size <= _SOURCE_LIMIT, "SOURCE_LIMIT")
             data = path.read_bytes()
             original.append({"path": name, "sha256": hashlib.sha256(data).hexdigest()})
@@ -726,11 +826,13 @@ class RepositoryProbeRunner:
         _require(project.is_file(), "PROJECT_NOT_IN_CANDIDATE")
         document = ElementTree.fromstring(project.read_bytes())
         _require(document.get("Sdk") or document.find("Sdk") is not None, "SDK_STYLE_PROJECT_REQUIRED")
-        result = self._compile_and_run(root, candidate, probe["files"], docker, environment)
+        result = self._compile_and_run(root, candidate, probe["files"], docker, environment,
+            evidence_root=evidence_root, prepared_packages=prepared_packages)
         _require(all(_ref(self.backend.source_root / row["path"])["sha256"] == row["sha256"] for row in original), "ORIGINAL_SOURCE_MUTATED")
         logs = state.save("probe-execution", {"schema": "task-agent-probe-execution.v2", "operation_id": operation_id,
             "source_revision_ref": reference, "source_identity": source_id, "probe": probe,
             "runner_identity": identity, "qualification_refs": capability["evidence_refs"], "execution": result,
+            "execution_workspace_ref": workspace.mapping_ref,
             "project_path": self.config["project_path"], "host_home_mounted": False,
             "host_environment_inherited": False, "source_credential_screening": "known_paths_and_nuget_credentials_only",
             "network_enabled": False})
@@ -738,9 +840,11 @@ class RepositoryProbeRunner:
         return {"execution_origin": "executed", "execution_kind": "isolated", "source_revision_ref": reference,
             "source_identity": source_id, "runner_identity": identity, "exit_code": result["exit_code"],
             "passed": result["passed"], "logs_ref": logs, "compiled_project_path": self.config["project_path"],
+            "execution_workspace_ref": workspace.mapping_ref,
             "source_manifest_sha256": canonical_hash(result["source_manifest"]),
             "dependency_manifest_sha256": canonical_hash(result["dependency_manifest"]),
             "observations": {"compiled": result["compiled"], "build_status": result.get("build_status"),
+                "dependency_failure": result.get("dependency_failure"),
                 "build_diagnostics": result.get("build_diagnostics"),
                 "stdout": runtime["stdout"] if runtime else "", "stderr": runtime["stderr"] if runtime else result["compile_execution"]["stderr"]},
             "verification_scope": "exploration_only_linux_sdk_project_not_independent_acceptance"}

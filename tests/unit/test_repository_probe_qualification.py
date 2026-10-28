@@ -107,6 +107,16 @@ def test_qualification_reference_is_not_a_recursive_profile_identity(qualified, 
     assert replacement.verify_capability(profile)["status"] == "unavailable"
 
 
+def test_new_runner_recovers_same_qualification_workspace_without_repeating_containers(qualified, monkeypatch):
+    selected, environment, profile, capability, calls = qualified
+    replacement = module.RepositoryProbeRunner(state=selected.state, backend=selected.backend)
+    monkeypatch.setattr(replacement, "_environment", lambda: (
+        ["controlled-docker", "--context", "default"], environment))
+    recovered = replacement.verify_capability(profile)
+    assert recovered == capability
+    assert calls == [False, True]
+
+
 @pytest.mark.parametrize("change,reason", [
     ({"execution_refs": []}, "QUALIFICATION_EXECUTION_REFS_REQUIRED"),
     ({"qualification_candidate": "model_claim"}, "QUALIFICATION_IDENTITY_CHANGED"),
