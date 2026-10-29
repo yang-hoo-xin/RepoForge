@@ -927,8 +927,16 @@ def seal_stopped_process(plan, process_ref, *, plan_ref):
         stop_ref = _ref(stop_path)
         episode_ref = seal_saved_public_episode(artifact_store_root=store,
             checkpoint_ref=checkpoint_ref, stop_ref=stop_ref)
+        from src.mod_agent.run_outcome_finalization import finalize_continuation
+        terminal_status = "timed_out" if timeout else "process_failed"
+        finalized = finalize_continuation(artifact_store_root=store,
+            event="process_timed_out" if timeout else "process_failed", checkpoint_ref=checkpoint_ref,
+            result={"status": terminal_status, "run_id": plan["run_id"],
+                "request_id": manifest["request_id"], "new_task_created": False,
+                "replayed": False, "whole_task_delivered": False,
+                "v2_checkpoint_ref": checkpoint_ref})
         return {"status": "sealed", "episode_ref": episode_ref, "stop_ref": stop_ref,
-            "model_calls": 0, "resumed": False}
+            "model_calls": 0, "resumed": False, **finalized}
     except Exception as error:
         return {"status": "unavailable", "error_type": type(error).__name__, "reason": str(error),
             "model_calls": 0, "resumed": False}

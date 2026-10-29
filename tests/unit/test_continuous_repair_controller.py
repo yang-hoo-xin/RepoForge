@@ -43,7 +43,8 @@ def _replace_fixture(reference, value):
 
 
 def test_stopped_controller_seals_exact_plan_and_idempotent_stop(tmp_path, monkeypatch):
-    plan, plan_ref, process_ref, _ = _stopped_case(tmp_path)
+    plan, plan_ref, process_ref, pointer = _stopped_case(tmp_path)
+    reference = json.loads(pointer.read_bytes())["checkpoint_ref"]
     calls = []
 
     def seal(**kwargs):
@@ -60,6 +61,15 @@ def test_stopped_controller_seals_exact_plan_and_idempotent_stop(tmp_path, monke
     assert first == second and first["status"] == "sealed"
     assert len(calls) == 2
     assert first["resumed"] is False and first["model_calls"] == 0
+    # 为什么要有它：外层硬停止也须绑定同一 Task Run，不能只有学习 episode 而缺少可验证停止边界和派生结果。
+    boundary = read_bound_json(first["outcome_boundary_ref"])
+    assert boundary["event"] == "process_timed_out" and boundary["status"] == "timed_out"
+    assert boundary["result"] == {"status": "timed_out", "run_id": "run-1", "request_id": "request-1",
+        "new_task_created": False, "replayed": False, "whole_task_delivered": False,
+        "v2_checkpoint_ref": reference}
+    manifest = json.loads((Path(plan["run_root"]) / "run_manifest.json").read_bytes())
+    assert first["outcome_summary_status"] == "available"
+    assert manifest["outcome_summary_ref"] == first["outcome_summary_ref"]
 
 
 @pytest.mark.parametrize("change", ["process_path", "argv", "cwd", "run_id", "ambiguous", "hash"])
