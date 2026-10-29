@@ -1,0 +1,11 @@
+{
+  "controls_rerun": false,
+  "model_calls": 0,
+  "qualified": true,
+  "original_owner_validation": "passed",
+  "qualification_ref": {
+    "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\qualification\\serilog-restored-v1\\qualification.json",
+    "sha256": "7ef380c229df2a2798d0eaeceb67251c92ca73c51312e785d2dad0222c735162"
+  },
+  "wall_seconds": 49.093
+}

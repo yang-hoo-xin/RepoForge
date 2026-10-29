@@ -1,0 +1,18 @@
+{
+  "status": "restored_exact_original",
+  "source_ref": {
+    "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261015\\business-evaluation\\swe-sharp-qualification\\official-input-v1\\evaluation-only\\official-swe-sharp-bench.csv",
+    "sha256": "95324e8ca8112d8b17232cbde178f179fda3ae012f9e533d58d1a23434025e50"
+  },
+  "instance_id": "serilog__serilog-2103",
+  "field": "problem_statement",
+  "restored_ref": {
+    "path": "C:\\Users\\10160\\AppData\\Local\\Temp\\rfext1021\\grader-v1\\solver-input\\problem_statement.txt",
+    "sha256": "2fd8554f947ed3c7a54d7b93a15853b8a176f9be1143cabde34558b13df77b08"
+  },
+  "bytes": 2353,
+  "write_mode": "xb",
+  "prompt_changed": false,
+  "other_task_content_exported": false,
+  "model_calls": 0
+}

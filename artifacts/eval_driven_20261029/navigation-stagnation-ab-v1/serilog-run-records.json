@@ -1,0 +1,14 @@
+{
+  "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\serilog-run-records.zip",
+  "sha256": "14142edafac323bff1af92aa3284d369406207cba56a6674c71be86c1abd3473",
+  "archive_bytes": 15919795,
+  "record_count": 2630,
+  "included_bytes": 47831158,
+  "excluded_counts": {
+    "generated_build_or_interpreter_cache_retained_at_original_path": 5853,
+    "duplicate_export_frozen_platform_copy_included_instead": 1080
+  },
+  "all_included_hashes_verified": true,
+  "original_files_deleted": false,
+  "scope": "Run records, frozen platforms and public sources; not a self-contained SDK/package environment."
+}

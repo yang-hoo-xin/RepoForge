@@ -1,0 +1,83 @@
+{
+  "status": "environment_repaired_comparison_invalid_B1_not_started",
+  "task_id": "serilog__serilog-2103-v2-development",
+  "scope": "Development-exposed diagnostic; retain failed attempt, exclude from hidden pilot and causal benefit estimates.",
+  "environment": {
+    "sdk": "8.0.100",
+    "sdk_restoration": "qualification/serilog-relocation/sdk-restoration.json",
+    "red": "Original frozen _configuration failed with FileNotFoundError for its bound dotnet.exe; minimal bound-path check also failed.",
+    "green": "Original frozen _configuration accepted all existing qualification originals after exact SDK restoration.",
+    "green_record": "qualification/serilog-relocation/original-owner-revalidated.json",
+    "public_problem_restoration": "qualification/serilog-relocation/problem-restoration.json",
+    "qualification": "qualification/serilog-restored-v1/result.json",
+    "qualification_valid": true,
+    "controls_rerun": false,
+    "answers_permissions_prompts_or_acceptance_changed": false
+  },
+  "frozen_pair_ref": {"path": "C:/tmp/rfnav2103-20261029-v1/pair.json", "sha256": "8eb7f4c53d20559e6388294c2a9955f8d9f6be68f017341a137025019cb0ff2e"},
+  "arms": {
+    "B0": {
+      "run_id": "dsh_20a78f8b74d5454bae86319f28c1aaae",
+      "status": "started_internal_resource_stop_then_platform_outcome_failure",
+      "complete_provider_responses": 11,
+      "executed_source_searches": 3,
+      "executed_source_reads": 0,
+      "budget_rejected_source_navigation": 6,
+      "budget_rejected_history_read": 1,
+      "output_format_corrections": 1,
+      "budget_rejections_delivered": 6,
+      "budget_rejections_not_delivered": 1,
+      "replayed_actions": 0,
+      "candidates": 0,
+      "checks": 0,
+      "source_changes": 0,
+      "process_wall_seconds": 631.5,
+      "task_wall_seconds": 631.75,
+      "owned_process_residuals": [],
+      "broker_descendant_cleanup": "not_established_by_generic_job_ownership"
+    },
+    "B1": {"run_id": "dsh_1c1d2b1bcfc449eaa6f177ee332833dc", "status": "not_started_comparison_invalidated", "model_calls": 0}
+  },
+  "findings": [
+    {
+      "kind": "experiment_design_preflight_omission",
+      "fact": "Effective common read/search limit is 3; navigation feedback requires 8 executed navigations. The intervention is unreachable under these conditions.",
+      "origin": "Frozen local_entry constructs PatchAgentLoopPolicy without overriding max_tool_rounds=3; task_total_only preserves that default. The frozen worker records it.",
+      "attribution": "Experiment preparation and review missed compatibility between the intervention trigger and the effective resource policy. This is not evidence for or against feedback efficacy."
+    },
+    {
+      "kind": "platform_terminal_contract_failure",
+      "fact": "The internal result is blocked and has current_stage, but lacks top-level status; _completed_task_run rejects it with DSH_TASK_RUN_OUTCOME_INVALID.",
+      "decision": "Apply the preregistered infrastructure-failure stop rule; leave B1 unstarted. No repair or rerun in this experiment."
+    }
+  ],
+  "five_metrics": {
+    "correct_delivery": {"B0_confirmed": 0, "B0_started_attempts": 1, "B1_started_attempts": 0, "independent_acceptance_runs": 0, "comparison_difference": null, "raw_native_verdicts_remain_null": true},
+    "human_and_wait": {"B0_task_seconds": 631.75, "human_active_minutes": null, "technical_hint_or_patch": false, "quality_matched_efficiency_comparison": null},
+    "unit_success_cost": {"input_tokens": 224385, "output_tokens": 645, "cached_input_tokens": 152539, "cached_input_included_in_input": true, "observed_calls": 11, "unknown_usage_within_observed_calls": 0, "additional_auxiliary_generations_observed": 0, "whole_task_cost_complete": false, "currency_cost": null, "per_success_cost": null, "reason": "zero confirmed correct deliveries; no finite unit-success cost"},
+    "counterexample_repair": {"business": {"K": 0, "k": 0, "rate": null}, "compilation": {"K": 0, "k": 0, "rate": null}, "process_feedback": "Budget and format corrections recorded separately; no business or compilation counterexample was delivered."},
+    "judgment_and_experience": {"navigation_feedback_effect": "not_measured_invalid_experiment", "B1_exposure": false, "strategy_enabled": false, "strategy_adoption_or_transfer_gain": "not_measured"}
+  },
+  "preparation_cost": {
+    "previous_measured_qualification_subset_seconds": 526.718,
+    "sdk_restore_seconds": 321.938,
+    "original_owner_revalidation_seconds": 25.875,
+    "full_qualification_revalidation_seconds": 49.093,
+    "measured_subset_seconds": 923.624,
+    "scope": "Includes retained earlier preparation failures; excludes task wall time. This is a measured subset, not total preparation elapsed time.",
+    "other_preparation_and_review_seconds": null,
+    "platform_development_model_usage": null,
+    "human_active_minutes": null
+  },
+  "evidence": {
+    "observed_summary": "serilog-observed-summary.json",
+    "independent_measurement_audit": "b0-independent-audit.md",
+    "independent_terminal_review": "b0-terminal-independent-review.md",
+    "record_archive": "serilog-run-records.json",
+    "stop_record": "C:/tmp/rfnav2103-20261029-v1/comparison-stop.json"
+  },
+  "next_recommendation": "At the existing queue boundary, prioritize normal blocked-outcome handling and an effective-budget/trigger compatibility check before any fresh real comparison. Use existing T2/resource-policy and Task Run outcome work; do not enlarge the evaluator or tune the threshold from this failed trial.",
+  "deferred": ["T2 real safe-input correction contrast", "T1 two-repository full acceptance", "child-owned graceful-stop outcome"],
+  "prohibited_replays": ["1531", "1552", "this B0 attempt or a replacement retry of this frozen comparison"],
+  "why": "为什么要有它：恢复环境、任务资格、实验有效性和产品模型表现分别记账；运行前遗漏和平台异常必须显式归因，不能用失败样本包装收益或悄悄补跑另一组。"
+}

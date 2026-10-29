@@ -1,0 +1,14 @@
+{
+  "status": "original_sdk_restored_pending_original_qualification_validation",
+  "sdk_version": "8.0.100",
+  "manifest_url": "https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/8.0/releases.json",
+  "archive_url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.100/dotnet-sdk-8.0.100-win-x64.zip",
+  "archive_sha512": "69ee73c56c78c94c186c0fd1b06ce1a7325979f7680857dc1a05d516feb9f0ffe990c2c0441caed1de98a0d0ae3923cc3e04525f91d96306d611e481a24f9fb4",
+  "archive_bytes": 282629917,
+  "target": "C:\\Users\\10160\\AppData\\Local\\Temp\\rfext1020\\sdk",
+  "dotnet_sha256": "b9eace03c8471717e3f98873527005dbd9a92367b954f8c48484d2b7b78efbac",
+  "wall_seconds": 321.938,
+  "qualification_modified": false,
+  "controls_rerun": false,
+  "why": "为什么要有它：下载包完整性与原资格绑定分别核验，不能仅靠版本号宣称环境一致。"
+}

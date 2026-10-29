@@ -1,0 +1,36 @@
+{
+  "status": "registered_before_either_arm_dispatch",
+  "parent_intent": "intent.json",
+  "task_id": "serilog__serilog-2103-v2-development",
+  "source_instance_id": "serilog__serilog-2103",
+  "selection_origin": "User authorized an existing independently qualified development-exposed fallback after the single bounded 1338 diagnostic fix failed admission.",
+  "exposure": "development_exposed; excluded from hidden pilot and held-out transfer estimates",
+  "qualification_ref": {
+    "path": "C:/Users/10160/.codex/worktrees/semantic-work-state/rag_capability_mainline/artifacts/eval_driven_20261029/navigation-stagnation-ab-v1/qualification/serilog-restored-v1/qualification.json",
+    "sha256": "7ef380c229df2a2798d0eaeceb67251c92ca73c51312e785d2dad0222c735162"
+  },
+  "main_tested_change": "Existing eight-consecutive-navigation feedback, implemented only in the three registered runtime modules.",
+  "commits": {"B0": "f059c4a1a8de4290924ff76c486e7fe5631c6c31", "B1": "ea4e532085861e3ea07bccc4461ef9ff91527b45"},
+  "order": ["B0", "B1"],
+  "common": {
+    "model": "qwen3-coder:30b",
+    "digest": "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca",
+    "seed": 0, "temperature": 0, "context_tokens": 65536, "max_output_tokens": 4096,
+    "strategy_experience_enabled": false,
+    "per_arm_seconds": 900, "per_arm_model_reservations": 16, "retries": 0,
+    "task_prompt": "Exact original public problem bytes restored from the same task's existing official record by SHA256.",
+    "execution_environment": "Original SDK 8.0.100 restored from official archive; original dotnet.exe SHA256 verified.",
+    "tools_permissions_checks": "Identical qualified public profile and existing Task Run entry for both arms."
+  },
+  "measurement": {
+    "primary": "First non-navigation choice within three model responses after navigation feedback; separately report valid candidates, checks and correct delivery.",
+    "independent_acceptance": "Use existing frozen CSharpRepositoryBackend.run_build_test and original _configuration/_report on an independent copy with original evaluation fixed inputs. Verify the complete production manifest against the actual delivered candidate source, including binary files.",
+    "delivery": "Use existing read_completed_v2_delivery validation of candidate, Apply, Build and artifact references. Both source-bound independent acceptance and actual delivery are required for correct_delivery=true.",
+    "strategy_verdict": "Not an adoption trial; no independent_strategy_verdict or strategy transfer claim.",
+    "costs": "Task execution, independent acceptance and platform/environment preparation separately reported; human active time and unknown usage never inferred."
+  },
+  "stop": "One attempt per arm. Infrastructure failure invalidates the comparison and leaves the next arm unstarted; ordinary timeout or no candidate remains a task result. No hints, patch substitution or same-task retry.",
+  "return_point": "After this single diagnostic, return to T2 and the original T1/T2/T3 frontier; keep child-owned stop outcome deferred.",
+  "prohibited_replays": ["1531", "1552"],
+  "why": "为什么要有它：备用任务和环境恢复须在运行前明示，两臂共用同一原件；已有独立业务验收与策略采用证明各守用途，不能把未测经验或单题结果扩大为产品收益。"
+}

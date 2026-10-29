@@ -1,0 +1,21 @@
+{
+  "root": "C:/tmp/rfnav2103-20261029-v1",
+  "task_id": "serilog__serilog-2103-v2-development",
+  "qualification_ref": {
+    "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\qualification\\serilog-restored-v1\\qualification.json",
+    "sha256": "7ef380c229df2a2798d0eaeceb67251c92ca73c51312e785d2dad0222c735162"
+  },
+  "public_profile_ref": {
+    "path": "C:\\tmp\\rf-serilog-v2-pair-main\\repository-profile.json",
+    "sha256": "2f00ddb6213e5e6210b8c47060ffa6070b47dca27355993df898c1a63135c754"
+  },
+  "public_source_root": "C:\\tmp\\rf-serilog-v2-pair-main\\public-source",
+  "problem_ref": {
+    "path": "C:\\Users\\10160\\AppData\\Local\\Temp\\rfext1021\\grader-v1\\solver-input\\problem_statement.txt",
+    "sha256": "2fd8554f947ed3c7a54d7b93a15853b8a176f9be1143cabde34558b13df77b08"
+  },
+  "intent_ref": {
+    "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\serilog-comparison-intent.json",
+    "sha256": "e22e194abce83e6aa24c31af6832006780168fbf180c485a48dde0a770c01008"
+  }
+}

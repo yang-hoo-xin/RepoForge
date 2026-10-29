@@ -1,0 +1,81 @@
+{
+  "records": [
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\serilog-diagnostic-result.json",
+      "sha256": "b035769458db8899a72dd4abf5b5ef5963b339270439ec48c5f4ef785d225913"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\serilog-observed-summary.json",
+      "sha256": "117070fb346e7c71db08acfa9e37a78f216ffdbe8e88763a2bece023e9f27418"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\serilog-comparison-intent.json",
+      "sha256": "e22e194abce83e6aa24c31af6832006780168fbf180c485a48dde0a770c01008"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\serilog-comparison-config.json",
+      "sha256": "c54311afb2d7f4950c4bf67e0d4c466544de50806e9b70ee27a3f4f5b18ee2c1"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\serilog-run-records.json",
+      "sha256": "092205dce0597794180e0f3fbb3ce59f29d46b5030bf433c37a8d0406c313160"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\b0-independent-audit.md",
+      "sha256": "9817431b7548ce11d156d7853ca25fd726f5c0b18f9d0152f37fb9606975ba4d"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\b0-terminal-independent-review.md",
+      "sha256": "ca28a54c3cbc13276d83dfa87b4f68cc09515bf9243aad3c5ca6e8a3c94be319"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\qualification\\serilog-relocation\\sdk-restoration.json",
+      "sha256": "fd7fb323f52a7fbc6e01cae7965e1b092f5816fe1be7b43bd06c293efc67cc4f"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\qualification\\serilog-relocation\\problem-restoration.json",
+      "sha256": "1c43157564f51cb141667c746fd0abc11f6d3f3620548c75dcca3cd2884d81a3"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\qualification\\serilog-relocation\\original-owner-revalidated.json",
+      "sha256": "721a973233529a1aad14a0c41255ee05710981ecfd43b061d6b25de40f252773"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\qualification\\serilog-restored-v1\\qualification.json",
+      "sha256": "7ef380c229df2a2798d0eaeceb67251c92ca73c51312e785d2dad0222c735162"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\qualification\\serilog-restored-v1\\result.json",
+      "sha256": "d662a47815d24019ac40244d630a9cc9fff04d9ace3b455112dfbd74d6c4c331"
+    },
+    {
+      "path": "C:\\tmp\\rfnav2103-20261029-v1\\pair.json",
+      "sha256": "8eb7f4c53d20559e6388294c2a9955f8d9f6be68f017341a137025019cb0ff2e"
+    },
+    {
+      "path": "C:\\tmp\\rfnav2103-20261029-v1\\comparison-stop.json",
+      "sha256": "aebc39a4fe85cd4b1f9edca2d80b8d55c9851e8748f8aa9177dcf44a50ba8a8e"
+    },
+    {
+      "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\result.json",
+      "sha256": "414a762ab650592a1961e21474b609cccfcb01bf4dc16ee06f1089d877537a07"
+    },
+    {
+      "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\execution\\process.json",
+      "sha256": "6d675181ddad06031f137b4b4dc96f1233fe3c3be0f9bfe77d325e84e79d1dfe"
+    },
+    {
+      "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\execution\\stderr.bin",
+      "sha256": "55255485499b83d73b1621de631fc2f50064f338841d00e4f823e47856b6cf51"
+    },
+    {
+      "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\runs\\dsh_20a78f8b74d5454bae86319f28c1aaae\\repository-worker.json",
+      "sha256": "43cb7835cdc991a8c7bb64d5f07464efdf594ddf03a7119f636a7381d8101da0"
+    },
+    {
+      "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\runs\\dsh_20a78f8b74d5454bae86319f28c1aaae\\a\\task-agent-execution\\loop-result.json",
+      "sha256": "0d1dc1a40b8487a101084f3d511b4f052912ea27bb603d6fa16c2225acb5e586"
+    }
+  ],
+  "why": "为什么要有它：当前结论绑定实际原件与独立复核，历史失败记录继续保留。"
+}

@@ -1,0 +1,211 @@
+{
+  "arms": {
+    "B0": {
+      "actual_wire_options": [
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        }
+      ],
+      "candidate_ref": null,
+      "choices_in_first_three_feedback_responses": [],
+      "completed_responses": 11,
+      "correct_delivery": null,
+      "experience_gain": "not_measured",
+      "first_feedback_request_turn": null,
+      "first_non_navigation_choice": null,
+      "human_active_seconds": null,
+      "independent_business_result": null,
+      "known_usage": {
+        "cached_input_tokens": 152539,
+        "input_tokens": 224385,
+        "output_tokens": 645
+      },
+      "native_result_present": true,
+      "native_status": null,
+      "owned_process_residuals": [],
+      "plan_ref": {
+        "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\plan.json",
+        "sha256": "13e5794b874a96aa53f27f76b98e6c48c63b0e41d2e291116dc218854e26d9c0"
+      },
+      "process_ref": {
+        "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\execution\\process.json",
+        "sha256": "6d675181ddad06031f137b4b4dc96f1233fe3c3be0f9bfe77d325e84e79d1dfe"
+      },
+      "process_status": "exited",
+      "public_check_count": 0,
+      "reserved_calls": 11,
+      "response_refs": [
+        {
+          "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\runs\\dsh_20a78f8b74d5454bae86319f28c1aaae\\a\\task-agent-execution\\response-001.json",
+          "sha256": "170b8959bc627b2913d9c7e4144bf3020fe14b30591593deef9d4a6021967b7d"
+        },
+        {
+          "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\runs\\dsh_20a78f8b74d5454bae86319f28c1aaae\\a\\task-agent-execution\\response-002.json",
+          "sha256": "9449c60760dba20ea14840bf8fdf49bcefb577436be0f32af4e1dfe1c466eeb7"
+        },
+        {
+          "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\runs\\dsh_20a78f8b74d5454bae86319f28c1aaae\\a\\task-agent-execution\\response-003.json",
+          "sha256": "6eee12c9dbe4f0182c9ba25a8d58bef0dd4a79e8926799969d3d78fb1d269a6c"
+        },
+        {
+          "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\runs\\dsh_20a78f8b74d5454bae86319f28c1aaae\\a\\task-agent-execution\\response-004.json",
+          "sha256": "8521d1598828cf0582d1db3b8ee447aae88397b58899c1ac133f6fc2dcb14291"
+        },
+        {
+          "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\runs\\dsh_20a78f8b74d5454bae86319f28c1aaae\\a\\task-agent-execution\\response-005.json",
+          "sha256": "6c260918054fad9a1a81337fa54ba6ddb82de49ab099dc76eb511e724b201480"
+        },
+        {
+          "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\runs\\dsh_20a78f8b74d5454bae86319f28c1aaae\\a\\task-agent-execution\\response-006.json",
+          "sha256": "d22da3f02d42b6d5c4057cfc38f06cc5cada147ac858085abb514a2556b744c6"
+        },
+        {
+          "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\runs\\dsh_20a78f8b74d5454bae86319f28c1aaae\\a\\task-agent-execution\\response-007.json",
+          "sha256": "b9eb2900c8c50fdf7066ea99871da478dc690d6438c8deda08e9045312be065f"
+        },
+        {
+          "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\runs\\dsh_20a78f8b74d5454bae86319f28c1aaae\\a\\task-agent-execution\\response-008.json",
+          "sha256": "ecbac7adb40d2e8354d6f80a73b330e4767be775af407fd6a49a89c8ad77b364"
+        },
+        {
+          "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\runs\\dsh_20a78f8b74d5454bae86319f28c1aaae\\a\\task-agent-execution\\response-009.json",
+          "sha256": "003bbce7c34ec9f655bef49fa0027dbc8279f692e66641246ce1877128124046"
+        },
+        {
+          "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\runs\\dsh_20a78f8b74d5454bae86319f28c1aaae\\a\\task-agent-execution\\response-010.json",
+          "sha256": "5b0d9d4210cee19f115aa77d2ad54a9a9e48ffb0af654948cd664841e7fc2f4a"
+        },
+        {
+          "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\runs\\dsh_20a78f8b74d5454bae86319f28c1aaae\\a\\task-agent-execution\\response-011.json",
+          "sha256": "5a13ebad721eed0ea45c7ea385c417710544944425cfb1a8f21dabd947e9169f"
+        }
+      ],
+      "result_ref": {
+        "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\result.json",
+        "sha256": "414a762ab650592a1961e21474b609cccfcb01bf4dc16ee06f1089d877537a07"
+      },
+      "run_id": "dsh_20a78f8b74d5454bae86319f28c1aaae",
+      "source_changed_paths": [],
+      "strategy_injected": false,
+      "task_wall_seconds": 631.75,
+      "technical_hint_or_patch": false,
+      "tool_counts": {
+        "source_search": 3
+      },
+      "tool_receipts": [
+        {
+          "code": null,
+          "name": "source_search",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\runs\\dsh_20a78f8b74d5454bae86319f28c1aaae\\a\\task-agent-execution\\tool-receipt-6627241aa0589564832242a439fbf2eb6cc73a73a06c00ad09b6741d577d1c6b.json",
+            "sha256": "3f09ffa183af15c670832344cbeae05d08407dd00bc1d5c3143273c83bad3bcf"
+          },
+          "status": null,
+          "turn": 1
+        },
+        {
+          "code": null,
+          "name": "source_search",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\runs\\dsh_20a78f8b74d5454bae86319f28c1aaae\\a\\task-agent-execution\\tool-receipt-13d000f0f726f2c1df9ae7f795725c866cf7982ce80caa24f176cd14bd9519fc.json",
+            "sha256": "9648fd003b3afd533a696cba2ccd21f6f4eb4fa7f59d9a71b4a99869bbce1b3e"
+          },
+          "status": null,
+          "turn": 2
+        },
+        {
+          "code": null,
+          "name": "source_search",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfnav2103-20261029-v1\\B0\\runs\\dsh_20a78f8b74d5454bae86319f28c1aaae\\a\\task-agent-execution\\tool-receipt-91bf81db09a1a5dd8900b70d11b006fd4c2a4d4de1d05e2beb49299094c5fe68.json",
+            "sha256": "c1d471f75d102581291484e772cd4590014ed5fb5069fd1e4a93f08049463e61"
+          },
+          "status": null,
+          "turn": 3
+        }
+      ],
+      "unknown_usage_calls": {
+        "cached_input_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "wall_seconds": 631.5
+    },
+    "B1": {
+      "plan_ref": {
+        "path": "C:\\tmp\\rfnav2103-20261029-v1\\B1\\plan.json",
+        "sha256": "6a6c845390ef9953677d28f825296e0770c82aa19996c3fe356cbf41246cad2e"
+      },
+      "status": "not_completed_or_not_started"
+    }
+  },
+  "pair_ref": {
+    "path": "C:\\tmp\\rfnav2103-20261029-v1\\pair.json",
+    "sha256": "8eb7f4c53d20559e6388294c2a9955f8d9f6be68f017341a137025019cb0ff2e"
+  },
+  "scope": "one development-exposed B0/B1 diagnostic; not hidden-pilot results",
+  "why": "为什么要有它：原件计量保留失败与未知量；独立验收及交付缺失时不能推断正确交付或有限单位成功成本。"
+}

@@ -1,0 +1,21 @@
+{
+  "qualified": true,
+  "task_id": "serilog__serilog-2103-v2-development",
+  "public_source_root": "C:\\tmp\\rf-serilog-v2-pair-main\\public-source",
+  "public_profile_ref": {
+    "path": "C:\\tmp\\rf-serilog-v2-pair-main\\repository-profile.json",
+    "sha256": "2f00ddb6213e5e6210b8c47060ffa6070b47dca27355993df898c1a63135c754"
+  },
+  "problem_ref": {
+    "path": "C:\\Users\\10160\\AppData\\Local\\Temp\\rfext1021\\grader-v1\\solver-input\\problem_statement.txt",
+    "sha256": "2fd8554f947ed3c7a54d7b93a15853b8a176f9be1143cabde34558b13df77b08"
+  },
+  "evaluator_ref": {
+    "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\qualification\\serilog-relocation\\evaluator.json",
+    "sha256": "573df692a8a5fb0d70dd5f20c72769afdaf011dabcc8e358209802a9328bac53"
+  },
+  "platform_ref": {
+    "path": "C:/tmp/rfcode-serilog-v2-pair-base/execution_snapshot.json",
+    "sha256": "4054922b0e2275409a8361008b41db2a8850a8215ae8e679747babdf58fb02ef"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "status": "ORIGINAL_QUALIFICATION_ACCEPTED",
+  "evaluator_ref": {
+    "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\qualification\\serilog-relocation\\evaluator.json",
+    "sha256": "573df692a8a5fb0d70dd5f20c72769afdaf011dabcc8e358209802a9328bac53"
+  },
+  "wall_seconds": 25.875,
+  "controls_rerun": false,
+  "model_calls": 0
+}
