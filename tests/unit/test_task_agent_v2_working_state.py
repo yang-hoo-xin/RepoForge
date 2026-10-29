@@ -155,6 +155,19 @@ def test_navigation_counter_rejects_forgery_and_does_not_count_unexecuted_reads(
     assert working_state_view(reset)["stagnation"]["navigation_only"] is False
 
 
+def test_navigation_recovery_uses_sent_observation_when_rejected_call_id_is_later_executed():
+    from src.mod_agent.task_agent_v2_working_state import validate_working_state
+    rejected = observed("stable-read")
+    rejected.tool_results[0].output["execution"] = "not_executed"
+    working = advance(None, [rejected])
+    completed = observed("stable-read")
+    records = {"stable-read": {"result": {"name": "source_read",
+        "output": completed.tool_results[0].output}}}
+    # 为什么要有它：同一ID纠正后执行的台账不能反向改写此前已发请求中的导航观察。
+    validate_working_state(working, responses=[], call_records=records, navigation_source=working)
+    assert working["consecutive_navigation_returns"] == 0
+
+
 def test_model_response_content_is_exact_and_never_promoted_to_fact():
     response = AgentTurnResponse(provider="fixture", model="fixture", content="Hypothesis A is unconfirmed. " * 1000)
     working = retain_model_statement(None, response, response_ref={"path": "response.json", "sha256": "hash"})

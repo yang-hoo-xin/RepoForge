@@ -15,17 +15,6 @@ _SCHEMA = "task-agent-working-state.v1"
 _NAVIGATION_TOOLS = {"source_search", "source_read"}
 
 
-def _navigation_streak(identities, call_records):
-    count = 0
-    for name, identifier in reversed(identities):
-        result = (call_records.get(identifier, {}).get("result") or {})
-        output = result.get("output") or {}
-        if name not in _NAVIGATION_TOOLS or not isinstance(output, dict) or output.get("execution") != "executed":
-            break
-        count += 1
-    return count
-
-
 def retain_model_statement(working, response, *, response_ref=None, source_boundary=None):
     """Retain complete public response content; no inferred hypothesis or hidden reasoning.
 
@@ -273,8 +262,9 @@ def validate_working_state(working, *, responses, call_records, navigation_sourc
             raise ValueError("TASK_AGENT_WORKING_NAVIGATION_SOURCE_CHANGED")
         start = working.get("navigation_boundary_start")
         count = working["consecutive_navigation_returns"]
+        # 为什么要有它：call ID在安全拒绝后可以被纠正复用，当前台账不能重算并覆盖此前请求的原始观察。
         if (type(start) is not int or not 0 <= start <= len(identities)
-                or type(count) is not int or count != _navigation_streak(identities[start:], call_records)):
+                or type(count) is not int or not 0 <= count <= len(identities) - start):
             raise ValueError("TASK_AGENT_WORKING_NAVIGATION_COUNT_CHANGED")
     for key in ("latest_public_check", "latest_public_failure"):
         observed = working.get(key)
