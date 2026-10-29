@@ -1,0 +1,31 @@
+{
+  "schema_version": "existing_development_qualification_availability.v1",
+  "status": "no_directly_reusable_qualified_evaluator_found",
+  "search_scope": ["serilog-2103", "restsharp-2241", "polly-2164"],
+  "model_calls": 0,
+  "controls_rerun": false,
+  "historical_runs_restarted": false,
+  "candidates": [
+    {
+      "task": "serilog-2103",
+      "qualification_ref": {"path": "C:/tmp/rf-serilog-v2-pair-eval/qualification-final/evaluator.json", "sha256": "4b6f85bd95d7ed30a555f4ffb58f207b618f413a4c941b1cf8788014ac9f3bef"},
+      "status": "original_frozen_owner_rejected_relocated_metadata",
+      "reason": "The byte-identical frozen adapter passed identity relocation, then _configuration failed because the bound SDK C:/Users/10160/AppData/Local/Temp/rfext1020/sdk/dotnet.exe no longer exists.",
+      "result_ref": {"path": "C:/Users/10160/.codex/worktrees/semantic-work-state/rag_capability_mainline/artifacts/eval_driven_20261029/navigation-stagnation-ab-v1/qualification/serilog-relocation/result.json", "sha256": "fc76874b6f37bb7441549403bb8ab755f2d531245ce336324a845e5f17c7501d"}
+    },
+    {
+      "task": "restsharp-2241",
+      "qualification_ref": {"path": "C:/tmp/rfext-restsharp-2241-public-qualification-v2/qualification.json", "sha256": "28ff3f2c1802ed8c8a0e32bb9a102b001ca545c3002f40b74e9806bd70630d07"},
+      "independent_qualification_ref": {"path": "C:/tmp/rfext-restsharp-2241-qualification-v3/qualification.json", "sha256": "3be131ccab5dde1a753b2d77a72c26be7cd7805e2faa70b6126c605a558683a2"},
+      "status": "historically_qualified_not_current_pilot_evaluator",
+      "reason": "Existing task-specific grader schemas do not supply strategy_repository_csharp_evaluator_v1 or an adoption_adapter_ref accepted by current pilot. No new adapter or qualifier constructed. SDK C:/tmp/rf-dotnet-8.0.302/sdk/dotnet.exe exists."
+    },
+    {
+      "task": "polly-2164",
+      "qualification_ref": {"path": "C:/tmp/rfext-polly-2164-public-qualification/qualification.json", "sha256": "33de496cc426e49e75f02edc12d0b16c35ab1ead1f21d72f0859b2d3ea1a68f4"},
+      "independent_qualification_ref": {"path": "C:/tmp/rfext-polly-2164-qualification/qualification.json", "sha256": "f25745b4d0e819e15602795c82a6b567eabc26763e26d522bf6d0211603f4980"},
+      "status": "historically_qualified_not_current_pilot_evaluator",
+      "reason": "Existing task-specific grader schemas do not supply strategy_repository_csharp_evaluator_v1 or an adoption_adapter_ref accepted by current pilot. No new adapter or qualifier constructed."
+    }
+  ]
+}

@@ -1,3 +1,9 @@
 # This model-response fixture has a frozen byte fingerprint; preserve its Git blob.
 # 为什么要有它：系统 autocrlf 不能改变冻结样本字节，校验应继续拒绝实际内容或换行变化。
 tests/fixtures/requirement_findings_duplicate_relation_indexes.json -text
+
+# 为什么要有它：本次资格结果含原件哈希引用，检出时必须保留记录字节，不能由 autocrlf 改写证据。
+artifacts/eval_driven_20261029/navigation-stagnation-ab-v1/bounded-qualification-result.json -text
+artifacts/eval_driven_20261029/navigation-stagnation-ab-v1/qualification/fallback-availability.json -text
+artifacts/eval_driven_20261029/navigation-stagnation-ab-v1/qualification/serilog-relocation/environment-availability.json -text
+artifacts/eval_driven_20261029/navigation-stagnation-ab-v1/qualification/v3/closure.json -text

@@ -1,0 +1,41 @@
+{
+  "schema_version": "existing_qualification_environment_availability.v1",
+  "status": "original_sdk_unavailable_in_checked_locations",
+  "inspection_only": true,
+  "checked_bound_reference_occurrences": 2525,
+  "checked_json_files": 27,
+  "original_sdk": {
+    "version": "8.0.100",
+    "version_evidence": "C:/tmp/rf-serilog-v2-pair-eval/correct/checks/518c0e299bd3437c8020005c0889378e/build.stdout.txt:5",
+    "path": "C:/Users/10160/AppData/Local/Temp/rfext1020/sdk/dotnet.exe",
+    "expected_sha256": "b9eace03c8471717e3f98873527005dbd9a92367b954f8c48484d2b7b78efbac",
+    "exists": false
+  },
+  "existing_sdk": {
+    "version": "8.0.302",
+    "path": "C:/tmp/rf-dotnet-8.0.302/sdk/dotnet.exe",
+    "sha256": "c6e330c1e3895deab7b47b725822a4453e50dd0b79a148dceaf8ba3a749f8412"
+  },
+  "existing_sdk_cache": {
+    "path": "C:/tmp/rf-dotnet-8.0.302/dotnet-sdk-8.0.302-win-x64.zip",
+    "contained_sdk_versions": ["8.0.302"],
+    "contained_dotnet_exe_sha256": "c6e330c1e3895deab7b47b725822a4453e50dd0b79a148dceaf8ba3a749f8412",
+    "archive_sha256": null
+  },
+  "missing_bound_files": ["C:/Users/10160/AppData/Local/Temp/rfext1020/sdk/dotnet.exe"],
+  "changed_bound_files": ["C:/Users/10160/.codex/visualizations/2026/08/11/019ff15f-9eac-7b13-aad5-faffde4b36b7/rag_capability_mainline/src/mod_agent/evaluation/strategy_repository_evaluator.py"],
+  "adapter_note": "The original mutable adapter differs. The separately saved derived evaluator points to a verified byte-identical frozen copy; original files were not modified.",
+  "control_environment_presence": {
+    "correct": {"source_root_exists": true, "missing_source_manifest_files": 0, "nuget_config_exists": true, "package_directory_exists": true},
+    "equivalent": {"source_root_exists": true, "missing_source_manifest_files": 0, "nuget_config_exists": true, "package_directory_exists": true},
+    "wrong": {"source_root_exists": true, "missing_source_manifest_files": 0, "nuget_config_exists": true, "package_directory_exists": true}
+  },
+  "package_cache_full_integrity": "unknown; directory presence does not establish full package integrity",
+  "can_restore_original_environment_from_checked_locations": false,
+  "sdk_downloaded": false,
+  "sdk_copied": false,
+  "controls_rerun": false,
+  "historical_runs_restarted": false,
+  "model_calls": 0,
+  "scope": "Existing bound qualification references and the two known SDK environment locations only; no whole-disk search or new qualification chain."
+}

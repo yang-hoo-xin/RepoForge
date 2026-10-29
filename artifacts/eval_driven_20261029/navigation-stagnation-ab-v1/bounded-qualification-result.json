@@ -1,0 +1,67 @@
+{
+  "schema_version": "navigation_stagnation_bounded_qualification_result.v1",
+  "status": "bounded_preparation_closed_comparison_not_run",
+  "implementation_commit": "ea4e532085861e3ea07bccc4461ef9ff91527b45",
+  "baseline_commit": "f059c4a1a8de4290924ff76c486e7fe5631c6c31",
+  "scope": "Development-exposed qualification only; not hidden pilot or autonomous task outcome.",
+  "primary_task": {
+    "task_id": "spectreconsole__spectre-console-1338",
+    "shared_diagnostic_output_fix": "passed",
+    "correct_control": "passed",
+    "equivalent_control": "passed",
+    "wrong_control": "rejected_by_behavior_with_valid_native_integrity_report",
+    "qualified": false,
+    "reason": "STRATEGY_REPOSITORY_PRODUCTION_SOURCE_OMITTED",
+    "closure": "qualification/v3/closure.json",
+    "result_sha256": "2c71bbcb3d72e05ada8c3083839ed6a2f2fd9c379b1392faec631828e7dd0feb",
+    "further_evaluator_changes": false
+  },
+  "fallback_selection": {
+    "record": "qualification/fallback-availability.json",
+    "sha256": "b15267c30e25b0f14c8911034e9848b30317b85dcfea08729ec518e57fef2e01",
+    "serilog_2103": "Historical qualification exists; byte-identical adapter relocation was rejected because the bound SDK no longer exists. Existing SDK 8.0.302 is not the original 8.0.100.",
+    "environment_availability_ref": {
+      "path": "qualification/serilog-relocation/environment-availability.json",
+      "sha256": "296a99faf80040c1fe9d8e2a38baf9ae9e01e6d4f447f639df5ab0b65c1c9b17"
+    },
+    "restsharp_2241_and_polly_2164": "Historical task-specific qualifications exist, but current pilot does not consume their evaluator schema. No adapter was built.",
+    "selected_task": null
+  },
+  "arms": {
+    "B0": {"status": "not_started_no_admitted_common_task", "run_id": null, "model_calls": 0, "trajectory": null},
+    "B1": {"status": "not_started_no_admitted_common_task", "run_id": null, "model_calls": 0, "trajectory": null}
+  },
+  "five_metrics": {
+    "correct_delivery": {"status": "not_measured", "executed_tasks_per_arm": 0, "rate": null},
+    "human_and_wait": {"status": "not_measured", "human_active_minutes": null, "task_end_to_end_seconds": null},
+    "unit_success_cost": {"status": "undefined_no_successful_task_runs", "cost_per_success": null, "task_model_calls": 0, "platform_development_usage": null},
+    "repair_after_counterexample": {"status": "not_measured", "eligible_agent_attempts": 0, "rate": null, "qualification_controls_excluded": true},
+    "judgment_and_experience": {"status": "not_measured", "navigation_feedback_effect": null, "strategy_experience_enabled": false}
+  },
+  "measured_preparation_cost": {
+    "scope": "Independent qualification preparation; measured subset only, not total development cost or end-to-end wait.",
+    "historical_v1_v2_seconds": 284.906,
+    "this_bounded_fix_preparation_seconds": 52.281,
+    "this_bounded_fix_controls_seconds": 183.781,
+    "serilog_metadata_validation_seconds": 5.75,
+    "total_measured_subset_seconds": 526.718,
+    "task_model_calls": 0,
+    "platform_development_model_usage": null,
+    "human_active_minutes": null,
+    "other_inspection_seconds": null,
+    "currency_cost": null
+  },
+  "preserved_boundaries": {
+    "task_answers_changed": false,
+    "independent_acceptance_changed": false,
+    "model_prompt_changed": false,
+    "task_authority_changed": false,
+    "hidden_tasks_opened": false,
+    "historical_runs_restarted": false,
+    "solver_technical_rescue": false
+  },
+  "deferred": ["T2 real safe-input correction contrast", "T1 two-repository full acceptance", "child-owned graceful-stop outcome"],
+  "return_point": "This bounded preparation is closed. Reselect the existing T1/T2/T3 frontier using the missing reusable qualified environment as evidence; do not automatically extend 1338 or add an evaluator adapter. The real B0/B1 comparison remains undelivered.",
+  "prohibited_replays": ["1531", "1552"],
+  "why": "为什么要有它：资格控制、环境复用和产品模型行为各有独立结果；未启动不能伪造成两组失败或改善数据，停止条件也不能被下一项准备工作覆盖。"
+}
