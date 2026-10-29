@@ -1,0 +1,22 @@
+{
+  "status": "slice1_green_slice2_next",
+  "fixed_point": "05373a1",
+  "scope": "Two sequential red-green slices: navigation experiment admission and normal blocked Task Run outcome.",
+  "baseline_evidence": "artifacts/eval_driven_20261029/navigation-stagnation-ab-v1/b0-independent-audit.md",
+  "expected_effect": "Reject an unreachable navigation experiment before freezing; return a valid blocked outcome without hiding its evidence or claiming success.",
+  "seams": ["Repository pilot experiment admission and freeze", "execute_task_run(OpenTaskRun) through the real product entry"],
+  "resource_contract": "Use existing PatchWorkerConfiguration and one shared repository policy resolver for preflight and runtime. Check read, model-call, observation-byte and wall-time capacity separately; post-trigger reserve is not counted wholly as navigation reads.",
+  "verification": "Independent red/green evidence per slice, controlled-provider normal-entry composition, Standards and Spec review, then CI. No real model is needed to reproduce either defect.",
+  "slice1": {
+    "initial_red_command": ".venv/Scripts/python.exe -m pytest tests/unit/test_navigation_experiment_admission.py -q --tb=short",
+    "initial_red": "AttributeError: validate_navigation_experiment absent; exit 1, captured in this session tool output",
+    "entry_red": "Explicit resource worker rejected by repository-profile conflict before a run manifest was written; normal OpenTaskRun failed. The conflict was narrowed to preserve rejection of custom evaluators.",
+    "intermediate_repairs": ["Policy resolver default referenced a function-local constant; replaced with the existing policy literal", "Controlled-entry expected awaiting_approval; corrected to the existing awaiting_delivery contract"],
+    "green": "8 passed; resource admission and eight actual controlled navigations followed by a source read, candidate, check and finish",
+    "green_evidence": "artifacts/eval_driven_20261029/navigation-repair/slice1-green.xml",
+    "model_calls": "controlled provider only; zero real model calls"
+  },
+  "preserve": ["all old experiment inputs and results", "navigation threshold 8", "existing source and effect authority", "no replay of 1531, 1552 or the invalid Serilog B0"],
+  "return_point": "After both slices and CI are green, reselect the existing queue and qualify a fresh experiment version before any new real pair. Do not expand restoration architecture or evaluators.",
+  "why": "为什么要有它：当前已知失败各用独立反例验证，局部修复必须共同到达正常入口；实验预检与产品结果不能继续靠模型运行排错。"
+}

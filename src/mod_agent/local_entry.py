@@ -6201,6 +6201,27 @@ def _run_pre_graph_step(
             raise
 
 
+def repository_task_agent_policy(*, model_call_budget_policy="stage_and_total",
+                                 task_model_call_limit=None, selected_policy=None):
+    """Resolve repository execution resources for both admission and runtime.
+
+    为什么要有它：实验预检不能猜测构造默认值；显式worker读取预算须进入实际执行，模型总额度仍由任务设置控制。
+    """
+    policy = PatchAgentLoopPolicy(
+        max_total_model_turns=5 if model_call_budget_policy == "stage_and_total" else (task_model_call_limit or 5),
+        model_call_budget_policy=model_call_budget_policy,
+        require_source_inspection=False, finalize_after_first_observation=False,
+        enable_supporting_reads=True, allow_upstream_request=True, allow_batched_reads=True,
+        deduplicate_source_excerpts=False, reuse_covered_source_observations=False)
+    if selected_policy is not None:
+        if (selected_policy.model_call_budget_policy != policy.model_call_budget_policy
+                or selected_policy.max_total_model_turns != policy.max_total_model_turns):
+            raise LocalEntryError("REPOSITORY_WORKER_MODEL_BUDGET_CONFLICT")
+        policy = replace(policy, max_tool_rounds=selected_policy.max_tool_rounds,
+                         max_observation_bytes=selected_policy.max_observation_bytes)
+    return policy
+
+
 def _observed_product_write_status(apply_payloads, effect_events) -> bool | None:
     """Aggregate observed writes without turning missing Apply facts into zero."""
     values = [payload.get("actual_write_performed") if isinstance(payload, Mapping) else None
@@ -7078,7 +7099,10 @@ def run_local_request(
         from src.mod_agent.domain.csharp_repository import CSharpRepositoryAdapter
         from src.mod_agent.domain.csharp_repository_backend import CSharpRepositoryProfile
         repository_profile = CSharpRepositoryProfile.load(repository_profile_path)
-        if (patch_worker_configuration is not None or run_gtfo_runtime or game_folder_build_binding is not None
+        # 为什么要有它：只接受现有worker的资源设置；仓库验收器仍由原profile生成，不能借预算配置替换验收。
+        worker_evaluator_conflict = (patch_worker_configuration is not None
+            and patch_worker_configuration.behavior_evaluator() is not None)
+        if (worker_evaluator_conflict or run_gtfo_runtime or game_folder_build_binding is not None
                 or dependency_api_config is not None or objective_verification_command is not None
                 or compiled_artifact_inspection_profile is not None or allow_game_launch or allow_game_directory_write):
             raise LocalEntryError("RUN_REQUEST_REPOSITORY_PROFILE_CONFLICT")
@@ -7992,12 +8016,10 @@ def run_local_request(
             repository_backend = CSharpRepositoryBackend(profile_ref=repository_profile.reference,
                 source_root=target_copy, workspace_root=run_root,
                 output_root=run_root / "repository_validation", expected_fixed_inputs=repository_binding)
-            selected_policy = PatchAgentLoopPolicy(
-                max_total_model_turns=5 if model_call_budget_policy == STAGE_AND_TOTAL else (task_model_call_limit or 5),
+            selected_policy = repository_task_agent_policy(
+                task_model_call_limit=task_model_call_limit,
                 model_call_budget_policy=model_call_budget_policy,
-                require_source_inspection=False, finalize_after_first_observation=False,
-                enable_supporting_reads=True, allow_upstream_request=True, allow_batched_reads=True,
-                deduplicate_source_excerpts=False, reuse_covered_source_observations=False)
+                selected_policy=patch_worker_configuration.policy if patch_worker_configuration is not None else None)
             worker_path = run_root / "repository-worker.json"
             with worker_path.open("x", encoding="utf-8") as stream:
                 json.dump({"schema_version": "patch_worker_configuration_v1", "enable_recovery_loop": True,

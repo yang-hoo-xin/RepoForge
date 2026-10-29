@@ -13,6 +13,7 @@ from src.mod_agent.task_agent_v2_semantic_state import strip_working_state
 
 _SCHEMA = "task-agent-working-state.v1"
 _NAVIGATION_TOOLS = {"source_search", "source_read"}
+NAVIGATION_STAGNATION_THRESHOLD = 8
 
 
 def retain_model_statement(working, response, *, response_ref=None, source_boundary=None):
@@ -158,7 +159,7 @@ def update_working_state(previous, request, *, task_contract_ref, current_revisi
                 counts["executed_experiment_returns"] += 1
     value["consecutive_repeated_returns"] = streak
     value["consecutive_navigation_returns"] = navigation
-    navigation_only = navigation >= 8
+    navigation_only = navigation >= NAVIGATION_STAGNATION_THRESHOLD
     repeated_failure = (value.get("public_failure_repetition") or {}).get("same_visible_failure", False)
     value["stagnation"] = {"triggered": streak >= 3 or repeated_failure or navigation_only, "consecutive_repeated_returns": streak,
         "navigation_only": navigation_only, "consecutive_navigation_returns": navigation,

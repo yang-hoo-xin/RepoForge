@@ -441,6 +441,53 @@ def external_pilot_identity(profile, expected=None):
     return observed
 
 
+def validate_navigation_experiment(execution_config_ref, requirements, *, wall_seconds):
+    """Admit this registered experiment against the repository owner's resources.
+
+    为什么要有它：只核对模型总次数会漏掉三次读取默认值；按资源分量留出触发后的行动空间，不修改权限或阈值。
+    """
+    from dataclasses import asdict
+    from scripts.dsh_run_request import _configuration_arguments
+    from src.mod_agent.local_entry import repository_task_agent_policy
+    from src.mod_agent.patch_worker_configuration import PatchWorkerConfiguration
+    from src.mod_agent.task_agent_v2_working_state import NAVIGATION_STAGNATION_THRESHOLD
+
+    _verify(execution_config_ref)
+    _, options = _configuration_arguments(execution_config_ref["path"])
+    expected = {"evaluation_version", "threshold", "navigation_observation_bytes", "navigation_seconds", "post_trigger_reserve"}
+    if (not isinstance(requirements, dict) or set(requirements) != expected
+            or not isinstance(requirements["evaluation_version"], str) or not requirements["evaluation_version"].strip()
+            or type(requirements["threshold"]) is not int or requirements["threshold"] != NAVIGATION_STAGNATION_THRESHOLD
+            or "--repository-profile" not in options):
+        raise ValueError("NAVIGATION_EXPERIMENT_REQUIREMENTS_INVALID")
+    reserve = requirements["post_trigger_reserve"]
+    if (not isinstance(reserve, dict) or set(reserve) != {"reads", "model_calls", "observation_bytes", "seconds"}
+            or any(type(value) is not int or value < 1 for value in reserve.values())
+            or any(type(requirements[key]) is not int or requirements[key] < 1
+                   for key in ("navigation_observation_bytes", "navigation_seconds"))
+            or type(wall_seconds) is not int or wall_seconds < 1):
+        raise ValueError("NAVIGATION_EXPERIMENT_REQUIREMENTS_INVALID")
+    worker = PatchWorkerConfiguration.load(options["--patch-worker-config"]) if "--patch-worker-config" in options else None
+    policy = repository_task_agent_policy(
+        model_call_budget_policy=options.get("--model-call-budget-policy", "stage_and_total"),
+        task_model_call_limit=int(options["--task-model-call-limit"]) if "--task-model-call-limit" in options else None,
+        selected_policy=worker.policy if worker else None)
+    required = {"reads": NAVIGATION_STAGNATION_THRESHOLD + reserve["reads"],
+        "model_calls": NAVIGATION_STAGNATION_THRESHOLD + reserve["model_calls"],
+        "observation_bytes": requirements["navigation_observation_bytes"] + reserve["observation_bytes"],
+        "seconds": requirements["navigation_seconds"] + reserve["seconds"]}
+    capacity = {"reads": policy.max_tool_rounds, "model_calls": policy.max_total_model_turns,
+                "observation_bytes": policy.max_observation_bytes, "seconds": wall_seconds}
+    insufficient = [key for key in required if capacity[key] is not None and capacity[key] < required[key]]
+    if insufficient:
+        raise ValueError("NAVIGATION_EXPERIMENT_UNREACHABLE: " + ",".join(insufficient))
+    return {"status": "admitted", "evaluation_version": requirements["evaluation_version"],
+        "threshold": NAVIGATION_STAGNATION_THRESHOLD, "required": required, "capacity": capacity,
+        "effective_policy": asdict(policy), "execution_config_ref": execution_config_ref,
+        "worker_configuration_ref": worker.reference if worker else None,
+        "scope": "Configured capacity for the registered sequence, not a prediction of model behavior or execution speed."}
+
+
 def freeze(configuration_ref):
     config = read_bound_json(configuration_ref)
     native = native_reference_profile(config)
@@ -453,6 +500,11 @@ def freeze(configuration_ref):
         external_settings = yaml.safe_load(Path(config["settings_ref"]["path"]).read_text(encoding="utf-8"))
         validate_external_settings_credentials(external_settings)
     mode = config.get("mode", "matched_product_pair")
+    if "patch_worker_config_ref" in config:
+        _verify(config["patch_worker_config_ref"])
+    wall_seconds = config.get("wall_seconds", 1800)
+    if type(wall_seconds) is not int or wall_seconds < 1:
+        raise ValueError("PILOT_WALL_BUDGET_INVALID")
     if mode == "strategy_pair":
         return freeze_strategy_pair(configuration_ref, config)
     if mode not in {"matched_product_pair", "absolute_real_B", "native_reference"}:
@@ -514,7 +566,7 @@ def freeze(configuration_ref):
         base = {"schema_version": "repository_product_arm_plan_v1", "arm": arm,
                 "root": str(arm_root), "workspace": str(workspace), "source_root": str(source),
                 "source_before": original, "common_request_ref": common_ref,
-                "configuration_ref": configuration_ref, "wall_seconds": 1800,
+                "configuration_ref": configuration_ref, "wall_seconds": wall_seconds,
                 "model_identity": identity, "allowed_edit_paths": profile.data["allowed_edit_paths"],
                 "public_profile_ref": profile.reference, "controller_ref": _ref(__file__),
                 "environment": config["environment"], "evaluator_ref": qualification["evaluator_ref"]}
@@ -604,20 +656,29 @@ def freeze(configuration_ref):
                 yaml.safe_dump(settings, stream, allow_unicode=True, sort_keys=False)
             arguments = ["--target-project", str(source), "--workspace-root", str(arm_root / "runs"),
                 "--settings", str(settings_path), "--repository-profile", profile.reference["path"],
-                *model_arguments, "--model-call-budget-policy", "meter_only",
+                *model_arguments, "--model-call-budget-policy", config.get("model_call_budget_policy", "meter_only"),
                 "--source-retrieval", "rg_live", "--confirm-isolated-write", "--allow-build", "--defer-approval",
                 "--technical-executor", "task_agent", "--task-agent-protocol", "v2",
                 "--task-agent-semantic-state", semantic_state,
                 "--constraint-policy", "source_priority_v1", "--task-agent-edit-paths", json.dumps(profile.data["allowed_edit_paths"])]
             if experience_ref is not None:
                 arguments.extend(["--task-agent-experience-config", experience_ref["path"]])
+            if "task_model_call_limit" in config:
+                arguments.extend(["--task-model-call-limit", str(config["task_model_call_limit"])])
+            if "patch_worker_config_ref" in config:
+                arguments.extend(["--patch-worker-config", config["patch_worker_config_ref"]["path"]])
             execution = _save(arm_root / "base-execution.json", {"arguments": arguments})
+            if "navigation_feedback_experiment" in config:
+                base["navigation_experiment_admission"] = validate_navigation_experiment(
+                    execution, config["navigation_feedback_experiment"], wall_seconds=wall_seconds)
             open_command = OpenTaskRun(execution_config_ref=execution, intent=common).bind()
             selected = open_command.execution_config_ref["path"]
             business = list(open_command.business_argv)
             _, options = _configuration_arguments(selected)
             run_root = arm_root / "runs" / options["--run-id"]
             bound = [_ref(selected), _ref(settings_path), profile.reference, common_ref, configuration_ref, _ref(__file__)]
+            if "--patch-worker-config" in options:
+                bound.append(_ref(options["--patch-worker-config"]))
             if external is not None:
                 bound.append(config["external_profile_ref"])
             if experience_ref is not None:
