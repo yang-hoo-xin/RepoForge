@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "C:\Users\10160\.codex\worktrees\semantic-work-state\rag_capability_mainline\artifacts\eval_driven_20261029\navigation-stagnation-ab-v2\run_pair.py", line 362, in <module>
+    prepare(args.path)
+  File "C:\Users\10160\.codex\worktrees\semantic-work-state\rag_capability_mainline\artifacts\eval_driven_20261029\navigation-stagnation-ab-v2\run_pair.py", line 154, in prepare
+    disk_before = disk_admit(root.parent, 3)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\10160\.codex\worktrees\semantic-work-state\rag_capability_mainline\artifacts\eval_driven_20261029\navigation-stagnation-ab-v2\run_pair.py", line 87, in disk_admit
+    raise ValueError(f"DISK_BOUNDARY: available={free}, required_gib={gib}; no old data deleted")
+ValueError: DISK_BOUNDARY: available=2344992768, required_gib=3; no old data deleted

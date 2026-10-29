@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "C:\Users\10160\.codex\worktrees\semantic-work-state\rag_capability_mainline\artifacts\eval_driven_20261029\navigation-stagnation-ab-v2\run_pair.py", line 358, in <module>
+    prepare(args.path)
+  File "C:\Users\10160\.codex\worktrees\semantic-work-state\rag_capability_mainline\artifacts\eval_driven_20261029\navigation-stagnation-ab-v2\run_pair.py", line 137, in prepare
+    raise ValueError("PREPARED_SOURCE_CHANGED")
+ValueError: PREPARED_SOURCE_CHANGED

@@ -1,0 +1,22 @@
+{
+  "command": [
+    "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\.venv\\Scripts\\python.exe",
+    "-X",
+    "utf8",
+    "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\run_pair.py",
+    "prepare",
+    "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\configuration.json"
+  ],
+  "exit_code": 1,
+  "wall_seconds": 3.125,
+  "stdout_ref": {
+    "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\freeze.stdout.txt",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "stderr_ref": {
+    "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\freeze.stderr.txt",
+    "sha256": "27177c1e9d6f3cb433f6a8bc0c39e133972b3aa1acc13b2e6c9930f82e5b8e19"
+  },
+  "pair_exists": false,
+  "model_calls": 0
+}

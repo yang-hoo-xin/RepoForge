@@ -1,0 +1,61 @@
+{
+  "evaluation_version": "navigation-stagnation-ab-v2-restsharp-2241",
+  "status": "task_qualified_freeze_blocked_by_storage_no_model_dispatch",
+  "requested_steps": {
+    "verify_existing_qualified_development_task": "completed",
+    "register_new_version_and_freeze_pair": "registered; freeze rejected before pair/run allocation",
+    "run_each_arm_once_and_measure": "not_started"
+  },
+  "task": "restsharp__restsharp-2241",
+  "task_admission": "qualification-reuse-restsharp.json",
+  "owner_compatibility": "restsharp-owner-compatibility.json",
+  "public_preparation_ref": {"path": "C:/tmp/rf-nav2-public/public-preparation.json", "sha256": "875283f7a9e77e31cb07f22993ef7353dfd91b601be7c08f5c945e145acfe802"},
+  "freeze_attempts": [
+    {
+      "record": "freeze-attempt.json",
+      "result": "PREPARED_SOURCE_CHANGED",
+      "diagnosis": "Preparation records 388 public files; runtime source projection excludes 10 .idea metadata files. There were zero changed shared file hashes and zero unexpected files.",
+      "resolution": "Before any model dispatch, compare all prepared files by their actual bytes; retain the runtime's existing projection separately.",
+      "wall_seconds": 3.125,
+      "runner_hash_at_attempt": null,
+      "version_note": "This preparatory fix is preserved in the conversation change record; the first capture did not bind a runner hash. No pair or model execution was created."
+    },
+    {
+      "record": "freeze-attempt2.json",
+      "result": "DISK_BOUNDARY",
+      "free_bytes_at_rejection": 2344992768,
+      "required_free_bytes": 3221225472,
+      "shortfall_bytes": 876232704,
+      "wall_seconds": 4.0,
+      "pair_root_created": false
+    }
+  ],
+  "preparation_facts": {
+    "public_inputs_bytes": 3519057,
+    "public_preparation_seconds": 8.65109119999397,
+    "owner_compatibility_verification_seconds": 6.560925400000997,
+    "old_controls_rerun": false,
+    "product_code_modified": false,
+    "historical_runs_restarted": false,
+    "unexposed_tasks_opened": false,
+    "private_acceptance_inputs_supplied_to_product_model": false,
+    "old_data_deleted": false,
+    "other_disk_usage_change_cause": "unknown; not attributed to this 3.36 MiB public preparation",
+    "runner_review_fixes": ["Explicit task_total_only worker policy", "Requirements version and common conditions matched to intent", "Allow documentation-only HEAD changes while retaining exact common runtime revision checks"]
+  },
+  "arms": {
+    "B0": {"status": "not_started_storage_admission_denied", "run_id": null, "model_calls": 0},
+    "B1": {"status": "not_started_storage_admission_denied", "run_id": null, "model_calls": 0}
+  },
+  "five_categories": {
+    "correct_delivery": {"status": "not_measured", "started_attempts": 0, "confirmed_deliveries": 0, "rate": null},
+    "human_and_wait": {"human_active_minutes": null, "task_wall_seconds": null, "scope": "Preparation time is separate and only recorded measured portions are known."},
+    "unit_success_cost": {"task_model_calls": 0, "task_input_tokens": 0, "task_output_tokens": 0, "per_success_cost": null, "platform_development_usage": null, "money": null},
+    "counterexample_repair": {"K": 0, "k": 0, "rate": null, "reason": "No task-model feedback or candidate execution occurred."},
+    "judgment_and_experience": {"navigation_feedback_exposure": false, "navigation_effect": "not_measured", "experience_gain": "not_measured"}
+  },
+  "technical_decision": "Keep the registered mechanism and threshold unchanged; no behavioral adoption or rejection is supported. Storage admission must be restored before this unstarted version can be frozen.",
+  "resume_condition": "At least 3 GiB free on the registered execution drive, then revalidate all pinned originals and perform a fresh successful freeze. This is preparation continuation, not replay of a model run; retain both failed preparation attempts.",
+  "return_point": "Report the storage blocker and retain the existing T1/T2/stop-outcome queue. No evaluator framework, hidden task opening, threshold reduction or old-run restart.",
+  "why": "为什么要有它：已有合格任务和已登记方案不等于运行已发生；资源不足必须在调用前停止，不能把未运行补写成模型失败或收益数据。"
+}

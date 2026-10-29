@@ -4,3 +4,4 @@ tests/fixtures/requirement_findings_duplicate_relation_indexes.json -text
 
 # 为什么要有它：本次实验记录与脚本含冻结哈希引用，保留原字节，并按 CRLF 原件识别行尾；仍检查实际尾随空格。
 artifacts/eval_driven_20261029/navigation-stagnation-ab-v1/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+artifacts/eval_driven_20261029/navigation-stagnation-ab-v2/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

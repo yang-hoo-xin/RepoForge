@@ -6,6 +6,15 @@
   "baseline_run_id": "dsh_6a255afa9b804a04a46862a64577642e",
   "behavior": "Eight consecutive executed source_search/source_read results at the same boundary expose advisory navigation feedback. Other returned actions or a changed boundary reset the window; replay does not count twice. The feedback neither infers understanding nor changes authority.",
   "threshold_status": "experimental_not_validated_by_model_results",
+  "next_comparison": {
+    "evaluation_version": "navigation-stagnation-ab-v2-restsharp-2241",
+    "status": "task_qualified_freeze_blocked_by_storage",
+    "record": "artifacts/eval_driven_20261029/navigation-stagnation-ab-v2/result.json",
+    "B0_started": false,
+    "B1_started": false,
+    "model_calls": 0,
+    "scope": "New development-exposed task, original qualification verified; actual pair allocation rejected below the registered 3 GiB free-space boundary."
+  },
   "bounded_repair": {
     "status": "complete_ci_green",
     "record": "docs/specs/navigation-stagnation-repair.json",

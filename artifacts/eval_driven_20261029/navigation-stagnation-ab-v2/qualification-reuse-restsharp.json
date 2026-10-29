@@ -1,0 +1,93 @@
+{
+  "schema_version": "existing_qualification_reuse_admission.v1",
+  "status": "admitted",
+  "task": "restsharp__restsharp-2241",
+  "scope": "One new development-exposed B0/B1 navigation-feedback diagnostic; not an unseen capability claim. Each new run must use fresh execution config, run ID, source isolation and output.",
+  "exposure_registration_ref": {
+    "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\docs\\evidence\\restsharp-revision-trial.json",
+    "sha256": "b308060ccbe4071dc76c454b1d40f055e7d37bafaf259d8a71c02155ae6d2200"
+  },
+  "source": {
+    "path": "C:/tmp/rfext-restsharp-2241",
+    "base_commit": "dd52ff6cd18cce2a74475f97374d431280ac10cf",
+    "head_verified": true,
+    "working_tree_clean": true
+  },
+  "public_input_refs": {
+    "public_problem_ref": {
+      "path": "C:\\tmp\\rfext-restsharp-2241-task\\solver-input\\problem_statement.txt",
+      "sha256": "049c44efeeec3b9ecc17ddadb10cef97e5f4ea4ad5f7156a9f05efb07b98038c"
+    },
+    "public_reproduction_ref": {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261022\\restsharp-2241-public-reproduction-v2.patch",
+      "sha256": "efc759b1eeec958d1c8f77685b694f84e0696cc7bec4cfdb2814909fb252b96b"
+    },
+    "environment_patch_ref": {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261022\\restsharp-2241-public-environment.patch",
+      "sha256": "abd837296cd97f3a83c6eabbd38a516247b8e47df25edcc5892f8fb89b9e6189"
+    }
+  },
+  "repository_profile_ref": {
+    "path": "C:\\tmp\\rfext-restsharp-v2-b1\\repository-profile.json",
+    "sha256": "de5e1aab3ced507f4f12d78239b3942b4af25f8a90fc7f59e2704bf26bfb968b"
+  },
+  "sdk_ref": {
+    "path": "C:\\tmp\\rf-dotnet-8.0.302\\sdk\\dotnet.exe",
+    "sha256": "c6e330c1e3895deab7b47b725822a4453e50dd0b79a148dceaf8ba3a749f8412"
+  },
+  "sdk_version_verified": "8.0.302",
+  "qualification_ref": {
+    "path": "C:\\tmp\\rfext-restsharp-2241-public-qualification-v2\\qualification.json",
+    "sha256": "28ff3f2c1802ed8c8a0e32bb9a102b001ca545c3002f40b74e9806bd70630d07"
+  },
+  "independent_qualification_ref": {
+    "path": "C:\\tmp\\rfext-restsharp-2241-qualification-v3\\qualification.json",
+    "sha256": "3be131ccab5dde1a753b2d77a72c26be7cd7805e2faa70b6126c605a558683a2"
+  },
+  "original_evaluator_ref": {
+    "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261022\\evaluate_restsharp_v2_candidate.py",
+    "sha256": "59fa8d39b2a1a02b37f48f625f954c40ac917585a99c30a8607be37d2646ba25"
+  },
+  "owner_registration_ref": {
+    "path": "C:\\tmp\\rfext-restsharp-v2-b1-independent-diagnostic\\result-reporting-v2.json",
+    "sha256": "a6cabc20a2f5ef0ba69ddf16dbcf9e906a5382ef4124d4b0c2de7fbc4abb5136"
+  },
+  "qualification_helper_ref": {
+    "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261022\\qualify_restsharp_2241.py",
+    "sha256": "d34bae928cd79c47ee504b08586e2b41b85142061ffbe86d72970d0f4c73b632"
+  },
+  "common_helper_ref": {
+    "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261021\\qualify_polly_2164.py",
+    "sha256": "b1f04c80026aaa25c88c253c1e3124023d1a9d580787b88b06954a3e5505ac1d"
+  },
+  "verification": {
+    "entry": "Load original_evaluator_ref with importlib.util.spec_from_file_location, exec_module, then call verified_qualification(); never call qualification main().",
+    "actual_result": "passed",
+    "bound_reports_and_process_logs_verified": true,
+    "controls_rerun": false,
+    "shared_run_evidence_entry": "Registered historical config and run ID queried with --inspect-run --view evidence --format json; exit 0; no execution restarted."
+  },
+  "final_grade": {
+    "argv": [
+      "<configured Python>",
+      "-B",
+      "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261022\\evaluate_restsharp_v2_candidate.py",
+      "--execution-record",
+      "<new terminal native execution.json>",
+      "--candidate-ref",
+      "<new native candidate_ref>",
+      "--output-root",
+      "<fresh independent output directory>"
+    ],
+    "constraints": "Final-only independent evaluator. Normal entry requires known terminal native execution, no unknown effects, model submission provenance, unchanged source/context, exact baseline production-source identity and allowed edits. It verifies qualification before grading. Do not use diagnostic-final-check for a normal new run. Public model input must not contain evaluator, qualification artifacts, private outcomes or answer patches.",
+    "execution_completed": false
+  },
+  "limitations": [
+    "No new evaluator framework or adapter; current generic pilot evaluator schema is not the selected grade entry.",
+    "Original reporting-corrected owner is pinned by aggregation_script_ref. Current workspace evaluator copy differs and must not silently substitute.",
+    "The SDK and qualified evidence were verified; no restore/build/test was rerun during admission. Final runtime environment failures must remain distinct from candidate failure."
+  ],
+  "model_calls": 0,
+  "historical_runs_restarted": false,
+  "product_code_edits": false
+}

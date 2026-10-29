@@ -1,0 +1,748 @@
+{
+  "schema_version": "restsharp_original_owner_compatibility.v1",
+  "status": "compatible_for_fixed_ollama_v2_with_valid_final_candidate",
+  "original_evaluator_ref": {
+    "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261022\\evaluate_restsharp_v2_candidate.py",
+    "sha256": "59fa8d39b2a1a02b37f48f625f954c40ac917585a99c30a8607be37d2646ba25"
+  },
+  "python_executable_ref": {
+    "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\.venv\\Scripts\\python.exe",
+    "sha256": "864530d708039551a2c672ddd65e5900fbc08b0981479679723a5b468f8082bc"
+  },
+  "imported_owner_file_refs": [
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261021\\qualify_polly_2164.py",
+      "sha256": "b1f04c80026aaa25c88c253c1e3124023d1a9d580787b88b06954a3e5505ac1d"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261022\\evaluate_restsharp_v2_candidate.py",
+      "sha256": "59fa8d39b2a1a02b37f48f625f954c40ac917585a99c30a8607be37d2646ba25"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261022\\qualify_restsharp_2241.py",
+      "sha256": "d34bae928cd79c47ee504b08586e2b41b85142061ffbe86d72970d0f4c73b632"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\__init__.py",
+      "sha256": "eca7dd2d5d7efed27ced9abb762ede267d2c4678319a734e0b7a474fc9030aed"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\core\\__init__.py",
+      "sha256": "b4beaec7a6d67910bfa061f2451708eb509a97eaa0be7e1b5eb5d584fafa3edf"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\core\\query_engine\\__init__.py",
+      "sha256": "fc09aa5019500d8f06344f30173c53dea91e7f2bebd687b651a3fc9cabaa3cea"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\core\\query_engine\\dense_retriever.py",
+      "sha256": "73bd3007fee58fdb006cec88b7cca3c8a917ba22cbe1dc8903aa931695b786a8"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\core\\query_engine\\fusion.py",
+      "sha256": "e284265a4884365b8cf3536b3b02f590fcb498036365e43533d6f44e56fa71fe"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\core\\query_engine\\hybrid_search.py",
+      "sha256": "4176138583a8cfc25d3ede8f4817e96bd24ada32a5912c3134a20fb97560abf6"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\core\\query_engine\\query_processor.py",
+      "sha256": "c9940b7311604a357f7af14c20c6b66f401e8ec18d16127a0ed1d12cacd17314"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\core\\query_engine\\sparse_retriever.py",
+      "sha256": "15fba5820c775c39261743edcf1e3828a1be57d362751ad46a0ad39cfe67a6fb"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\core\\query_engine\\tokenization.py",
+      "sha256": "daa2e75af7d4d5ac39c8ea36054e7711eda1ea2ed52e3a0091eb2e53b6237951"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\core\\settings.py",
+      "sha256": "57041c01350d42d31eafefba8c0220a68c2b188ef44328613f09a4697eb675cc"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\core\\trace\\__init__.py",
+      "sha256": "03de2d42a7fc7a5b927e92136b873337fd9b824833a8da9f34f1726fe6d59b53"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\core\\trace\\execution_trace.py",
+      "sha256": "8c8d8a2fa6bd2af0a8dfd85d2594d06f2f2098e5eba6daebf1b224daa2a3b8fc"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\core\\trace\\trace_collector.py",
+      "sha256": "82f3bc59677f21242793fb6241e952ab1d87adb6efc4d257af3ef80ef0d3ba3c"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\core\\trace\\trace_context.py",
+      "sha256": "c3697e10a6d729801a53540defe421443e6c70becb68e6b98973a0918ef4855d"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\core\\types.py",
+      "sha256": "a750acdfa9ed40786f2b95d040ebc93ad8727d9cd6cc6ce5735350bfbc74aeb4"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\libs\\__init__.py",
+      "sha256": "a9ffe61fce7a99b6fa75b4f12fdd5bae44dde4522b14f59961a9c124420bfea6"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\libs\\llm\\__init__.py",
+      "sha256": "7991ab94233d4fb9051f782d0f2f422e9c340c4ce5714172bf39b4b12f356126"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\libs\\llm\\agent_turn.py",
+      "sha256": "6b794753d3e6090655b5a3ab06ff6e8341f182da2bd36f666bbee2c9a97b58ac"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\libs\\llm\\azure_llm.py",
+      "sha256": "9632d6028d54d8e240c56182af7e9824c61074b3594a91d5b52bdb970c1fc797"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\libs\\llm\\azure_vision_llm.py",
+      "sha256": "57e6c446b0e5ac8d6852253b0ad325041c12be52b808dd937e8804b85be0f711"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\libs\\llm\\base_llm.py",
+      "sha256": "f51782e9e1866545bc80ce0284651416e6036a4e09f7560678796715abff7887"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\libs\\llm\\base_vision_llm.py",
+      "sha256": "994898bdb88467c7ecbb964d122cd6f3a15d6fc7826fad79e9603ff3f7c09ee7"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\libs\\llm\\deepseek_llm.py",
+      "sha256": "8786e4867792220db32a389ab08637b5912e294c463d5c1785fe6dfa4bd6788a"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\libs\\llm\\llm_factory.py",
+      "sha256": "5367509768f3936fa8daa6c6489a7a09a46c26063dbbb8e2eac75a1e93c45f51"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\libs\\llm\\ollama_llm.py",
+      "sha256": "17f37bb8add98c9c91b2b2c11afb52a47d1cfaea38aa55d4c4f0aa6d3f4e4514"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\libs\\llm\\ollama_vision_llm.py",
+      "sha256": "c62365a38ceb84d000171a558fe1c64a431c10139b3a982a8d84461b6bac729d"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\libs\\llm\\openai_llm.py",
+      "sha256": "7f1fbbc2fc192884eb394181ded14452438dd2b8b972cb3c1f2ba8c3fb43efc5"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\libs\\llm\\openai_vision_llm.py",
+      "sha256": "fb4fd0ec95f492c7b27c38b2e8dce7206d21dc97a6dd72c89bcd87ec2f2b9dfe"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\libs\\llm\\transport_observation.py",
+      "sha256": "d9d0eb670f697b5ab942da1f9d16f41601e4a3d0b3642587ddc282e53626e222"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\__init__.py",
+      "sha256": "a9da13eb7fc7a0f71b808cabc4ab7552a436a30af66c86a5c24f11e2a7b41ae5"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\action_identity.py",
+      "sha256": "4b9ef749bf76410d6b23ee022719dfa98a1b491b77f8858c5688cd5a0dcba987"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\artifact_semantics.py",
+      "sha256": "ad05c8937e9cf9e11ba83660935ec615300523963de7e63d045c495b5df545be"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\artifacts\\__init__.py",
+      "sha256": "9a4f5349adc4e6b0876d39d321dbe3efb1d24046bdc3d33996af4050384d5bca"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\artifacts\\envelope.py",
+      "sha256": "90a887f6f6b90fbc044277e965c85eb10e6daff0d928ed4257d1df52a5fc3a72"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\artifacts\\freshness.py",
+      "sha256": "0a38928d4ef871b7fce29a98a46c891d48d4a0b19f64ce3022a4ed6109a0ae0a"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\artifacts\\registry.py",
+      "sha256": "b1601d70042a8d6e1801b666c387f136d855a9f69bb8363010982803a8a4062f"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\artifacts\\store.py",
+      "sha256": "2e90bfd4b2ef238b9b43569af7121f8b9f7cc51366fa2fc2245b90144cbaa579"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\bindings\\__init__.py",
+      "sha256": "4f9aad49a2a418c91a4f3ae8e5cc23aae382442308f4eaaa9123594cc74f20a3"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\bindings\\resolver.py",
+      "sha256": "05cdf4636c49b5d18832de4f3c425664cffd0de926c0b1f8eacb6319ff4bcfa8"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\bindings\\runtime_resolution.py",
+      "sha256": "751b3ad634d9622b9cd46b7fce8f654bd451e6e28685aa68883162864ecdc338"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\build\\__init__.py",
+      "sha256": "1d1c457b77125e1c1936a67c3eb2399b9070f9f5a8d87fe12ad675bd754c5fcd"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\build\\adapter.py",
+      "sha256": "79f014eaee42563a0866bfffb3ff8fcdaae6699aabdfad717703d119c3f06900"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\build\\dependencies.py",
+      "sha256": "003a854783f8cbb8964761ce1c22f288c97cee5d04fa330f2f2df5a8a1a8ce96"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\build\\nuget.py",
+      "sha256": "ff5103225c7a2203d6e39cdf684e900352c7bc57d39ebcbc97e7dedb871fca05"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\candidate_execution.py",
+      "sha256": "7e8ef378a2e738c9a4d26d8cd09b00159216e3d735f268ebb33bc7abe5285afb"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\comparison_checkpoint.py",
+      "sha256": "21ffb05ea0a319aa21268ef5aace2be6c24b8dcb536bf62e7bac0119b6fe437e"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\current_candidate.py",
+      "sha256": "b0a8afc539f760bc0acc97207b3692144b0183cf19d09732fbe6d0604ea8eb63"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\domain\\__init__.py",
+      "sha256": "437fedea4c49b2e6c1d974f08b4a8ba09441632e5f4221e58556317d1e74cab7"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\domain\\gtfo.py",
+      "sha256": "e00bfa4d6e9658a03bbef5b427077b4951313798aa4c74b21befac9ecf755b70"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\domain\\models.py",
+      "sha256": "5b156f49d40241a6068f52a6c6b1f6c006e3c44c9b891566be7a44a5f86ec3fc"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\domain\\unsupported.py",
+      "sha256": "5966fecab857bd7661d1c4b7066a7f85c94771c3e164d2a641b367ca8186db05"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\edit_authority_capabilities.py",
+      "sha256": "4cca7dbed95ff7e6e711f1d6ba2a79d0b488325de56a83269806d057876567f1"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\errors.py",
+      "sha256": "46e8961c40df90c0fd135bc422eb7a6ecc0dd80af293fb271e151040df51306f"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evaluation\\__init__.py",
+      "sha256": "f85c104cbdf8d66ae034200a8c587fa193b6c53becebfb57aa62c25a00ea02e9"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evaluation\\agent_quality.py",
+      "sha256": "f50400c0789dfcd1464d8ea2c0faed509493a5568095775ef76ae9264ccf5f11"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evaluation\\arm_a.py",
+      "sha256": "016820e7fcbd8f90eae084cfe4ee39bf1e8d2a20d9dc9e2aca12b5533bc4d86a"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evaluation\\gate.py",
+      "sha256": "628de1e10ec06a08d02795ea1a34daabf61e3ec74f1c08411ae03a78f7526434"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evaluation\\hidden_golden.py",
+      "sha256": "d2bc564dcca1776c65664e39b12982992547fee365643c39d0b2e59a03c70bcc"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evaluation\\quality_policy.py",
+      "sha256": "43ea5d7a95b65844d37c595a2128fc80d983a0af8e6d9d34eab7d6ab4c2d4eea"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evaluation\\retrieval_regression.py",
+      "sha256": "f831ca2abb1fe59d8e29b7b1ffcaa5678ef61ef65a80b971da90ca2fe4f851bc"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\__init__.py",
+      "sha256": "c0521a3281889c523bb1ac9eb638fedcbc86b8c16c1934df20af3a493f65ee3f"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\calibration.py",
+      "sha256": "c245efaa9c6a1fa540a7ba850b80012b72ac38c938df6de840a51d4429b12cc7"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\compilation_candidate.py",
+      "sha256": "08828c676324324e1dbb91ba8979982ec821aec097a62dffa23d786fa42a4fb5"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\dense.py",
+      "sha256": "83b681cf5cc9b6352e8d321102ced06c5017dddf765eb9c0f19179584b127c1f"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\discovery.py",
+      "sha256": "534c0d9f88c261430854bc53039ad068dc50f12d931e6da4c0b905b0f0e9f5ef"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\discovery_contract.py",
+      "sha256": "4791e3fdc826ac93e5080fe2f5286b01dac2c24e6a7dbc881c188e46309a6995"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\discovery_loop.py",
+      "sha256": "d7f1c3f6afd86dd1c1af4779dcad9bef0999b81262fae9e0685babb58b0bce98"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\discovery_tools.py",
+      "sha256": "182c3c7de4bf5675e9728a797cc01c6fb52302f7b0da6f8b33c4801e98ca5695"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\dotnet_metadata.py",
+      "sha256": "09c95c2bb59413f70d113f83b84da183a2f9bb2d108a50ae64086bbd6f124add"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\gtfo_r8.py",
+      "sha256": "3434e2c93849321b0ead34d170b21dd9db0e11c224451484dcfeed3c157490f8"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\hook_discovery.py",
+      "sha256": "4293f93cc7057f5b38f7642dc59a9aa1442415d09707283eba3acfe5b7455434"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\identity.py",
+      "sha256": "4e7a1786fa344572f7279e84a3922ccbd49ab06f9ed98aea0f7e7aec0b20dc89"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\model_view.py",
+      "sha256": "7bfe0d95319be47f557f212b281e387d02a762629e4e18319139aef89ee68bda"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\models.py",
+      "sha256": "d6d13710a57220981760c07808b8c148a66c5a901a97a11ad37b75fb2cbb704f"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\native_findings_contract.py",
+      "sha256": "d3dd7f7f5a1d33128aaf6735c328121bb6f0bcfd78b70a55a54c19f012f755cc"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\optimization_policy.py",
+      "sha256": "e032579bd64b642c4d315579ba8fa238b2372d8883f1c18ca1d59c2ac80266e0"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\r8_il.py",
+      "sha256": "91d7915f764471976e928aacc36d720ab9d65bc1b19d98236244b1af990a1d48"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\readiness.py",
+      "sha256": "8ccc13fe205b4e63f71d17552d609e0406d48f07176ee1680bb226a28463571e"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\reassessment.py",
+      "sha256": "64465cc9deccf41b51af4180e0d49b09c14bd39f081c5ec01c220f2ec9b0a684"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\requirement_coverage.py",
+      "sha256": "24c5b7a6a58e7925a63e4824d9f03824a85a7521f01f8daed2e274216a2bbe52"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\requirement_coverage_provider.py",
+      "sha256": "87f92f8508b3b5ff6dd918efaf392142cc5fa2d36f563f6b8d5a86dd5bb83a5c"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\retriever.py",
+      "sha256": "4091697757d1e40588e376619ba64803bf9654ee4619e1ec8f77d3b7b17c5632"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\rg_live.py",
+      "sha256": "a5630883deff80f0e7f1c37629566a90471ff3b0a3a514eaed7065c4b4eb148c"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\small_project_context.py",
+      "sha256": "27864876772a502de3076750e01a26ac5525aaf153061fcf59a6e36d7aea1e8f"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\source_view.py",
+      "sha256": "cde591a13d8660f91811fae1ce6b459bec9bf7e8727156b5f8811f5542111322"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\evidence\\source_window.py",
+      "sha256": "0773c137f44fca7f5038cc466598602b08984f6b5615dde828d7391cd542e4a9"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\execution\\__init__.py",
+      "sha256": "15cddc5a2f07b627a470e4f4b9e7555fe44450949f6791d25cf8b1efd8260e50"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\execution\\patch_apply.py",
+      "sha256": "d53ddfdafb9ec00f8345e7b022039d8dae904f9bbf73b9d9927a499d519139a3"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\fresh_coverage.py",
+      "sha256": "5f235a1b4f00239ab9d5a4fed52d292c79a6b542dee811039a466ff0083544de"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\fresh_planning_continuation.py",
+      "sha256": "823a2e1d63e412ef940e051551e99f6c441ef9f28606b09eb81e9a4051cc80b7"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\git\\__init__.py",
+      "sha256": "f51670d996d36c41f01ccf46f02072c591dd770275b9834c3c752b0003c167aa"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\git\\admission.py",
+      "sha256": "7395cd3bd713221b6fa6af3c02b61ec1ff11a390619ba0695e0faa9f9fe03b09"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\git\\repository.py",
+      "sha256": "b6e64e75045e82b9413f56c371ecd40f22613a4d56c1813a9be9fc54f782bcf4"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\knowledge\\__init__.py",
+      "sha256": "04af0c1e1c9f9711a5a875fa517784f8eccbd3dc4effbbdf7c1bc0a47aaecc2e"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\knowledge\\bm25_indexer.py",
+      "sha256": "49985645fb18287058ccc9068b93cf80ac982fb934b49dce5ea428291c9bc316"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\knowledge\\collection_resolver.py",
+      "sha256": "c032d576171cf40fe2ee3ff3a456f7b9a1aa433d48908f1b5f67c1b5ee2d211b"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\knowledge\\database.py",
+      "sha256": "1e548a1df4822f5853b0520ccaf9bd7333d8e9301a1048c2b20333bcf2833fb9"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\knowledge\\indexer.py",
+      "sha256": "b2713d4a3406dad144cbe474ca6a22f11deaa9cc227d4a0b96daee54d4d6a25f"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\knowledge\\models.py",
+      "sha256": "b4d51d31f0f9e039994aee67d6546250799d2142a7971ad1e1db78b9879b659e"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\knowledge\\source_discovery.py",
+      "sha256": "9c6c6a5493082816f14169620cd67d9ff5414bceffe022cd64cf4299d5881030"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\knowledge\\source_registry.py",
+      "sha256": "b3fc3df1a21c348831bb2b7a5ded4449417ff1677d21ddd66d71c98567112548"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\knowledge\\symbol_indexer.py",
+      "sha256": "24429245ecde4d33ccce0818c0183a0e86ad50b9ce09af56828e4c6d4ff7f0b9"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\local_entry.py",
+      "sha256": "ea714add346af8d51c4156aa752e30b9b50d3ff4c21fe38444e850c4ecf8e767"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\model_admission.py",
+      "sha256": "a8424c0d8da50f90335e4081f2ff32c2b5784052243339ed643bd5524315a402"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\model_call_budget.py",
+      "sha256": "1b43e34600f3e75ceca99af0323fdb985d9b7bce44f105bc43529c47dccd4a81"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\model_qualification.py",
+      "sha256": "bc469823f3c0d0998ac95b7e448a4ae8d0f5021021cd0c8641ac80841e75eec9"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\patch_upstream_configuration.py",
+      "sha256": "64acf8b472a3cda3b346501bc91153e8d8b6ddfe240ca8d94ea0b4fed309aa9d"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\patch_worker_configuration.py",
+      "sha256": "ad161a3ab6ee409fd79e6f3ba6e55383540c4889d9659e1db80e59f66f6f1d0e"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\performance\\__init__.py",
+      "sha256": "305a8899b21b30db5db90177101033121df089de56148aee74799498fa206c28"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\performance\\budget.py",
+      "sha256": "9b0725f295aaff1a81fb23bfdd256ff3e4f4376a4070daf5e5a02e39fbeccaad"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\planning\\__init__.py",
+      "sha256": "b9aad72a3b1b202171464bba6c0071d3e83cd0173689345f3185d28fabbc2a01"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\planning\\candidate_scope.py",
+      "sha256": "ef8e828d56d7865852cf95aae2b0211978aead589c3a458829d66082dc29ee1d"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\planning\\constraint_context.py",
+      "sha256": "10c00df93215100473e97702150fd8828507c760a10a32f30bc8592e4a66a44d"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\planning\\evidence_requirements.py",
+      "sha256": "7f473a7a2719d2f6a8921b97032fc23760f2092c5856372ee8dbb9bb79062feb"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\planning\\feature_spec.py",
+      "sha256": "a32357eaca64fe23564ef48392865341b4cf8a2c55311b5dea00ba093eba3a61"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\planning\\implementation_plan.py",
+      "sha256": "5177d39621d808504aaabcb13eda94e0f76db7847e649104ae46e65c434c1fb0"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\planning\\model_selection.py",
+      "sha256": "6485894b7a2b276718e10e578d2e08800a6f27c5ae7e17e29a026e4e6a32159a"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\planning\\models.py",
+      "sha256": "4957869d58811d26d763383fc2a28c6ad1b32205b1489e87c00aebe4bb0a7d4f"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\planning\\planning_brief.py",
+      "sha256": "078c22e1790c005b2cc6200ad3b1308fba1a6dc1184452acc9ac929c3c26755e"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\planning\\request_planner.py",
+      "sha256": "7e39c14b86c19a01edfb735766120885ec7154f386b457a83ce3e6937809f344"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\planning\\task_memory.py",
+      "sha256": "2a4bd28be97569bc0c8cd9b7be6a2934d263742cb0c29060fe3e85b3f4adcad1"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\planning\\upstream_model_view.py",
+      "sha256": "d41edbd69ab55068553435b084e31025d0dd101bfc2bab69090655fd3ce79900"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\product_execution.py",
+      "sha256": "f8cbef16bb3ddc3160a38c4433bb797be72d0509c3f3693f70353bb2b71ab80f"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\product_executor.py",
+      "sha256": "b52bbe99211dc7cb17a36d117d997f79c8f958078aae46874684b1f9e869e3fd"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\proposal\\__init__.py",
+      "sha256": "40ce83b858e2de259a035890acf3f27fdaecad65696bd6b43305bef37a3b103c"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\proposal\\behavior_feedback_view.py",
+      "sha256": "4f273fc9cb326ae9517d7fdc698b2ac4ba71c23cc2b1cbbfac97283c8d23ecd1"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\proposal\\builder.py",
+      "sha256": "94af72377ed20f32a7d78d04e09eb19f0babfa28d8f41b1aa96e0b52ffe18fc7"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\proposal\\code_generator.py",
+      "sha256": "58ad1ebfc3c59aa5873722a7f3b4f4cdef870ba10faff17077d2baeb7cbdce81"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\proposal\\critic.py",
+      "sha256": "2b178db92214ee190a431e43970bfc734dca7e92e4098d4675c1315a0a1503eb"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\proposal\\failure_state.py",
+      "sha256": "4a7a26007403bd737863858ee5ff7c45cab4faf3731605ffda42401147137c7e"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\proposal\\models.py",
+      "sha256": "18263f0f73152a1899fa628516310a53b9842c8056db636d7d57a2fcf8515803"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\proposal\\noop_submission_feedback.py",
+      "sha256": "2a43b463fcaf9368aea276a865948d1368cdb5653d562b904a38fd0cc9f70542"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\proposal\\observation_value_refs.py",
+      "sha256": "cae6c1147f18fa53fe94c895c67f39708e75c83630bf92a0ea422f3606d464ff"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\proposal\\patch_agent_loop.py",
+      "sha256": "fb8b43bfd021af01ace570a743e60ca125e9ad83895b35fde396e26ae8a5c7dc"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\proposal\\repair_input_projection.py",
+      "sha256": "c07f285f9e1ed6eecabef8a97770cb3d433418fd20c7f579166b89b2f3ce555a"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\proposal\\reviewer.py",
+      "sha256": "960964974b2f723d5b6d1d9cf1299e403763b25a01c7cd0336e03cdcff47f5bf"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\proposal\\tool_argument_feedback.py",
+      "sha256": "0c1243974e9235765e345e239caa47b8fe6771035ff685e339a6a9a4d5e4a961"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\proposal\\tool_batch_feedback.py",
+      "sha256": "4b4e950a91d6cc8d6b743bf0ed15d6369b10c2a0af718a04afc9de65a65fa97b"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\proposal\\working_view.py",
+      "sha256": "5ab12f614654ad04251015b182bf06032e92974970c2beb89b717c371f118b9b"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\repair\\__init__.py",
+      "sha256": "7c3461dbf0ec4d2e093aeb9fdeb435125365ef61efb74a09d7d88cf9ba2a0c07"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\repair\\planner.py",
+      "sha256": "8e023dd0837adc7be899158807ea118e8c63792c395ab241ac5ca34930a7db28"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\requirement_coverage_model.py",
+      "sha256": "60a1324d6be6fcfbad9dfa424a1081dba5b5a52be3574780d0c073eb71c2f6c1"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\runtime\\__init__.py",
+      "sha256": "d22f4427633ef1bfd585748aa6eff84d5f1399b451b40755426d1ee9bbb58352"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\runtime\\deployment.py",
+      "sha256": "b5f8654ea55fa93ac5133ace2f2ce2f30b8cb411a7e2807da47203a9bdb7308d"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\runtime\\evidence.py",
+      "sha256": "0b62ed5b4cd5f17637b56e5e61d0db116311f726c3d6a0370ad33fadc619d198"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\runtime\\gtfo_automation.py",
+      "sha256": "4eb965d784391a4c75ad5cc3a0529e89c06961412111c37a94d1024bf1c824e9"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\runtime\\gtfo_stagger.py",
+      "sha256": "78b2fb36534d81fb2026c90703028aa01cb5e323aa020f115ecc460b68c9e0d1"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\runtime\\probe.py",
+      "sha256": "41a7d0b152433fa39092483e8bcc75c6bfae45b92858143b729deed62698bd78"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\runtime\\screenshots.py",
+      "sha256": "f5d4a69ee27102e898d8a25af83381558a0140261fb601d0e652cd46f2f00d63"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\runtime\\stagger_diagnosis.py",
+      "sha256": "521850d4bc474e6770e4bc95d983bac2d9c074c98fb2e06886c83f8f562b28f0"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\runtime\\stagger_diagnostic_diff.py",
+      "sha256": "a75c5910b3b22ffeffafae8db6250bb3466c1ed15091972ef18c71564cf0acaf"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\runtime\\stagger_diagnostic_harness.py",
+      "sha256": "f778d8c3b26a87218eccc8fd7b47fd7d2e218854a05cd4e6373ba874b3a7ff82"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\runtime\\stagger_edit_authority.py",
+      "sha256": "b0bbea48016e5c877cd0a9710448c7d906d236c772cfcb87081f0954754a3309"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\runtime\\stagger_hierarchy_observation.py",
+      "sha256": "ad9931edae16cfd5c611877d7309799e1a774a320d709837d0ef2cc61b4902ea"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\runtime\\stagger_planner_admission.py",
+      "sha256": "49eea74a6ef2b4b2099119560e9272bfa2df608452d946b7c48ee1a0f02c7b24"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\runtime\\stagger_root_cause.py",
+      "sha256": "c401e0dc893c770ae85d88f203f563d05ba3021d527d6dd70f01272e8105d85f"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\runtime_evidence_consolidation.py",
+      "sha256": "d92990a036050ef47f07d39928395f864df889f32c6c0b038245fb9e2349da0d"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\task_agent_execution.py",
+      "sha256": "35172408802bcd63e3d177881059ca5cc978f8e21aff468a3fff688c68c51ec7"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\task_agent_loop.py",
+      "sha256": "2d5848425f3ec8703e13b52d153aeb212abed010e29abb8f78c4157d50e6598b"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\task_agent_owners.py",
+      "sha256": "0ed070d7413503e01bdcc630e87113b4b65cb5a7d6c99a077da7b70d6485c0de"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\task_agent_tools.py",
+      "sha256": "4a9ff1d5ae5c07a8cd7973cb3d7abe2a2466f1647b814d3ecc48abd581b33c8e"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\task_agent_v2_state.py",
+      "sha256": "821b3d1b68dd419c339d4ddade0f6ff1e63f2663e26f4bfd4d5b3649526b9c80"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\upstream_trace.py",
+      "sha256": "b4644ebbef372f8e8e1d1b00782975c2a20b049664d1ca4c506f6f7fad0a7047"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\verification_operations.py",
+      "sha256": "046df121bf4a4c38f606c98fe35a319f8bcbd1e14576a0d70808ebf01dbbdcd8"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\workflow\\__init__.py",
+      "sha256": "3b98eacc758da7c6239a1d7f9baac9133fafaac733f8c476dde4189633a851ce"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\workflow\\checkpointing.py",
+      "sha256": "a2242a0e843f20d576e28bbd199a57bdf5aab47921f349411bd2934b641b27ab"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\workflow\\graph.py",
+      "sha256": "9a4d8945d46f95fa40dd9de0dd8025cec03253957a7c8a0bd30be75c5177a08f"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\workflow\\interrupts.py",
+      "sha256": "9a868636400017070e48e65913bb8ed433fbdf3c03be2390178307cee2ecf2aa"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\workflow\\nodes.py",
+      "sha256": "42d8c8a746f95a81f0ca2efbf0bca94c6d390db7c2ebc9068b0bbcd83d21c065"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\workflow\\state.py",
+      "sha256": "56d7a3d3da11f3a66d5555ca20cac29e7402d8501e139747a0e2e7d0d475b3c2"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\workflow\\transitions.py",
+      "sha256": "05de9c100406d2d2066085c140786eb85d604f4b39c5485a05bee91874ed9800"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\src\\mod_agent\\workflow\\verification_only.py",
+      "sha256": "fb3e611e9489a105203d31695fb4ad4fa7836e847d56fe51f6199e2d5ea656e1"
+    }
+  ],
+  "qualification_verifier_passed": true,
+  "provider_constraint": "Original owner accepts only ollama_chat_local. Parent confirmed both arms use qwen3-coder:30b fixed digest 06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca. OpenAI Responses is incompatible.",
+  "candidate_compatibility": {
+    "ast_identical_to_current": [
+      "TaskAgentV2State.validate_candidate",
+      "TaskAgentV2State.changes_from_baseline",
+      "TaskAgentV2State.materialize",
+      "TaskAgentV2State._materialize",
+      "TaskAgentV2State.load",
+      "TaskAgentV2State._validate_view",
+      "task_agent_execution._read"
+    ],
+    "source_view_change": "Current line/character read API still persists original source-view schema with full text and read_window offset/end. Original evaluator accepts these valid bounded preimages.",
+    "native_contract": "Original validate_native requires schema task-agent-product-execution.v2, known terminal status candidate_ready/blocked/failed, unknown_effects false, matching nonempty final candidate and complete real model submission provenance.",
+    "limits": "No prospective actual native candidate exists yet. This is source/interface compatibility and import verification, not a fabricated native execution or candidate grade. No final candidate means independent grading is not applicable and must not be manufactured.",
+    "line_endings": "Original source RestClient.cs and historical public input both have 299 CRLF/299 LF. Preparation preserves exact clean checkout bytes; archive LF alone would fail independent baseline identity."
+  },
+  "public_preparation": {
+    "script_ref": {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\prepare_restsharp_public.py",
+      "sha256": "1d5053fb80dad3c918e808f6194d0bd1e7b8d7cfb760cc4d73a93defde231898"
+    },
+    "original_preparation_entry_ref": {
+      "path": "C:\\Users\\10160\\.codex\\visualizations\\2026\\08\\11\\019ff15f-9eac-7b13-aad5-faffde4b36b7\\rag_capability_mainline\\artifacts\\eval_driven_20261022\\run_restsharp_v2.py",
+      "sha256": "f20e857e325034f84c4d10e2c814723632cab793e03c6162125ebf42292bff47"
+    },
+    "source_formula": "Git archive exact base enumerates inputs; verify clean original checkout files equal blobs modulo CRLF normalization, preserve original checkout bytes; apply original public reproduction v2 then environment patch; retain profile bytes.",
+    "fixed_inputs": "CSharpRepositoryProfile.bind and verify_fixed_inputs; full source-file hash manifest; all src/gen .cs compared byte-for-byte with original clean base checkout; CRLF retained because original evaluator uses exact byte-decoded source identity.",
+    "execution": "Configured Python -B prepare_restsharp_public.py --output-root <fresh short directory>; script records preparation_wall_seconds.",
+    "executed": false
+  },
+  "verification_wall_seconds": 6.560925400000997,
+  "model_calls": 0,
+  "controls_rerun": false
+}

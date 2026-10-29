@@ -1,0 +1,58 @@
+{
+  "records": [
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\configuration.json",
+      "sha256": "802fdcbac6b9844ee1ed51618079fa83b7938b858439ce8cabd32c223db83925"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\freeze-attempt.json",
+      "sha256": "4241aec7f04fb9677b9a09ea25501b3953368e3ef81ee817d4f49c78c90add99"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\freeze-attempt2.json",
+      "sha256": "a2d3593f4128bbd0faa02d3ae279bdfecf98689e750c68e8b245f3150b843009"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\freeze-attempt2.stderr.txt",
+      "sha256": "3cfe82de9b899b26637b978a9254e10ff19211683c592ded3a354e8a7bbf38ad"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\freeze-attempt2.stdout.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\freeze.stderr.txt",
+      "sha256": "27177c1e9d6f3cb433f6a8bc0c39e133972b3aa1acc13b2e6c9930f82e5b8e19"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\freeze.stdout.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\intent.json",
+      "sha256": "64207c128f0a2f28ffaadc7357dc44fd19d1eb03d3a1fec25584cd096a8f9f23"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\prepare_restsharp_public.py",
+      "sha256": "1d5053fb80dad3c918e808f6194d0bd1e7b8d7cfb760cc4d73a93defde231898"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\qualification-reuse-restsharp.json",
+      "sha256": "c3455e5a04a7ebc9af3bfac52adf326da4f0e9676aeb2122f4aad236ddf42bd6"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\restsharp-owner-compatibility.json",
+      "sha256": "4d6cf6d4bc568a69e71c6535f3d3b4b85f861bc7770cd48d1b1541539b87eee3"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\result.json",
+      "sha256": "cb83bb434e3967ee8753f1c74e6cae54e3cc485bf0569750c856889e6a69d60d"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\run_pair.py",
+      "sha256": "d3f09908798a81ef7f0a61d6823f167ee0f869b9e35b8872e33b852eda6c8318"
+    }
+  ],
+  "model_dispatches": 0,
+  "pair_frozen": false
+}

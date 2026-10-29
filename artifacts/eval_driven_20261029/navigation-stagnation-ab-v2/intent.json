@@ -1,0 +1,64 @@
+{
+  "evaluation_version": "navigation-stagnation-ab-v2-restsharp-2241",
+  "status": "registered_before_model_dispatch",
+  "task_id": "restsharp__restsharp-2241",
+  "task_scope": "New task for this comparison, already development-exposed in earlier diagnostics. Not unseen, not hidden pilot; no earlier run or candidate is resumed.",
+  "authorization": "Current user instruction: verify a new already-qualified development-exposed task, freeze B0/B1, run once each and retain failures, costs and five categories of data.",
+  "admission_ref": {
+    "path": "C:/Users/10160/.codex/worktrees/semantic-work-state/rag_capability_mainline/artifacts/eval_driven_20261029/navigation-stagnation-ab-v2/qualification-reuse-restsharp.json",
+    "sha256": "c3455e5a04a7ebc9af3bfac52adf326da4f0e9676aeb2122f4aad236ddf42bd6"
+  },
+  "prepared_ref": {"path": "C:/tmp/rf-nav2-public/public-preparation.json", "sha256": "875283f7a9e77e31cb07f22993ef7353dfd91b601be7c08f5c945e145acfe802"},
+  "platform": {
+    "common_commit": "3569e61",
+    "ci_verified_runtime_commit": "0c644d0d7278547e68e2bbe257eb2714d421be5d",
+    "B0": "Same fixed platform, with only navigation_only assigned False instead of navigation >= NAVIGATION_STAGNATION_THRESHOLD.",
+    "B1": "Unmodified common platform; threshold remains 8.",
+    "shared": "Both retain navigation telemetry, recovery, exact-repeat/public-failure feedback, resource admission and blocked-outcome repairs.",
+    "allowed_different_runtime_files": ["src/mod_agent/task_agent_v2_working_state.py"],
+    "why": "为什么要有它：两臂都包含平台修复，单独比较导航触发的提示；不能拿旧缺陷版本作新基线。"
+  },
+  "common_conditions": {
+    "model": "qwen3-coder:30b",
+    "digest": "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca",
+    "ollama_version": "0.40.11",
+    "seed": 0, "temperature": 0, "context_tokens": 65536, "max_output_tokens": 4096,
+    "wall_seconds": 900, "model_reservations": 16, "read_calls": 12, "observation_bytes": 262144,
+    "strategy_experience": false, "task_memory": false, "retries": 0,
+    "order": ["B0", "B1"], "workers": 1,
+    "task_input": "Identical qualified public baseline, public reproduction and environment patch; exact UTF-8 public problem text only. No technical hints, answer patches or independent grader inputs in model requests.",
+    "permissions_tools_checks": "Same registered repository profile, allowed paths, tool schemas and existing execution owner; private grader stays external to the task agent.",
+    "cold_start": "Unload the selected model before each arm and verify no resident models; record service version and digest. Other machine workload/cache effects are not claimed eliminated.",
+    "why": "为什么要有它：实际策略、输入、权限与预算均须相同，避免把环境差异或外层帮助归因于反馈机制。"
+  },
+  "navigation_feedback_experiment": {
+    "evaluation_version": "navigation-stagnation-ab-v2-restsharp-2241", "threshold": 8,
+    "navigation_observation_bytes": 131072, "navigation_seconds": 600,
+    "post_trigger_reserve": {"reads": 2, "model_calls": 3, "observation_bytes": 65536, "seconds": 180}
+  },
+  "preflight": {
+    "rules": "Use existing validate_navigation_experiment on the actual bound execution config. Match copied worker to its original and freeze its reference. Check source, owner/dependency, public input, SDK and model identities. Require at least 3 GiB free before pair preparation and 1.5 GiB before B1; do not delete old evidence to make room.",
+    "interpretation": "Declared navigation-phase time includes entry preparation. Capacity supports the registered action sequence, not a guarantee about model choice, response size or runtime speed.",
+    "why": "为什么要有它：触发条件须在真实资源配置中可达，准入不能来自未被执行的旧配置或预测出的成功。"
+  },
+  "measurements": {
+    "primary": "Whether B1 actually receives navigation feedback, then selects a non-navigation action within the next three completed model responses. Count proposed, executed, rejected and replayed actions separately.",
+    "business": "Valid candidate, public checks, original final-only independent grade, and same-candidate actual isolated delivery are separate results. Correct delivery requires independent acceptance and verified delivery of the same source version.",
+    "costs": "All observed calls, retries, recovery and auxiliary calls; input/output/cache token components, bytes, wall time and unknowns. Separate qualification/preparation, task, independent grade and platform development. Human active time only measured or explicitly declared.",
+    "five_categories": ["correct delivery", "human effort and waiting", "unit-success cost", "repair after public counterexample", "judgment and experience scope"],
+    "experience": "Off in both arms; adoption/transfer gain remains not measured.",
+    "why": "为什么要有它：选择工具、产生候选、修对业务和减少用户工作是不同结果，不能由单一通路指标替代。"
+  },
+  "stop_and_decision": {
+    "per_arm": "Stop at the registered wall or model budget; each arm starts at most once. No mid-run patch, resource adjustment or task rescue.",
+    "platform_failure": "Preserve the failed arm and leave any later arm unstarted if platform identity, ordinary terminal projection, authority or owned-process cleanup fails. Ordinary validated blocked outcomes or bounded timeouts are task results, not automatically platform failures.",
+    "no_exposure": "If the intervention is not delivered, report it as not exposed and do not infer benefit or harm.",
+    "behavior_only": "A B1 non-navigation choice without a valid candidate and independent correct delivery supports only the stated behavioral observation.",
+    "negative": "If both arms stagnate or fail, retain the negative result and end; no threshold tuning or same-task rerun to obtain a positive result.",
+    "limits": "One exposed task cannot establish general repair superiority, resume-level competitive performance or experience transfer.",
+    "why": "为什么要有它：运行前固定结束和归因规则，防止看到结果后延长实验或扩大收益主张。"
+  },
+  "deferred": ["T2 broader real safe-input correction comparison", "T1 full two-repository acceptance", "child-owned graceful-stop continuation"],
+  "return_point": "After this one comparison or a precise admission/platform stop, publish the five-category record and technical decision, then reselect the existing queue. No evaluator framework or full recovery refactor.",
+  "prohibited_replays": ["Spectre 1531", "Spectre 1552", "Spectre 1338 qualification chain", "invalid Serilog 2103 B0", "old B12 or any historical run identity"]
+}

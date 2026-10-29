@@ -1,0 +1,20 @@
+{
+  "root": "C:/tmp/rfn2241v2",
+  "task_id": "restsharp__restsharp-2241",
+  "admission_ref": {
+    "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\qualification-reuse-restsharp.json",
+    "sha256": "c3455e5a04a7ebc9af3bfac52adf326da4f0e9676aeb2122f4aad236ddf42bd6"
+  },
+  "prepared_ref": {
+    "path": "C:\\tmp\\rf-nav2-public\\public-preparation.json",
+    "sha256": "875283f7a9e77e31cb07f22993ef7353dfd91b601be7c08f5c945e145acfe802"
+  },
+  "compatibility_ref": {
+    "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\restsharp-owner-compatibility.json",
+    "sha256": "4d6cf6d4bc568a69e71c6535f3d3b4b85f861bc7770cd48d1b1541539b87eee3"
+  },
+  "intent_ref": {
+    "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\intent.json",
+    "sha256": "64207c128f0a2f28ffaadc7357dc44fd19d1eb03d3a1fec25584cd096a8f9f23"
+  }
+}
