@@ -1641,7 +1641,8 @@ def test_graph_terminal_persistence_preserves_owner_result_strict_roundtrip(
     persisted = json.loads(result_bytes)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     persisted_owner = persisted["product_execution_result"]
-    assert list(persisted) == sorted(summary)
+    assert list(persisted) == sorted([*summary, "status"])
+    assert persisted["status"] == result.terminal_node
     assert list(persisted["z_outer"]) == ["a", "z"]
     assert list(persisted["z_outer"]["a"]) == ["a", "z"]
     assert list(persisted_owner) == list(owner_projection)
