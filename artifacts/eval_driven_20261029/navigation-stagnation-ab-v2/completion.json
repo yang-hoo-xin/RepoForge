@@ -1,0 +1,65 @@
+{
+  "evaluation_version": "navigation-stagnation-ab-v2-restsharp-2241",
+  "status": "completed_once_each_supported_single_task_negative_result",
+  "task_id": "restsharp__restsharp-2241",
+  "exposure": "previously development-exposed; not hidden or unseen evaluation",
+  "distinct_tasks": 1,
+  "started_arms": 2,
+  "pair_ref": {"path": "C:/tmp/rfn2241v2/pair.json", "sha256": "dd190b32339e0e815b4eb9c990d1c4b175251c62d73153de830b78fe6bc978f1"},
+  "historical_preparation_record": "result.json",
+  "successful_freeze_record": "freeze-attempt3.json",
+  "common_policy": {"model_reservations": 16, "reads": 12, "observation_bytes": 262144, "wall_seconds": 900, "navigation_threshold": 8},
+  "arms": {
+    "B0": {
+      "run_id": "dsh_a31162dcceab4c349922da4734e1782d",
+      "major_terminal": "timed_out",
+      "reserved_calls": 16, "completed_responses": 15, "inflight_usage_unknown": 1,
+      "searches_executed": 6, "reads_executed": 6, "read_budget_rejections": 3,
+      "candidates": 0, "checks": 0, "experiments": 0,
+      "navigation_feedback_delivered": false,
+      "known_usage": {"input_tokens": 330966, "output_tokens": 848, "cached_input_tokens": 193132},
+      "process_seconds": 900.062, "outer_task_seconds": 901.031,
+      "owned_process_residuals": [], "forbidden_source_changes": []
+    },
+    "B1": {
+      "run_id": "dsh_1d07d6daa6004163bba32f162a2902ca",
+      "major_terminal": "timed_out",
+      "reserved_calls": 15, "completed_responses": 14, "inflight_usage_unknown": 1,
+      "searches_executed": 5, "reads_executed": 7, "read_budget_rejections": 2,
+      "candidates": 0, "checks": 0, "experiments": 0,
+      "navigation_feedback_delivered": true, "first_feedback_request": 9,
+      "first_three_feedback_response_choices": ["source_read", "source_read", "source_search"],
+      "known_usage": {"input_tokens": 305641, "output_tokens": 822, "cached_input_tokens": 160736},
+      "process_seconds": 900.062, "outer_task_seconds": 900.984,
+      "owned_process_residuals": [], "forbidden_source_changes": []
+    }
+  },
+  "five_categories": {
+    "correct_delivery": {"B0": {"confirmed": 0, "attempts": 1}, "B1": {"confirmed": 0, "attempts": 1}, "observed_difference": 0, "independent_business_acceptance_executed": false, "actual_delivery_executed": false, "raw_business_verdict": null, "reason": "No candidate existed to grade or deliver; no invented grader failure."},
+    "human_and_wait": {"human_active_minutes": null, "task_technical_hint_or_patch": false, "quality_matched_successful_pairs": 0, "efficiency_savings": null, "scope": "Environment preparation, review and platform work are separate from task execution."},
+    "unit_success_cost": {"known_input_tokens": 636607, "known_output_tokens": 1670, "known_cached_input_tokens": 353868, "cached_input_included_in_input": true, "inflight_calls_with_unknown_usage": 2, "additional_auxiliary_generations_observed": 0, "whole_task_cost_complete": false, "money": null, "hardware_cost": null, "platform_development_model_usage": null, "finite_cost_per_success": null, "reason": "Zero confirmed deliveries; incomplete calls are unknown rather than zero."},
+    "counterexample_repair": {"B0": {"business_K": 0, "business_k": 0, "compilation_K": 0, "compilation_k": 0, "rates": null}, "B1": {"business_K": 0, "business_k": 0, "compilation_K": 0, "compilation_k": 0, "rates": null}, "process_feedback": "Read-budget refusals are retained separately, not counted as compilation/business counterexamples."},
+    "judgment_and_experience": {"intervention_delivery": "verified in B1 actual HTTP request 9", "primary_endpoint": "not_met", "failure_before_read_budget_exhaustion": true, "strategy_experience_enabled": false, "adoption_or_transfer_gain": "not_measured", "general_capability_claim": false}
+  },
+  "technical_decision": {
+    "decision": "Do not treat this advisory prompt as a demonstrated remedy for action stagnation on the tested task and budget.",
+    "scope": "Retain the experimental implementation and evidence; no product code changed after seeing results. Do not tune the threshold, extend the budget or repeat this task to seek a positive outcome.",
+    "interpretation": "The guidance reached the model and sufficient read allowance remained during the primary response window. Its three responses still selected navigation; neither arm later produced a candidate.",
+    "limits": "One exposed task and sequential runs do not establish general model incapability, competitive performance, or learning transfer. Machine/cache/order effects are not claimed eliminated.",
+    "return_point": "Close this comparison and reselect the original queue. Prioritize evidence about candidate-formation decisions rather than further tuning this reminder; no new experiment is launched by this record."
+  },
+  "evidence": {
+    "recomputed_summary": "observed-pair-summary.json",
+    "independent_audit": "pair-measurement-audit.md",
+    "baseline_audit": "b0-measurement-audit.md",
+    "archive_receipt": "run-records.json",
+    "original_preparation_manifest": "record-manifest.json"
+  },
+  "known_limitations": [
+    "Hard timeout prevented child run_result/execution/loop-result finalization. Parent process episodes were sealed, while child-owned completeness remains deferred.",
+    "Shared evidence cost projections lacking final native references can show zero requests; actual provider records establish the nonzero usage reported here.",
+    "Independent final candidate acceptance was not exercised because no candidate existed.",
+    "Generic job ownership reports no owned residuals; broker-descendant cleanup is not independently established."
+  ],
+  "why": "为什么要有它：实际送达、行为改善、正确交付和迁移收益分别判断；本轮负结果必须结束并保留成本，不能靠改条件或补跑包装为成功。"
+}

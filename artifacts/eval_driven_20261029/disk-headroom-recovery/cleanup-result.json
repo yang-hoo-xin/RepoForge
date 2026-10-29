@@ -1,0 +1,36 @@
+{
+  "status": "completed_sdk_identities_preserved",
+  "removed": [
+    {
+      "path": "C:\\tmp\\rf-dotnet-8.0.302\\dotnet-sdk-8.0.302-win-x64.zip",
+      "bytes": 290606422,
+      "kind": "download_archive_of_verified_installed_sdk"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\qualification\\serilog-relocation\\dotnet-sdk-8.0.100-win-x64.zip",
+      "bytes": 282629917,
+      "kind": "download_archive_of_verified_installed_sdk"
+    },
+    {
+      "path": "C:\\Users\\10160\\AppData\\Local\\npm-cache\\_cacache",
+      "bytes": 269353809,
+      "kind": "npm_download_cache_only"
+    }
+  ],
+  "free_before_bytes": 14798385152,
+  "free_after_bytes": 15646654464,
+  "observed_free_delta_bytes": 848269312,
+  "failure": null,
+  "protected_sdk_refs": [
+    {
+      "path": "C:\\tmp\\rf-dotnet-8.0.302\\sdk\\dotnet.exe",
+      "sha256": "c6e330c1e3895deab7b47b725822a4453e50dd0b79a148dceaf8ba3a749f8412"
+    },
+    {
+      "path": "C:\\Users\\10160\\AppData\\Local\\Temp\\rfext1020\\sdk\\dotnet.exe",
+      "sha256": "b9eace03c8471717e3f98873527005dbd9a92367b954f8c48484d2b7b78efbac"
+    }
+  ],
+  "applications_uninstalled": false,
+  "run_evidence_deleted": false
+}

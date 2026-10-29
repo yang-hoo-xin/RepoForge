@@ -1,0 +1,37 @@
+{
+  "records": [
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\completion.json",
+      "sha256": "a632a9e0f7893e41a352b73a35ed0f52ec92171f1dd7171a6950267a239571e4"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\observed-pair-summary.json",
+      "sha256": "a80712e89b2797b513f1cf25b1ac3e79d796629e2cb7270a7b269ade5b9a7d16"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\pair-measurement-audit.md",
+      "sha256": "e3312c50f804c26c2cd8dce1118ef9e6bdf6e66b7bb982959b8abc7a731b1e0a"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\b0-measurement-audit.md",
+      "sha256": "fbad39badab565a05900c0825461d85fbb82d8ccd71f238acf6aeb3a8819e26f"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\run-records.json",
+      "sha256": "32b0a696925031ad0ac640ca4e50b6d193ae34dafbc266afdf0c924dca705dfe"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\freeze-attempt3.json",
+      "sha256": "25c365ae7a28d0fcda3bf20f8916bbf6036ed8a678314ecf847d8cc4ca71e43f"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\disk-headroom-recovery\\cleanup-plan.json",
+      "sha256": "27021fe06bb4e6a35c970191332ed45a8ee99d4027444e427c3f0f71ceaff79f"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\disk-headroom-recovery\\cleanup-result.json",
+      "sha256": "4021e87ff365340168a18d4e4c9b4f244fb16c127d83a6f62d73f2935cb8fa74"
+    }
+  ],
+  "free_disk_bytes_at_close": 11451334656
+}

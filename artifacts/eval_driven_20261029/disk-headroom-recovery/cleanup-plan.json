@@ -1,0 +1,44 @@
+{
+  "free_before_bytes": 14800027648,
+  "files": [
+    {
+      "path": "C:\\tmp\\rf-dotnet-8.0.302\\dotnet-sdk-8.0.302-win-x64.zip",
+      "bytes": 290606422,
+      "sha256": "ddb7dc983df37b20bd03b57c27c1ecdc3eee8f7187cca9d6498023381f912dc0",
+      "kind": "download_archive_of_verified_installed_sdk",
+      "sdk_version": "8.0.302"
+    },
+    {
+      "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v1\\qualification\\serilog-relocation\\dotnet-sdk-8.0.100-win-x64.zip",
+      "bytes": 282629917,
+      "sha256": "fc225bcce6b54385580a16216e484b6119452ff6febac7da4e2a7e1fdee09921",
+      "kind": "download_archive_of_verified_installed_sdk",
+      "sdk_version": "8.0.100"
+    }
+  ],
+  "directories": [
+    {
+      "path": "C:\\Users\\10160\\AppData\\Local\\npm-cache\\_cacache",
+      "bytes": 269353809,
+      "kind": "npm_download_cache_only"
+    }
+  ],
+  "protected_sdk_refs": [
+    {
+      "path": "C:\\tmp\\rf-dotnet-8.0.302\\sdk\\dotnet.exe",
+      "sha256": "c6e330c1e3895deab7b47b725822a4453e50dd0b79a148dceaf8ba3a749f8412"
+    },
+    {
+      "path": "C:\\Users\\10160\\AppData\\Local\\Temp\\rfext1020\\sdk\\dotnet.exe",
+      "sha256": "b9eace03c8471717e3f98873527005dbd9a92367b954f8c48484d2b7b78efbac"
+    }
+  ],
+  "preserved": [
+    "SDK installation directories",
+    "NuGet package and HTTP caches",
+    "pytest and rfcscli evidence",
+    "C:/tmp historical runs and qualification originals",
+    "model weights and application installations"
+  ],
+  "why": "为什么要有它：只回收已确认的下载副本，保持当前运行及原资格绑定的SDK与依赖可用。"
+}

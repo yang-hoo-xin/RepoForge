@@ -1,0 +1,650 @@
+{
+  "arms": {
+    "B0": {
+      "actual_wire_options": [
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        }
+      ],
+      "candidate_ref": null,
+      "choices_in_first_three_feedback_responses": [],
+      "completed_responses": 15,
+      "correct_delivery": null,
+      "experience_gain": "not_measured",
+      "first_feedback_request_turn": null,
+      "first_non_navigation_choice": null,
+      "human_active_seconds": null,
+      "independent_business_result": null,
+      "known_usage": {
+        "cached_input_tokens": 193132,
+        "input_tokens": 330966,
+        "output_tokens": 848
+      },
+      "native_result_present": false,
+      "native_status": null,
+      "owned_process_residuals": [],
+      "plan_ref": {
+        "path": "C:\\tmp\\rfn2241v2\\B0\\plan.json",
+        "sha256": "5cddb67918057f16e79afffbf1f8718c5bf1e8fd39c7b600a0dd274292809cdb"
+      },
+      "process_ref": {
+        "path": "C:\\tmp\\rfn2241v2\\B0\\execution\\process.json",
+        "sha256": "0c81a75bf58abb0f6a310421070ec075ebf4fc00dc7753eda5dd948f6ddea0ca"
+      },
+      "process_status": "timed_out",
+      "public_check_count": 0,
+      "reserved_calls": 16,
+      "response_refs": [
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\response-001.json",
+          "sha256": "b7930de081e1b602592c2315660eec1422b7b101314c6b08fec2deecfa0470a1"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\response-002.json",
+          "sha256": "2140d6d6bb2ca55c46612422473bcab48dc56ad85a6c0d173db7340c68f9d9c4"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\response-003.json",
+          "sha256": "9c9b800572ad79544a7fda3b18eb7241fe134259dbba341457a981adac397ed9"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\response-004.json",
+          "sha256": "999ef79a2670c216dcf3d92e958d869506343ea24bc6da9674e3ac6ce2adf05a"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\response-005.json",
+          "sha256": "2fac3c703efccd418b8a0cbb8206ae65812c71b54a50e4d017091b889f2ba5f8"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\response-006.json",
+          "sha256": "3c96a654fdacfa13ebb7447ccccf2c8f7093c8cff3065b366bc9fa7bed9bf41f"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\response-007.json",
+          "sha256": "bc77ad68475343281075c898bd69e3dbc5f2f2f75d284755ac7eb4e95b5754e2"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\response-008.json",
+          "sha256": "3acf4720c88a510fc90d22d2f9115dc1cc635dbc83c9cc6974f87e2dda2a9bdf"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\response-009.json",
+          "sha256": "a8798b393fc16b5217d4a3b9c32685613ffd938cfa884f305dd942963a38d10d"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\response-010.json",
+          "sha256": "26b534c4c4a7486173f0a7edd372bfbcd3fdc88c1ada68a4a87fc258271aba55"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\response-011.json",
+          "sha256": "b34d8c1fe9de7ca93a8cc743b0cdd03c36a99fe79b07429b461bcbd7539b019f"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\response-012.json",
+          "sha256": "cdb20657f69741232aa7b26d1dbe0958714c3c4b8faf6796ee10d55acea4692b"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\response-013.json",
+          "sha256": "98b687b4e0abc70960bda9eb5a2f21ebd5808f181b297d950fb3dfb0d044abe1"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\response-014.json",
+          "sha256": "c3b43cd71339c65159b3c93b9ae992d9025bdb58a41db25695cdcb86995ca018"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\response-015.json",
+          "sha256": "cc34eb163930a48f4550acfc7d7cfb7efb236b8f56f7b312dccc6cdb5083b52a"
+        }
+      ],
+      "result_ref": {
+        "path": "C:\\tmp\\rfn2241v2\\B0\\result.json",
+        "sha256": "2d9bc9d63507c5747f01faf1fa0a3d24b67df8d880208b0d3d934d0fb56cf952"
+      },
+      "run_id": "dsh_a31162dcceab4c349922da4734e1782d",
+      "source_changed_paths": [],
+      "strategy_injected": false,
+      "task_wall_seconds": 901.0309999999954,
+      "technical_hint_or_patch": false,
+      "tool_counts": {
+        "source_read": 6,
+        "source_search": 6
+      },
+      "tool_receipts": [
+        {
+          "code": null,
+          "name": "source_search",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\tool-receipt-0dcac6dbaf0d2b97bcf5a64c3e0f06ef930b5f755bbc505f22f57d3bb44e461c.json",
+            "sha256": "14b5a17d5459da2dcc603b56b1165d65f2f621bffee62913c283096a6d14fe66"
+          },
+          "status": null,
+          "turn": 1
+        },
+        {
+          "code": null,
+          "name": "source_search",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\tool-receipt-f78052dc56de302dc3eeab0d736b6c56d5607f799419ffe4eb186de70897d1ff.json",
+            "sha256": "756dd4354357ce0065d73dfc65950fe08934db04ab2cc8bf547f94a1b6281c66"
+          },
+          "status": null,
+          "turn": 2
+        },
+        {
+          "code": null,
+          "name": "source_read",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\tool-receipt-c4ae90c48efbeea543cae7a087845d9cd039b4d07e3d75de30a79efd682ec472.json",
+            "sha256": "a81d1c44732955e08bc1df00f3f20e247bef9ded8f8cea219cb311174cbdd61b"
+          },
+          "status": null,
+          "turn": 3
+        },
+        {
+          "code": null,
+          "name": "source_read",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\tool-receipt-92618d615d726a4db52fb3d21d6adafc25e5984f1b1e94fb83a0cfb575c7547a.json",
+            "sha256": "12e10eb04e2eb488ed9b6f535fb7a5fc83051d2aebce4ecbcf7f9d0b7e4b7ba6"
+          },
+          "status": null,
+          "turn": 4
+        },
+        {
+          "code": null,
+          "name": "source_search",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\tool-receipt-57cff6f7840e312de736450e3a7d89cefa020c5a6859b24b13ea6e83ba8bc6d9.json",
+            "sha256": "c4e696a1aad367f48dcd2889e7f7e4bba59b1db195c21d2989a465a65613d665"
+          },
+          "status": null,
+          "turn": 5
+        },
+        {
+          "code": null,
+          "name": "source_read",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\tool-receipt-a133b91bd77513a86f01dabcec845f68f2932cca283757bbd4990b66261c4a7d.json",
+            "sha256": "40bcfe1fe33606071569e92a85db2174c132a6fd9820aae7aa1da9cef4d37535"
+          },
+          "status": null,
+          "turn": 6
+        },
+        {
+          "code": null,
+          "name": "source_search",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\tool-receipt-b249642006886ac15fc90e5fb659cb04d4e6523b8481b1db9383c37165d4158a.json",
+            "sha256": "0aab67707254e114b7a603a45a9d062a3af45a5352e5c82364ecdd552a267f16"
+          },
+          "status": null,
+          "turn": 7
+        },
+        {
+          "code": null,
+          "name": "source_read",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\tool-receipt-944c7e718bd4e0180d7e2a024a860b717d67f55ac6775861537939d0bff61579.json",
+            "sha256": "84d36850a7e188a2428e9c5d5d86105b526ec01e6b2837a61cd1fe5de1e43f9a"
+          },
+          "status": null,
+          "turn": 8
+        },
+        {
+          "code": null,
+          "name": "source_search",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\tool-receipt-52d84458d6983721120f961f0db448b488d1c581b57994c2a9276e2677b53c3c.json",
+            "sha256": "99eaa9bd78a4072ae6d52fb9e5da1d26b95a3fe5eaf0dec63974a0dff2c49ba6"
+          },
+          "status": null,
+          "turn": 9
+        },
+        {
+          "code": null,
+          "name": "source_read",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\tool-receipt-2dd46298d467795a8a2ed72c5896b424ab2461b2a0e5743a3e0e55786391dde3.json",
+            "sha256": "71c816a3fbfd3701a817f43d02b374ea7ce41a049035f6b552c51080257a6333"
+          },
+          "status": null,
+          "turn": 10
+        },
+        {
+          "code": null,
+          "name": "source_search",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\tool-receipt-f796fbc9c6e3fa338c9b61befcaf8a01b45b1527f4834683db7914d4725d1b77.json",
+            "sha256": "26496f30c02b310d7f8514b3db49f11a8a53d69da2e8c3e7dc6a29155c75fa1d"
+          },
+          "status": null,
+          "turn": 11
+        },
+        {
+          "code": null,
+          "name": "source_read",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B0\\runs\\dsh_a31162dcceab4c349922da4734e1782d\\a\\task-agent-execution\\tool-receipt-4d8366b26d26a6f8998898bb2dcb582a2b5af8a665f503a658e345fd9fd91739.json",
+            "sha256": "0c50931dc6c925885daaa53097df3edda69cfd2bcabba61197d534f014ab81ba"
+          },
+          "status": null,
+          "turn": 12
+        }
+      ],
+      "unknown_usage_calls": {
+        "cached_input_tokens": 1,
+        "input_tokens": 1,
+        "output_tokens": 1
+      },
+      "wall_seconds": 900.0619999999981
+    },
+    "B1": {
+      "actual_wire_options": [
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        },
+        {
+          "num_ctx": 65536,
+          "num_predict": 4096,
+          "seed": 0,
+          "temperature": 0.0
+        }
+      ],
+      "candidate_ref": null,
+      "choices_in_first_three_feedback_responses": [],
+      "completed_responses": 14,
+      "correct_delivery": null,
+      "experience_gain": "not_measured",
+      "first_feedback_request_turn": 9,
+      "first_non_navigation_choice": null,
+      "human_active_seconds": null,
+      "independent_business_result": null,
+      "known_usage": {
+        "cached_input_tokens": 160736,
+        "input_tokens": 305641,
+        "output_tokens": 822
+      },
+      "native_result_present": false,
+      "native_status": null,
+      "owned_process_residuals": [],
+      "plan_ref": {
+        "path": "C:\\tmp\\rfn2241v2\\B1\\plan.json",
+        "sha256": "399b4437d280815846968612ccd8719d4eaaf4d58f95642dd8e28a3b60a10858"
+      },
+      "process_ref": {
+        "path": "C:\\tmp\\rfn2241v2\\B1\\execution\\process.json",
+        "sha256": "f93662bf3552e6fac7e14d52623fdd05cab0ac868c01b01a38d134fca99a93e9"
+      },
+      "process_status": "timed_out",
+      "public_check_count": 0,
+      "reserved_calls": 15,
+      "response_refs": [
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\response-001.json",
+          "sha256": "5e08d24984b7cfb576614cbd5e47ff86ee93a528e007ba0b6962f3872dfa3462"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\response-002.json",
+          "sha256": "f96f338b69f1be8c01776c3d5200197fde80a69e5fa25a48d06723e4a42d5422"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\response-003.json",
+          "sha256": "8269a3cbf26380947b1db4e921ea8e7897ff4af165ea23787dc311d646310d1d"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\response-004.json",
+          "sha256": "4917c61b70996f4f902e9108d3937e3f4efe7012fde7ca243ee061664211a9b3"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\response-005.json",
+          "sha256": "4041296740723bbac014fde4dfd8ad7227b6c7f10eb2396c3cc486e06ce004e8"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\response-006.json",
+          "sha256": "e4ac009c99243a18f0d0c5e5f8b158aa4e949b29145dada02571d75f174cec90"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\response-007.json",
+          "sha256": "93a9a18db7bb22ba11b53c34770642950f1526c212eac13feb942d62be2da9dd"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\response-008.json",
+          "sha256": "307d53c3e735d341d88176580659b28d6c39bbedfef61fc4811edd761c27d1f5"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\response-009.json",
+          "sha256": "76c8bde7579d37bff2d6e78855e478540676dc409c9a04852729c150d67a5ff0"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\response-010.json",
+          "sha256": "1a5d546187510a4fd0636ededdf23bc6d5bb7a7a0b85182e7542d6e2a7dc62a0"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\response-011.json",
+          "sha256": "bae236bed3923945c6838f7d5556f4cc2655aa271a05af7c445dc4a01970f82f"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\response-012.json",
+          "sha256": "4f480c2bf13e7b0a5c618d416050eace1cdb9125cfda78866345631dd784494a"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\response-013.json",
+          "sha256": "e64a0a011828420ead38a9891212b3d241cfc33ff2fdca0717bb37710af7963e"
+        },
+        {
+          "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\response-014.json",
+          "sha256": "0e19b48b20ac86c6c10d385a33cdb4f0e4a19d92a509b8b3bf249762bc0c591d"
+        }
+      ],
+      "result_ref": {
+        "path": "C:\\tmp\\rfn2241v2\\B1\\result.json",
+        "sha256": "32f7d3676d8ae16e3acb26eb66f232cc779c448371c716d0eed42752e3310556"
+      },
+      "run_id": "dsh_1d07d6daa6004163bba32f162a2902ca",
+      "source_changed_paths": [],
+      "strategy_injected": false,
+      "task_wall_seconds": 900.984000000004,
+      "technical_hint_or_patch": false,
+      "tool_counts": {
+        "source_read": 7,
+        "source_search": 5
+      },
+      "tool_receipts": [
+        {
+          "code": null,
+          "name": "source_search",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\tool-receipt-d11b83ff011b508fc56656cdb70d83de3c704867dd1472ff56943c9ba1ae8692.json",
+            "sha256": "38259952626b490a6df9afbacc8c7aa45cf3c4971803fb7d68033a84927c5cc4"
+          },
+          "status": null,
+          "turn": 1
+        },
+        {
+          "code": null,
+          "name": "source_search",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\tool-receipt-b4ea7a7315ac0e1736ae1036fcdd8a14939a40bf8f7ce974ce38512ac706d9fb.json",
+            "sha256": "3ee31d2e138ee179fbdfe2556530f2a5af6bcebd8c6b870d46f8c5553d3a334a"
+          },
+          "status": null,
+          "turn": 2
+        },
+        {
+          "code": null,
+          "name": "source_read",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\tool-receipt-e70ffea819d4647906df144f25d9a3a27e9dfaf0585b579e28b9fae16e7a9e08.json",
+            "sha256": "e50e778f5f969583c09c22e9b22237e658e4c5f6462bbc7f7b669dcb794a3a22"
+          },
+          "status": null,
+          "turn": 3
+        },
+        {
+          "code": null,
+          "name": "source_read",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\tool-receipt-f5f20c780d3b042518bb767ea848c06b738243665ade837a3d2b2a83b02d7a7f.json",
+            "sha256": "1ed7222158897c4e182757e1181747116ff4767d6189418162fde7118a70bae9"
+          },
+          "status": null,
+          "turn": 4
+        },
+        {
+          "code": null,
+          "name": "source_search",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\tool-receipt-da96023d64c76de4750e27c828b7b3a626710cba5f8a87c2b2d5b96f7cc4a541.json",
+            "sha256": "0d710210809ea5026ba7e93c8ae7a3135de3abfaad6fdb82863fed2fc8e68aaf"
+          },
+          "status": null,
+          "turn": 5
+        },
+        {
+          "code": null,
+          "name": "source_read",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\tool-receipt-a7935669eb369d5d480bb942913bccfa909c32067eda1c4693561fb7771534b2.json",
+            "sha256": "bb71cea30c8be4bc7f07eb4057c199f7345fe4efe5e4c76c44d3ab63526eba80"
+          },
+          "status": null,
+          "turn": 6
+        },
+        {
+          "code": null,
+          "name": "source_search",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\tool-receipt-4ceaef446f5e008436efdc1ccd84990ec5139522f3cf4099107930e90c85f5ae.json",
+            "sha256": "a421634475fbc8b213119dd1761698d8b2f26e7f4d61a2fa2bc5ab06fa2d2d3e"
+          },
+          "status": null,
+          "turn": 7
+        },
+        {
+          "code": null,
+          "name": "source_read",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\tool-receipt-d1aa69c40df6be4b098eedd364a28c106a7fd34a4ff05d51c871c890c7222c6c.json",
+            "sha256": "9a571b5938c38d12e54c76cf2e3bbf68747f39eda7ce8117f92dedfb1a5bc62e"
+          },
+          "status": null,
+          "turn": 8
+        },
+        {
+          "code": null,
+          "name": "source_read",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\tool-receipt-2c89a9d1b0e2ca799bc16cb47af67783e1132121d88a94796d4f4a81d586a5a8.json",
+            "sha256": "9227f98f89dc446b5bdfece1c767dc2ebab78f6236875a1eda2057452af65b26"
+          },
+          "status": null,
+          "turn": 9
+        },
+        {
+          "code": null,
+          "name": "source_read",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\tool-receipt-4fbca661b1190b47924102ac511be6058cee4502795542cb8fd2970a6fe8a0b6.json",
+            "sha256": "a1fa77b84ad985c8ff9dccb7897b0e4874749e4baf4a6d3798e607dcaef5029d"
+          },
+          "status": null,
+          "turn": 10
+        },
+        {
+          "code": null,
+          "name": "source_search",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\tool-receipt-13003df9d9f236be195b0db135382ed31d6db2811afb94a1d3b9fba8d73f55b2.json",
+            "sha256": "434af38da09c3a5acc15f86eee1601eb354d396b1284dfbb470731f3118e2bf0"
+          },
+          "status": null,
+          "turn": 11
+        },
+        {
+          "code": null,
+          "name": "source_read",
+          "receipt_ref": {
+            "path": "C:\\tmp\\rfn2241v2\\B1\\runs\\dsh_1d07d6daa6004163bba32f162a2902ca\\a\\task-agent-execution\\tool-receipt-df82d11650d060c90ef1791adec0a50265dcb1242bf784d3faaadb0bab2586e5.json",
+            "sha256": "3c6ac96992e253f0ee7f0b9f440018524a113bf8e4e83c85bc1d01486cd2c3a8"
+          },
+          "status": null,
+          "turn": 12
+        }
+      ],
+      "unknown_usage_calls": {
+        "cached_input_tokens": 1,
+        "input_tokens": 1,
+        "output_tokens": 1
+      },
+      "wall_seconds": 900.0620000000054
+    }
+  },
+  "pair_ref": {
+    "path": "C:\\tmp\\rfn2241v2\\pair.json",
+    "sha256": "dd190b32339e0e815b4eb9c990d1c4b175251c62d73153de830b78fe6bc978f1"
+  },
+  "scope": "one development-exposed B0/B1 diagnostic; not hidden-pilot results",
+  "why": "为什么要有它：原件计量保留失败与未知量；独立验收及交付缺失时不能推断正确交付或有限单位成功成本。"
+}

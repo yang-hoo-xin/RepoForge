@@ -1,0 +1,15 @@
+{
+  "path": "C:\\Users\\10160\\.codex\\worktrees\\semantic-work-state\\rag_capability_mainline\\artifacts\\eval_driven_20261029\\navigation-stagnation-ab-v2\\run-records.zip",
+  "sha256": "d2af9fb942f82a1ade7dcb2ba71930e0e941789fb31f2072260d241bdb247c52",
+  "archive_bytes": 42476625,
+  "record_count": 4657,
+  "included_bytes": 116964676,
+  "excluded_counts": {
+    "bound_external_material_retained_locally_not_exported": 392,
+    "generated_build_or_interpreter_cache_retained_at_original_path": 2776,
+    "duplicate_export_frozen_platform_copy_included_instead": 1080
+  },
+  "all_included_hashes_verified": true,
+  "original_files_deleted": false,
+  "scope": "Public run records, runtime source and public task inputs; external bound files, private acceptance and build caches remain at their original locations."
+}
