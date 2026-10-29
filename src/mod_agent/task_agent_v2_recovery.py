@@ -814,9 +814,21 @@ def load_task_agent_checkpoint(*, artifact_store_root, checkpoint_ref, reconcile
     _validate_resource_chain(state, checkpoint, host)
     _validate_call_evidence(checkpoint, root, host)
     from src.mod_agent.task_agent_v2_working_state import validate_working_state
+    navigation_source = None
+    working = checkpoint["owner"].get("working_state")
+    if isinstance(working, dict) and "consecutive_navigation_returns" in working:
+        # 为什么要有它：恢复导航窗口只信实际请求绑定的工作状态，不能用检查点自报起点证明自身。
+        turns = checkpoint["details"]["provider_turns"]
+        _require(bool(turns), "NAVIGATION_REQUEST_MISSING")
+        actual_request = _trusted_read(turns[-1]["request_ref"], root)
+        states = [row["content"]["current_task_state"] for row in actual_request["messages"]
+            if isinstance(row.get("content"), dict) and "current_task_state" in row["content"]]
+        _require(len(states) == 1, "NAVIGATION_REQUEST_AMBIGUOUS")
+        working_ref = states[0]["working_state_ref"]
+        navigation_source = _trusted_read({"path": str(root / working_ref), "sha256": Path(working_ref).stem}, root)
     validate_working_state(checkpoint["owner"].get("working_state"),
         responses=[_trusted_read(row["response_ref"], root) for row in checkpoint["details"]["provider_turns"]
-            if row.get("response_ref")], call_records=checkpoint["loop"]["call_records"])
+            if row.get("response_ref")], call_records=checkpoint["loop"]["call_records"], navigation_source=navigation_source)
     if host.get("semantic_state_enabled", False):
         from src.mod_agent.task_agent_v2_semantic_state import validate_semantic_state
         validate_semantic_state(checkpoint["owner"].get("working_state"), [

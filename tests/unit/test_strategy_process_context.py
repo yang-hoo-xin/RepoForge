@@ -67,6 +67,15 @@ def test_candidate_change_cannot_reuse_old_boundary_trigger(tmp_path):
     assert TaskAgentV2Experience.context(session, source_state(session, renewed))["stagnation_triggered"] is False
 
 
+def test_navigation_feedback_has_its_own_strategy_evidence_scope(tmp_path):
+    session, _ = session_fixture(tmp_path)
+    working = advance(session, None, [observed(str(i), text=f"page {i}") for i in range(8)])
+    facts, sources = TaskAgentV2Experience.context_with_sources(session, source_state(session, working))
+    assert facts["stagnation_triggered"] is True
+    assert facts["consecutive_repeated_returns"] == 0
+    assert sources["stagnation_scope"] == "navigation_only_returns_not_semantic_progress"
+
+
 def test_public_phase_requires_check_bound_to_exact_current_candidate(tmp_path):
     session, documents = session_fixture(tmp_path)
     session.state.current_revision_ref = "candidate-new"

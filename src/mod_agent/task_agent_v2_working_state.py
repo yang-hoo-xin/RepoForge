@@ -12,6 +12,18 @@ from src.mod_agent.task_agent_v2_context import native_assistant_text, native_to
 from src.mod_agent.task_agent_v2_semantic_state import strip_working_state
 
 _SCHEMA = "task-agent-working-state.v1"
+_NAVIGATION_TOOLS = {"source_search", "source_read"}
+
+
+def _navigation_streak(identities, call_records):
+    count = 0
+    for name, identifier in reversed(identities):
+        result = (call_records.get(identifier, {}).get("result") or {})
+        output = result.get("output") or {}
+        if name not in _NAVIGATION_TOOLS or not isinstance(output, dict) or output.get("execution") != "executed":
+            break
+        count += 1
+    return count
 
 
 def retain_model_statement(working, response, *, response_ref=None, source_boundary=None):
@@ -79,8 +91,14 @@ def update_working_state(previous, request, *, task_contract_ref, current_revisi
         "repeated_returns": 0, "accepted_candidate_returns": 0, "executed_experiment_returns": 0,
         "public_check_returns": 0})
     streak = value.get("consecutive_repeated_returns", 0)
+    # Scope: only new completed navigation returns at the current bound source/check state.
+    # 为什么要有它：不同查询也可能持续没有候选或实验；边界变化及历史回放不能伪造连续次数。
+    navigation = value.get("consecutive_navigation_returns", 0)
+    value.setdefault("navigation_boundary_start", len(seen_calls))
     if prior_boundary is not None and prior_boundary != boundary:
         streak = 0
+        navigation = 0
+        value["navigation_boundary_start"] = len(seen_calls)
     if prior_boundary is not None and prior_boundary.get("task_contract_ref") != task_contract_ref:
         value.pop("public_failure_repetition", None)
     exchanges = [(row.provider_state, row.tool_results) for row in request.historical_tool_exchanges]
@@ -124,6 +142,7 @@ def update_working_state(previous, request, *, task_contract_ref, current_revisi
             observed = output.get("value", output)
             observed = observed if isinstance(observed, dict) else {}
             executed = output.get("execution") == "executed"
+            navigation = navigation + 1 if executed and result.name in _NAVIGATION_TOOLS else 0
             fact = {"call_id": result.call_id, "name": result.name, "arguments": arguments,
                 "returned_output_sha256": canonical_hash(result.output), "repeated_exact_return": repeated}
             value["latest_action"] = fact
@@ -149,11 +168,15 @@ def update_working_state(previous, request, *, task_contract_ref, current_revisi
             if executed and result.name in {"experiment_run", "experiment_execute", "probe_run", "test_run"}:
                 counts["executed_experiment_returns"] += 1
     value["consecutive_repeated_returns"] = streak
+    value["consecutive_navigation_returns"] = navigation
+    navigation_only = navigation >= 8
     repeated_failure = (value.get("public_failure_repetition") or {}).get("same_visible_failure", False)
-    value["stagnation"] = {"triggered": streak >= 3 or repeated_failure, "consecutive_repeated_returns": streak,
+    value["stagnation"] = {"triggered": streak >= 3 or repeated_failure or navigation_only, "consecutive_repeated_returns": streak,
+        "navigation_only": navigation_only, "consecutive_navigation_returns": navigation,
         "same_visible_public_failure": repeated_failure,
         "basis": "The exact-return counter compares matched tool arguments and full returned output; "
-            "the public-failure signal separately compares the declared selected observation signature. Replayed call IDs count once.",
+            "the public-failure signal separately compares the declared selected observation signature. "
+            "Navigation-only counts consecutive executed search/read returns at the current boundary. Replayed call IDs count once.",
         "business_progress_inferred": False, "authority_changed": False,
         "guidance": ("Repeated returns have added no distinct recorded observation. Reconsider the current "
             "hypothesis using the recorded evidence; choose a discriminating experiment, a justified edit, "
@@ -162,7 +185,11 @@ def update_working_state(previous, request, *, task_contract_ref, current_revisi
                 "Three or more executed public checks returned the same selected check/expected/actual/count signature. "
                 "Inspect the full public feedback before revising a hypothesis or selecting a discriminating experiment. "
                 "This does not establish absence of technical progress; no edit, approval or plan tool is required.")
-            if repeated_failure else None}
+            if repeated_failure else (
+                "At least eight consecutive search/read results have returned without an intervening candidate, experiment or check. "
+                "These results may contain useful new evidence. Reconsider the current hypothesis using the recorded evidence; "
+                "choose a discriminating experiment, a justified edit, a specific missing observation, or explain a concrete blocker. "
+                "No patch or plan tool is mandatory.") if navigation_only else None}
     return value
 
 
@@ -195,7 +222,8 @@ def working_state_view(working, *, statement_archive_ref=None):
         view[key] = item
     if "stagnation" in working:
         view["stagnation"] = {key: deepcopy(working["stagnation"][key]) for key in
-            ("triggered", "consecutive_repeated_returns", "same_visible_public_failure", "business_progress_inferred", "guidance")
+            ("triggered", "consecutive_repeated_returns", "same_visible_public_failure", "business_progress_inferred", "guidance",
+             "navigation_only", "consecutive_navigation_returns")
             if key in working["stagnation"]}
     if "public_failure_repetition" in working:
         view["public_failure_repetition"] = {key: deepcopy(working["public_failure_repetition"][key]) for key in
@@ -211,7 +239,7 @@ def working_state_view(working, *, statement_archive_ref=None):
     return view
 
 
-def validate_working_state(working, *, responses, call_records):
+def validate_working_state(working, *, responses, call_records, navigation_source=None):
     """Reject invented public statements or returned observations during recovery.
 
     为什么要有它：恢复状态会进入真实模型请求，持久化不能成为注入未发生的模型陈述和工具结果的通道。
@@ -237,6 +265,17 @@ def validate_working_state(working, *, responses, call_records):
     counts = working.get("counts", {})
     if counts.get("completed_returns") != len(identities):
         raise ValueError("TASK_AGENT_WORKING_RETURN_COUNT_CHANGED")
+    if "consecutive_navigation_returns" in working:
+        # 为什么要有它：自洽的起点和次数仍可伪造；必须与实际发送请求绑定的原件一致。
+        if not isinstance(navigation_source, dict) or any(
+                working.get(key) != navigation_source.get(key) for key in
+                ("boundary", "navigation_boundary_start", "consecutive_navigation_returns")):
+            raise ValueError("TASK_AGENT_WORKING_NAVIGATION_SOURCE_CHANGED")
+        start = working.get("navigation_boundary_start")
+        count = working["consecutive_navigation_returns"]
+        if (type(start) is not int or not 0 <= start <= len(identities)
+                or type(count) is not int or count != _navigation_streak(identities[start:], call_records)):
+            raise ValueError("TASK_AGENT_WORKING_NAVIGATION_COUNT_CHANGED")
     for key in ("latest_public_check", "latest_public_failure"):
         observed = working.get(key)
         if observed is not None:

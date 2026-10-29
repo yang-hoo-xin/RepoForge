@@ -18,7 +18,7 @@ from tests.unit.test_csharp_repository_product_entry import (
 
 
 def test_normal_cli_no_plan_or_binding_gate_retains_observation_and_repairs(
-    repository_workspace, monkeypatch, capsys, semantic_observer=None,
+    repository_workspace, monkeypatch, capsys, semantic_observer=None, distinct_navigation=False,
 ):
     profile, source = _profile(repository_workspace)
     baseline = (source / "Library/Arithmetic.cs").read_bytes()
@@ -74,13 +74,23 @@ def test_normal_cli_no_plan_or_binding_gate_retains_observation_and_repairs(
         revision = current["current_revision_ref"]
         phase = memory["phase"]
         content = ""
-        if phase == "investigate" and memory["reads"] < 4:
+        read_count = 8 if distinct_navigation else 4
+        if phase == "investigate" and memory["reads"] < read_count:
             content = statement if memory["reads"] == 0 else "Re-read the same current source view."
             name, arguments = "source_read", {"parent_revision_ref": revision, "path": "Library/Arithmetic.cs"}
+            if distinct_navigation and memory["reads"] < 7:
+                arguments["limit"] = memory["reads"] + 1
+            if distinct_navigation:
+                assert current["working_state"]["stagnation"]["navigation_only"] is False
             memory["reads"] += 1
         elif phase == "investigate":
             assert statement in json.dumps(payload), "The actual request must retain the observation without duplicating its audit ledger"
-            assert current["investigation_observations"]["repeated_view_returns"] == 3
+            assert current["investigation_observations"]["repeated_view_returns"] == (0 if distinct_navigation else 3)
+            if distinct_navigation:
+                signal = current["working_state"]["stagnation"]
+                assert signal["navigation_only"] is True
+                assert signal["consecutive_navigation_returns"] == 8
+                assert "eight consecutive" in signal["guidance"]
             assert not current["valid_bindings"]
             name, arguments = "candidate_submit", {"parent_revision_ref": revision, "edits": [{
                 "path": "Library/Arithmetic.cs", "source_view_ref": last["source_view_ref"],
@@ -89,6 +99,8 @@ def test_normal_cli_no_plan_or_binding_gate_retains_observation_and_repairs(
             content = "Test an intentionally incorrect controlled multiplier hypothesis."
             memory["phase"] = "check_first"
         elif phase == "check_first":
+            if distinct_navigation:
+                assert current["working_state"]["stagnation"]["navigation_only"] is False
             assert last["candidate_ref"] == revision
             assert current["valid_bindings"], "The platform must have created the edit binding"
             memory["failed_candidate"] = revision
@@ -159,3 +171,10 @@ def test_normal_cli_no_plan_or_binding_gate_retains_observation_and_repairs(
     handoff = proposal["context_pack"]["task_agent_handoff_v2"]
     assert handoff["candidate_ref"] != memory["failed_candidate"]
     assert "Arithmetic.cs" in json.dumps(proposal["diff_intent"])
+
+
+def test_normal_entry_sends_navigation_feedback_then_accepts_model_chosen_candidate(
+        repository_workspace, monkeypatch, capsys):
+    # 为什么要有它：反馈须进入实际 provider 请求，正常候选权限与检查行为也须继续成立。
+    test_normal_cli_no_plan_or_binding_gate_retains_observation_and_repairs(
+        repository_workspace, monkeypatch, capsys, distinct_navigation=True)

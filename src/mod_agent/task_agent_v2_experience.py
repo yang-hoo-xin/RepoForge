@@ -437,6 +437,9 @@ def _process_context(session, current_task_state=None):
             if retained["stagnation"]["triggered"] is stagnation["triggered"]:
                 facts["stagnation_triggered"] = stagnation["triggered"]
                 facts["consecutive_repeated_returns"] = streak
+                if retained["stagnation"].get("navigation_only"):
+                    # 为什么要有它：导航反馈有独立来源范围，不能被经验消费者误标为完全重复返回。
+                    sources["stagnation_scope"] = "navigation_only_returns_not_semantic_progress"
     return facts, sources
 
 

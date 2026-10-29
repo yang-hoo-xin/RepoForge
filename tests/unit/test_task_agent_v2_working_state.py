@@ -1,6 +1,8 @@
 """Counterexamples for durable public statements, repeated reads and recovered counters."""
 import json
 
+import pytest
+
 from src.libs.llm.agent_turn import (
     AgentMessage,
     AgentToolExchange,
@@ -90,6 +92,69 @@ def test_changed_advisory_metadata_does_not_make_an_identical_read_new_evidence(
     assert raw_second["working_state"] == {"hypothesis": "revised"}
 
 
+def test_distinct_navigation_feedback_reaches_view_and_survives_replay():
+    history = [observed(str(i), text=f"different page {i}",
+        name="source_search" if i % 2 else "source_read") for i in range(8)]
+    working = advance(None, history[:7])
+    assert working_state_view(working)["stagnation"]["triggered"] is False
+    working = advance(working, history)
+    view = working_state_view(working)
+    assert view["stagnation"]["navigation_only"] is True
+    assert view["stagnation"]["consecutive_navigation_returns"] == 8
+    assert view["stagnation"]["triggered"] is True
+    assert view["stagnation"]["business_progress_inferred"] is False
+    assert "No patch or plan tool is mandatory" in view["stagnation"]["guidance"]
+    assert "no distinct" not in view["stagnation"]["guidance"]
+    assert advance(json.loads(json.dumps(working)), history) == working
+    reset = advance(working, history, current_revision_ref="new-source")
+    assert working_state_view(reset)["stagnation"]["navigation_only"] is False
+
+
+@pytest.mark.parametrize("boundary", [{"registry_ref": "new-authority-binding"}, {"current_check_ref": "new-check"}])
+def test_navigation_window_does_not_cross_boundaries(boundary):
+    history = [observed(str(i), text=str(i)) for i in range(8)]
+    working = advance(None, history)
+    reset = advance(working, history, **boundary)
+    assert reset["consecutive_navigation_returns"] == 0
+    continued = advance(reset, [*history, observed("new", text="new")], **boundary)
+    assert continued["consecutive_navigation_returns"] == 1
+
+
+@pytest.mark.parametrize("name", ["probe_submit", "experiment_run", "candidate_check", "plan_update"])
+def test_non_navigation_result_breaks_navigation_window(name):
+    history = [observed(str(i), text=str(i)) for i in range(8)]
+    working = advance(None, history)
+    other = observed("other", name=name)
+    continued = advance(working, [*history, other, observed("later", text="later")])
+    assert continued["consecutive_navigation_returns"] == 1
+
+
+def test_navigation_counter_rejects_forgery_and_does_not_count_unexecuted_reads():
+    from src.mod_agent.task_agent_v2_working_state import validate_working_state
+    history = [observed(str(i), text=str(i)) for i in range(8)]
+    working = advance(None, history)
+    records = {row.tool_results[0].call_id: {"result": {
+        "name": row.tool_results[0].name, "output": row.tool_results[0].output}} for row in history}
+    validate_working_state(working, responses=[], call_records=records, navigation_source=working)
+    forged = json.loads(json.dumps(working))
+    forged["consecutive_navigation_returns"] = 9
+    with pytest.raises(ValueError, match="NAVIGATION_SOURCE_CHANGED"):
+        validate_working_state(forged, responses=[], call_records=records, navigation_source=working)
+    reset = advance(working, history, current_revision_ref="new-source")
+    forged = json.loads(json.dumps(reset))
+    forged.update(navigation_boundary_start=0, consecutive_navigation_returns=8)
+    with pytest.raises(ValueError, match="NAVIGATION_SOURCE_CHANGED"):
+        validate_working_state(forged, responses=[], call_records=records, navigation_source=reset)
+    rejected = observed("rejected")
+    rejected.tool_results[0].output["execution"] = "not_executed"
+    continued = advance(working, [*history, rejected])
+    assert continued["consecutive_navigation_returns"] == 0
+    candidate = observed("candidate", name="candidate_submit")
+    candidate.tool_results[0].output["value"]["candidate_ref"] = "candidate"
+    reset = advance(working, [*history, candidate])
+    assert working_state_view(reset)["stagnation"]["navigation_only"] is False
+
+
 def test_model_response_content_is_exact_and_never_promoted_to_fact():
     response = AgentTurnResponse(provider="fixture", model="fixture", content="Hypothesis A is unconfirmed. " * 1000)
     working = retain_model_statement(None, response, response_ref={"path": "response.json", "sha256": "hash"})
@@ -140,13 +205,13 @@ def test_recovery_rejects_an_invented_model_statement_or_public_feedback():
     item = observed("read", content="Unconfirmed actual hypothesis")
     working = advance(None, [item])
     records = {"read": {"result": {"call_id": "read", "name": "source_read", "output": item.tool_results[0].output}}}
-    validate_working_state(working, responses=[{"content": item.provider_state["content"]}], call_records=records)
+    validate_working_state(working, responses=[{"content": item.provider_state["content"]}], call_records=records, navigation_source=working)
     with pytest.raises(ValueError, match="WORKING_STATEMENT_NOT_OBSERVED"):
         validate_working_state(working, responses=[{"content": "different"}], call_records=records)
     forged = json.loads(json.dumps(working))
     forged["latest_public_failure"] = {"call_id": "read", "name": "candidate_check", "output": {"status": "failed"}}
     with pytest.raises(ValueError, match="WORKING_FEEDBACK_NOT_OBSERVED"):
-        validate_working_state(forged, responses=[{"content": item.provider_state["content"]}], call_records=records)
+        validate_working_state(forged, responses=[{"content": item.provider_state["content"]}], call_records=records, navigation_source=working)
 
 
 def test_first_received_response_can_be_reconciled_before_any_previous_working_state():
