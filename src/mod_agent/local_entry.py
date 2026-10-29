@@ -6251,7 +6251,8 @@ def _persist_graph_terminal_result(
         raise LocalEntryError("Run manifest identity changed before terminal projection.")
     result_path = run_root / "run_result.json"
     terminal_stage = str(summary.get("current_stage") or "unknown")
-    summary = {**summary, "current_stage": terminal_stage}
+    # 为什么要有它：无候选的正常阻塞也须在持久化原件与返回值中提供终态；保留已有显式状态，不伪造成功。
+    summary = {**summary, "current_stage": terminal_stage, "status": summary.get("status", terminal_stage)}
     ordered_summary: dict[str, Any] = {}
     for key in sorted(summary):
         value = summary[key]
@@ -6283,7 +6284,7 @@ def _persist_graph_terminal_result(
         encoding="utf-8",
     )
     from src.mod_agent.run_outcome_finalization import finalize_run_outcome
-    return finalize_run_outcome(run_root=run_root, run_id=run_id)
+    return {"status": summary["status"], **finalize_run_outcome(run_root=run_root, run_id=run_id)}
 
 
 def _sort_graph_terminal_json_objects(value: Any) -> Any:

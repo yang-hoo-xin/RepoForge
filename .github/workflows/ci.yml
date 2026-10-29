@@ -76,6 +76,8 @@ jobs:
           tests/unit/test_extract_strategy_experience.py
           tests/unit/test_repository_declared_skips.py
           tests/unit/test_repository_product_pilot.py
+          tests/unit/test_navigation_experiment_admission.py
+          tests/unit/test_navigation_task_run_entry.py
 
       # 为什么要有它：缺项和失败不能变成评测成绩，真实临时文件的治理边界需要在每次变更后回归。
       - name: Offline governance scenario gate

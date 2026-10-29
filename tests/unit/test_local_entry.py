@@ -1276,11 +1276,12 @@ def test_graph_terminal_result_updates_same_run_manifest(tmp_path: Path) -> None
     result_path = tmp_path / "run_result.json"
     result_bytes = result_path.read_bytes()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    expected_summary = {**summary, "status": "blocked"}
     expected_result_bytes = (
-        json.dumps(dict(summary), ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+        json.dumps(expected_summary, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     ).encode("utf-8")
     assert result_bytes == expected_result_bytes
-    assert json.loads(result_bytes) == summary
+    assert json.loads(result_bytes) == expected_summary
     assert manifest["status"] == "blocked"
     assert manifest["terminal_stage"] == "blocked"
     assert manifest["graph_invoked"] is True

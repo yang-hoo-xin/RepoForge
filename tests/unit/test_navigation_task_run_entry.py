@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import httpx
+import pytest
 
 from scripts import dsh_run_request as bridge
 from scripts import run_repository_product_pilot as pilot
@@ -14,12 +15,13 @@ from src.mod_agent.build.adapter import BuildCommandResult
 from src.mod_agent.build.nuget import NuGetIsolatedBuildExecution
 from src.mod_agent.domain import csharp_repository_backend as backend
 from src.mod_agent.domain.full_project_compilation import _ref
+from src.mod_agent.model_qualification import read_bound_json
 from tests.unit.test_csharp_repository_backend import _profile
 from tests.unit.test_csharp_repository_product_entry import repository_workspace as repository_workspace
 from tests.unit.test_navigation_experiment_admission import requirement
 
 
-def controlled_entry(root, monkeypatch, *, navigation=False):
+def controlled_entry(root, monkeypatch, *, navigation=False, model_calls=1, reads=None):
     profile, source = _profile(root)
     requests, saved = [], {}
     original = (source / "Library/Arithmetic.cs").read_bytes()
@@ -86,16 +88,16 @@ def controlled_entry(root, monkeypatch, *, navigation=False):
     arguments = ["--target-project", str(source), "--repository-profile", profile.reference["path"],
         "--workspace-root", str(root / "runs"), "--settings", str(Path("config/settings.yaml").resolve()),
         "--local-ollama", "--ollama-model", model, "--ollama-context-window", "65536",
-        "--model-call-budget-policy", "task_total_only", "--task-model-call-limit", "16" if navigation else "1",
+        "--model-call-budget-policy", "task_total_only", "--task-model-call-limit", "16" if navigation else str(model_calls),
         "--constraint-policy", "source_priority_v1", "--technical-executor", "task_agent",
         "--task-agent-protocol", "v2", "--task-agent-semantic-state", "enabled",
         "--source-retrieval", "rg_live", "--defer-approval", "--confirm-isolated-write", "--allow-build"]
-    if navigation:
+    if navigation or reads is not None:
         worker = root / "policy.json"
         worker.write_text(json.dumps({"schema_version": "patch_worker_configuration_v1",
             "enable_recovery_loop": False, "behavior_evaluator": None, "policy": {
-                "model_call_budget_policy": "task_total_only", "max_total_model_turns": 16,
-                "max_tool_rounds": 12, "max_observation_bytes": 131072}}), encoding="utf-8")
+                "model_call_budget_policy": "task_total_only", "max_total_model_turns": 16 if navigation else model_calls,
+                "max_tool_rounds": 12 if navigation else reads, "max_observation_bytes": 131072}}), encoding="utf-8")
         arguments += ["--patch-worker-config", str(worker)]
     configuration = root / "execution.json"
     configuration.write_text(json.dumps({"arguments": arguments}), encoding="utf-8")
@@ -113,3 +115,28 @@ def test_admitted_budget_reaches_feedback_candidate_and_check(repository_workspa
     assert isinstance(result, bridge.TaskRunCompleted)
     assert result.status == "awaiting_delivery"
     assert len(requests) == 12
+
+
+@pytest.mark.parametrize("model_calls,reads", [(1, None), (3, 1)])
+def test_budget_stop_without_candidate_returns_blocked_evidence(repository_workspace, monkeypatch, model_calls, reads):
+    result, requests = controlled_entry(repository_workspace, monkeypatch, model_calls=model_calls, reads=reads)
+    assert isinstance(result, bridge.TaskRunCompleted)
+    assert result.status == "blocked"
+    assert len(requests) == model_calls
+    manifest = read_bound_json(result.evidence_bundle_ref)
+    terminal = read_bound_json(manifest["terminal_record"])
+    outcome = read_bound_json(result.run_outcome_ref)
+    assert terminal["status"] == terminal["current_stage"] == "blocked"
+    assert outcome["run_id"] == result.run_id and outcome["request_id"] == result.request_id
+    assert terminal["actual_write_performed"] is False
+    assert terminal["model_call_budget"]["consumed"] == model_calls
+    assert terminal["task_agent_outcome"]["candidate_ref"] is None
+    assert terminal["task_agent_outcome"]["check_ref"] is None
+    assert any("BUDGET" in row["code"] for row in terminal["blockers"])
+    loop = read_bound_json(terminal["task_agent_outcome"]["loop_result_ref"])
+    assert loop["read_units"] == 1
+    assert sum(row["status"] == "completed" for row in loop["call_records"].values()) == 1
+    if reads is not None:
+        rejected = [row for row in loop["call_records"].values() if row["status"] == "not_dispatched"]
+        assert len(rejected) == 1
+        assert rejected[0]["result"]["output"]["code"] == "TASK_AGENT_READ_BUDGET_EXCEEDED"

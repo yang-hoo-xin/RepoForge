@@ -75,7 +75,7 @@ def test_summary_exception_does_not_change_product_result(tmp_path, monkeypatch)
     result = local_entry._persist_graph_terminal_result(run_root=root, run_id="one", request_id="request-one",
         summary={"run_id": "one", "current_stage": "blocked", "actual_write_performed": False},
         model_call_count=3, patch_payload_parser_entered=False, actual_write_performed=False)
-    assert result == {"outcome_summary_status": "summary_unavailable", "outcome_summary_error": "RuntimeError"}
+    assert result == {"status": "blocked", "outcome_summary_status": "summary_unavailable", "outcome_summary_error": "RuntimeError"}
     manifest = json.loads((root / "run_manifest.json").read_bytes())
     assert manifest["terminal_stage"] == "blocked" and manifest["model_call_count"] == 3
     assert _read(manifest["terminal_record"])["current_stage"] == "blocked"

@@ -1,5 +1,5 @@
 {
-  "status": "slice1_green_slice2_next",
+  "status": "both_slices_green_combined_verification_and_review_pending",
   "fixed_point": "05373a1",
   "scope": "Two sequential red-green slices: navigation experiment admission and normal blocked Task Run outcome.",
   "baseline_evidence": "artifacts/eval_driven_20261029/navigation-stagnation-ab-v1/b0-independent-audit.md",
@@ -15,6 +15,13 @@
     "green": "8 passed; resource admission and eight actual controlled navigations followed by a source read, candidate, check and finish",
     "green_evidence": "artifacts/eval_driven_20261029/navigation-repair/slice1-green.xml",
     "model_calls": "controlled provider only; zero real model calls"
+  },
+  "slice2": {
+    "red": "Normal execute_task_run(OpenTaskRun) reproduced DSH_TASK_RUN_OUTCOME_INVALID after one controlled source-read response and a natural model-budget stop.",
+    "red_evidence": "artifacts/eval_driven_20261029/navigation-repair/slice2-red.xml",
+    "green": "The same test returns TaskRunCompleted(blocked) with identity, budget, no candidate/check and original evidence references preserved.",
+    "green_evidence": "artifacts/eval_driven_20261029/navigation-repair/slice2-green.xml",
+    "change": "Persist and return status in the existing terminal owner; preserve an explicitly supplied status, otherwise use the already determined terminal stage. No new outcome schema or consumer migration."
   },
   "preserve": ["all old experiment inputs and results", "navigation threshold 8", "existing source and effect authority", "no replay of 1531, 1552 or the invalid Serilog B0"],
   "return_point": "After both slices and CI are green, reselect the existing queue and qualify a fresh experiment version before any new real pair. Do not expand restoration architecture or evaluators.",
