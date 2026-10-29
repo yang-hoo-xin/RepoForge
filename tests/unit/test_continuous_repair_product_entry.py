@@ -178,3 +178,36 @@ def test_normal_entry_sends_navigation_feedback_then_accepts_model_chosen_candid
     # 为什么要有它：反馈须进入实际 provider 请求，正常候选权限与检查行为也须继续成立。
     test_normal_cli_no_plan_or_binding_gate_retains_observation_and_repairs(
         repository_workspace, monkeypatch, capsys, distinct_navigation=True)
+
+
+def test_navigation_receipt_recovery_sends_feedback_without_repeating_eighth_read(
+        repository_workspace, monkeypatch, capsys):
+    import pytest
+    from src.mod_agent.task_agent_v2_execution import TaskAgentExecutionV2
+
+    original = TaskAgentExecutionV2.record_v2_tool_receipt
+    retained, read_calls = [], []
+
+    def interrupt(owner, origin, output, session):
+        reference = original(owner, origin, output, session)
+        if origin["name"] == "source_read":
+            read_calls.append(origin["call_id"])
+        if origin["turn"] == 8 and not retained:
+            retained.append((str(owner.store.root), owner.v2_checkpoint_ref))
+            raise KeyboardInterrupt()
+        return reference
+
+    # 为什么要有它：第八次读取回执后的真实恢复必须送达同一导航反馈，且不能重复读取或重置预算。
+    monkeypatch.setattr(TaskAgentExecutionV2, "record_v2_tool_receipt", interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        test_normal_cli_no_plan_or_binding_gate_retains_observation_and_repairs(
+            repository_workspace, monkeypatch, capsys, distinct_navigation=True)
+    capsys.readouterr()
+    assert len(read_calls) == 8 and len(set(read_calls)) == 8
+    store, checkpoint = retained[0]
+    code = cli.main(["run-request", "--resume-task-agent", checkpoint, "--artifact-store-root", store])
+    result = json.loads(capsys.readouterr().out)
+    assert code == 0 and result["status"] == "awaiting_delivery"
+    assert result["new_task_created"] is False
+    assert result["cumulative_resources"]["model_calls"] == 14
+    assert len(read_calls) == 9 and len(set(read_calls)) == 9
