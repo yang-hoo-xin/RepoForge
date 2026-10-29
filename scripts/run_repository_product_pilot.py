@@ -454,6 +454,8 @@ def validate_navigation_experiment(execution_config_ref, requirements, *, wall_s
 
     _verify(execution_config_ref)
     _, options = _configuration_arguments(execution_config_ref["path"])
+    if options.get("--technical-executor") != "task_agent" or options.get("--task-agent-protocol") != "v2":
+        raise ValueError("NAVIGATION_EXPERIMENT_REQUIRES_TASK_AGENT_V2")
     expected = {"evaluation_version", "threshold", "navigation_observation_bytes", "navigation_seconds", "post_trigger_reserve"}
     if (not isinstance(requirements, dict) or set(requirements) != expected
             or not isinstance(requirements["evaluation_version"], str) or not requirements["evaluation_version"].strip()
@@ -490,6 +492,10 @@ def validate_navigation_experiment(execution_config_ref, requirements, *, wall_s
 
 def freeze(configuration_ref):
     config = read_bound_json(configuration_ref)
+    mode = config.get("mode", "matched_product_pair")
+    # 为什么要有它：显式实验要求不能在其他冻结分支被忽略，入口必须实际包含待测机制。
+    if "navigation_feedback_experiment" in config and mode not in {"absolute_real_B", "matched_product_pair"}:
+        raise ValueError("NAVIGATION_EXPERIMENT_MODE_UNSUPPORTED")
     native = native_reference_profile(config)
     native_user = native_user_configuration(config.get("native_user_config_ref"), native) if native is not None else None
     external = external_pilot_profile(config)
@@ -499,7 +505,6 @@ def freeze(configuration_ref):
         _verify(config["settings_ref"])
         external_settings = yaml.safe_load(Path(config["settings_ref"]["path"]).read_text(encoding="utf-8"))
         validate_external_settings_credentials(external_settings)
-    mode = config.get("mode", "matched_product_pair")
     if "patch_worker_config_ref" in config:
         _verify(config["patch_worker_config_ref"])
     wall_seconds = config.get("wall_seconds", 1800)
@@ -668,9 +673,6 @@ def freeze(configuration_ref):
             if "patch_worker_config_ref" in config:
                 arguments.extend(["--patch-worker-config", config["patch_worker_config_ref"]["path"]])
             execution = _save(arm_root / "base-execution.json", {"arguments": arguments})
-            if "navigation_feedback_experiment" in config:
-                base["navigation_experiment_admission"] = validate_navigation_experiment(
-                    execution, config["navigation_feedback_experiment"], wall_seconds=wall_seconds)
             open_command = OpenTaskRun(execution_config_ref=execution, intent=common).bind()
             selected = open_command.execution_config_ref["path"]
             business = list(open_command.business_argv)
@@ -678,7 +680,17 @@ def freeze(configuration_ref):
             run_root = arm_root / "runs" / options["--run-id"]
             bound = [_ref(selected), _ref(settings_path), profile.reference, common_ref, configuration_ref, _ref(__file__)]
             if "--patch-worker-config" in options:
-                bound.append(_ref(options["--patch-worker-config"]))
+                copied_worker = _ref(options["--patch-worker-config"])
+                if read_bound_json(copied_worker) != read_bound_json(config["patch_worker_config_ref"]):
+                    raise ValueError("PILOT_WORKER_CONFIGURATION_CHANGED_DURING_BIND")
+                bound.append(copied_worker)
+            # 为什么要有它：预检必须绑定实际执行副本，不能记录旧worker容量却冻结已漂移的新配置。
+            if "navigation_feedback_experiment" in config:
+                admission = validate_navigation_experiment(open_command.execution_config_ref,
+                    config["navigation_feedback_experiment"], wall_seconds=wall_seconds)
+                if admission["worker_configuration_ref"] is not None and admission["worker_configuration_ref"] not in bound:
+                    raise ValueError("PILOT_WORKER_CONFIGURATION_CHANGED_DURING_BIND")
+                base["navigation_experiment_admission"] = admission
             if external is not None:
                 bound.append(config["external_profile_ref"])
             if experience_ref is not None:
@@ -764,6 +776,8 @@ def configuration_keys(config):
         keys += ("experience_config_ref",)
     if "external_profile_ref" in config:
         keys += ("external_profile_ref",)
+    if "patch_worker_config_ref" in config:
+        keys += ("patch_worker_config_ref",)
     return (*keys, "codex_executable_ref") if config.get("mode", "matched_product_pair") == "matched_product_pair" else keys
 
 

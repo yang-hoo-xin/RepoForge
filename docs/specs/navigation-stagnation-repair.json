@@ -1,5 +1,5 @@
 {
-  "status": "both_slices_green_combined_verification_and_review_pending",
+  "status": "both_slices_green_review_fixes_verified_pending_recheck_and_ci",
   "fixed_point": "05373a1",
   "scope": "Two sequential red-green slices: navigation experiment admission and normal blocked Task Run outcome.",
   "baseline_evidence": "artifacts/eval_driven_20261029/navigation-stagnation-ab-v1/b0-independent-audit.md",
@@ -22,6 +22,15 @@
     "green": "The same test returns TaskRunCompleted(blocked) with identity, budget, no candidate/check and original evidence references preserved.",
     "green_evidence": "artifacts/eval_driven_20261029/navigation-repair/slice2-green.xml",
     "change": "Persist and return status in the existing terminal owner; preserve an explicitly supplied status, otherwise use the already determined terminal stage. No new outcome schema or consumer migration."
+  },
+  "combined_verification": {"result": "191 passed", "evidence": "artifacts/eval_driven_20261029/navigation-repair/combined-after-contract.xml"},
+  "review_fixes": {
+    "Standards": "P2: preflight ran before worker allocation. Now compare registered and copied worker contents, preflight the exact bound execution config, and include that worker reference in frozen inputs.",
+    "Spec": "P2: unsupported execution paths could be admitted. Require TaskAgent v2 and reject navigation requirements in unsupported freeze modes; semantic-state disabled is not rejected because base navigation state remains active.",
+    "red_evidence": ["artifacts/eval_driven_20261029/navigation-repair/review-standards-red.xml", "artifacts/eval_driven_20261029/navigation-repair/review-spec-red.xml"],
+    "green": "98 passed after review fixes",
+    "green_evidence": "artifacts/eval_driven_20261029/navigation-repair/review-fixes-verified.xml",
+    "retained_environment_failure": "The earlier same selection had 88 passes and 10 Windows sandbox temporary-path PermissionErrors; normal-permission rerun passed without product/test logic changes."
   },
   "preserve": ["all old experiment inputs and results", "navigation threshold 8", "existing source and effect authority", "no replay of 1531, 1552 or the invalid Serilog B0"],
   "return_point": "After both slices and CI are green, reselect the existing queue and qualify a fresh experiment version before any new real pair. Do not expand restoration architecture or evaluators.",

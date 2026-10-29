@@ -422,10 +422,16 @@ def test_reference_path_compatibility_does_not_accept_extra_fields_or_relative_p
             pilot._verify(changed)
 
 
+@pytest.mark.parametrize("navigation_case", ["admitted", "changed_worker"])
+def test_navigation_freeze_uses_the_actual_bound_worker(tmp_path, monkeypatch, capsys, navigation_case):
+    test_semantic_state_reaches_generated_configuration_and_product_argv(
+        tmp_path, monkeypatch, capsys, "absolute_real_B", "enabled", False, navigation_case=navigation_case)
+
+
 @pytest.mark.parametrize("mode", ["absolute_real_B", "matched_product_pair"])
 @pytest.mark.parametrize("selected,with_experience", [(None, False), ("enabled", False), ("disabled", False), ("enabled", True)],
     ids=["default", "enabled", "disabled", "catalog"])
-def test_semantic_state_reaches_generated_configuration_and_product_argv(tmp_path, monkeypatch, capsys, mode, selected, with_experience, external=False):
+def test_semantic_state_reaches_generated_configuration_and_product_argv(tmp_path, monkeypatch, capsys, mode, selected, with_experience, external=False, navigation_case=None):
     from tests.unit.test_csharp_repository_backend import _profile
 
     profile, source = _profile(tmp_path)
@@ -444,6 +450,25 @@ def test_semantic_state_reaches_generated_configuration_and_product_argv(tmp_pat
         config["codex_executable_ref"] = _ref(executable)
     if selected is not None:
         config["task_agent_semantic_state"] = selected
+    if navigation_case is not None:
+        from tests.unit.test_navigation_experiment_admission import requirement
+        worker = _save(tmp_path / "worker-policy.json", {"schema_version": "patch_worker_configuration_v1",
+            "enable_recovery_loop": False, "behavior_evaluator": None, "policy": {
+                "model_call_budget_policy": "task_total_only", "max_total_model_turns": 16,
+                "max_tool_rounds": 10, "max_observation_bytes": 81920}})
+        config.update(patch_worker_config_ref=worker, model_call_budget_policy="task_total_only",
+            task_model_call_limit=16, wall_seconds=900, navigation_feedback_experiment=requirement())
+        if navigation_case == "changed_worker":
+            original_write = Path.write_text
+
+            def changed_copy(path, data, *args, **kwargs):
+                # 为什么要有它：文件系统边界模拟绑定期间的副本漂移，不能把旧预检当作新副本的证据。
+                if path.name == "worker.json" and ".dsh-inputs" in path.parts:
+                    document = json.loads(data)
+                    document["policy"]["max_tool_rounds"] = 3
+                    data = json.dumps(document)
+                return original_write(path, data, *args, **kwargs)
+            monkeypatch.setattr(Path, "write_text", changed_copy)
     if external:
         config["external_profile_ref"] = _save(tmp_path / "openai-profile.json", {
             "profile_version": "external_openai_responses_profile_v1", "base_url": "https://api.openai.com/v1",
@@ -468,11 +493,22 @@ def test_semantic_state_reaches_generated_configuration_and_product_argv(tmp_pat
     monkeypatch.setattr(pilot, "read_ollama_model_identity", lambda _url, model: {"model": model, "digest": pilot.DIGEST})
     monkeypatch.setattr(pilot, "local_codex_command", lambda *_args: ["controlled-codex-not-executed"])
     configuration = _save(tmp_path / "pilot-config.json", config)
+    if navigation_case == "changed_worker":
+        with pytest.raises(ValueError, match="PILOT_WORKER_CONFIGURATION_CHANGED_DURING_BIND"):
+            pilot.freeze(configuration)
+        assert not captured
+        return
     pilot.freeze(configuration)
     pilot_ref = json.loads(capsys.readouterr().out)["pilot_ref"]
     frozen = pilot.read_bound_json(pilot_ref)
     plan = pilot.read_bound_json(frozen["plans"]["RepoForge_B"])
     execution = pilot.read_bound_json(plan["execution_config_ref"])
+    if navigation_case == "admitted":
+        admission = plan["navigation_experiment_admission"]
+        assert admission["execution_config_ref"] == plan["execution_config_ref"]
+        assert admission["worker_configuration_ref"] in plan["bound_inputs"]
+        assert ".dsh-inputs" in admission["worker_configuration_ref"]["path"]
+        assert admission["capacity"]["reads"] == 10 and plan["wall_seconds"] == 900
     expected = selected or "enabled"
     for arguments in (execution["arguments"], captured[0]["business_argv"]):
         assert arguments.count("--task-agent-semantic-state") == 1

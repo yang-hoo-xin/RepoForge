@@ -18,6 +18,7 @@ def requirement():
 
 def configuration(tmp_path, *, reads=None, bytes_limit=81920, calls=16):
     arguments = ["--repository-profile", str(tmp_path / "profile.json"),
+        "--technical-executor", "task_agent", "--task-agent-protocol", "v2",
         "--model-call-budget-policy", "task_total_only", "--task-model-call-limit", str(calls)]
     if reads is not None:
         worker = tmp_path / "worker.json"
@@ -65,3 +66,22 @@ def test_lowering_threshold_does_not_admit_the_failed_experiment(tmp_path):
     requirements = {**requirement(), "threshold": 3}
     with pytest.raises(ValueError, match="NAVIGATION_EXPERIMENT_REQUIREMENTS_INVALID"):
         pilot.validate_navigation_experiment(configuration(tmp_path), requirements, wall_seconds=900)
+
+
+@pytest.mark.parametrize("flag,value", [("--technical-executor", "workflow"), ("--task-agent-protocol", "v1")])
+def test_non_task_agent_v2_entry_cannot_admit_navigation_experiment(tmp_path, flag, value):
+    reference = configuration(tmp_path, reads=10)
+    path = tmp_path / "execution.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["arguments"][document["arguments"].index(flag) + 1] = value
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(ValueError, match="NAVIGATION_EXPERIMENT_REQUIRES_TASK_AGENT_V2"):
+        pilot.validate_navigation_experiment(_ref(path), requirement(), wall_seconds=900)
+
+
+@pytest.mark.parametrize("mode", ["native_reference", "strategy_pair"])
+def test_freeze_cannot_ignore_navigation_requirements_on_other_modes(tmp_path, mode):
+    path = tmp_path / "pilot.json"
+    path.write_text(json.dumps({"mode": mode, "navigation_feedback_experiment": requirement()}), encoding="utf-8")
+    with pytest.raises(ValueError, match="NAVIGATION_EXPERIMENT_MODE_UNSUPPORTED"):
+        pilot.freeze(_ref(path))
