@@ -1,0 +1,23 @@
+{
+  "fixed_point": "05373a165d6b2f024167f62f1b40bd30095cad7d",
+  "initial_review_head": "4a0de97",
+  "review_fix_head": "ea7ea930a752cc5ba31d7f0e89d02dc7058ebe5a",
+  "ci_test_sync_head": "0c644d0d7278547e68e2bbe257eb2714d421be5d",
+  "Standards": {
+    "initial_findings": 1,
+    "severity": "P2",
+    "finding": "Preflight read the source worker before allocation; a changed copy could be frozen using stale capacity evidence.",
+    "resolution": "Validate the actual allocated execution config, compare copied worker contents with the registered original, and freeze the exact admitted worker reference.",
+    "recheck": "Original P2 closed; no new Standards blocker."
+  },
+  "Spec": {
+    "initial_findings": 1,
+    "severity": "P2",
+    "finding": "Navigation requirements could be admitted on workflow/v1 or ignored in unsupported freeze modes.",
+    "resolution": "Require TaskAgent v2 and reject explicit navigation requirements before dispatching unsupported modes.",
+    "recheck": "Original P2 closed; no new Spec blocker.",
+    "withdrawn_hypothesis": "semantic_state=disabled does not disable base navigation state; no extra restriction added."
+  },
+  "ci_test_delta_review": "Only the outer terminal status expectation changed. Inner owner field order, strict roundtrip, hash binding and negative cases remain intact. No acceptance weakening found.",
+  "scope": "Independent read-only reviews and rechecks; no autonomous-model benefit claim."
+}

@@ -1,5 +1,8 @@
 {
-  "status": "review_complete_ci_contract_test_synced_pending_final_ci",
+  "status": "complete_ci_green",
+  "completion_record": "artifacts/eval_driven_20261029/navigation-repair/verification.json",
+  "verified_code_commit": "0c644d0d7278547e68e2bbe257eb2714d421be5d",
+  "final_ci": "https://github.com/yang-hoo-xin/RepoForge/actions/runs/40836157883",
   "fixed_point": "05373a1",
   "scope": "Two sequential red-green slices: navigation experiment admission and normal blocked Task Run outcome.",
   "baseline_evidence": "artifacts/eval_driven_20261029/navigation-stagnation-ab-v1/b0-independent-audit.md",

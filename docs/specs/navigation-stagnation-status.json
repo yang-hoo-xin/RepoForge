@@ -6,6 +6,13 @@
   "baseline_run_id": "dsh_6a255afa9b804a04a46862a64577642e",
   "behavior": "Eight consecutive executed source_search/source_read results at the same boundary expose advisory navigation feedback. Other returned actions or a changed boundary reset the window; replay does not count twice. The feedback neither infers understanding nor changes authority.",
   "threshold_status": "experimental_not_validated_by_model_results",
+  "bounded_repair": {
+    "status": "complete_ci_green",
+    "record": "docs/specs/navigation-stagnation-repair.json",
+    "code_commit": "0c644d0d7278547e68e2bbe257eb2714d421be5d",
+    "ci": "https://github.com/yang-hoo-xin/RepoForge/actions/runs/40836157883",
+    "scope": "Experiment resource admission and normal blocked-outcome contract; original real comparison stays invalid, no replacement trial started."
+  },
   "verification": {
     "initial_red": "navigation_only absent after eight distinct navigation returns",
     "state_context_and_experience_tests": "65 passed",
