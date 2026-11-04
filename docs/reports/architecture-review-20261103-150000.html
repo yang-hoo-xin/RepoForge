@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RepoForge · 夜间运行后的结构审查</title>
+
+<style>
+:root{font-family:system-ui,"Microsoft YaHei",sans-serif;color:#172334;background:#f7f5f0;line-height:1.65}*{box-sizing:border-box}body{margin:0}main{max-width:1120px;margin:auto;padding:48px 24px 70px}h1{font-size:32px;letter-spacing:-.03em;margin:8px 0}h2{font-size:23px;line-height:1.4;margin:8px 0 18px}p{margin:10px 0}.eyebrow{color:#526274;text-transform:uppercase;font-size:12px;letter-spacing:.12em}.muted{color:#5b6572}.summary{border-left:4px solid #24654e;padding:12px 18px;background:#edf5ef;margin:24px 0}.cards{display:grid;gap:28px;margin-top:32px}article{border:1px solid #d9ddd8;border-radius:12px;padding:28px;background:#fff}article strong{font-weight:650}.badges{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.badge{font-size:12px;padding:3px 10px;border-radius:99px;background:#edf0f4;color:#41526a}.strong{background:#def2e5;color:#176343}.explore{background:#fff0cf;color:#8a5913}.comparison{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:24px 0}.diagram{border:1px solid #d9dfdf;border-radius:9px;padding:18px;background:#fafafa;min-height:284px}.diagram h3{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#536274;margin:0 0 16px}.node{border:1px solid #91a0ae;background:white;padding:9px 12px;text-align:center;border-radius:5px;font-size:13px;margin:6px 0}.node small{display:block;color:#596574}.deep{background:#1e3344;border:3px solid #1e3344;color:#fff;padding:15px}.deep small{color:#d6e1ea}.arrow{text-align:center;color:#637589;font-size:17px;line-height:1.2}.red{color:#a63432}.missing{border:2px dashed #c26b62;color:#963c34;background:#fff7f4}.seam{border-top:2px dashed #8d9d99;margin:12px 0;position:relative}.seam span{position:relative;top:-13px;background:#fafafa;font-size:11px;padding-right:8px;color:#61706b}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.half{border-left:3px solid #b6c1c9;padding:10px;background:#edf1f4;margin:8px 0;font-size:13px}.wide{border-left:6px solid #24654e;background:#edf5ef}.facts{display:grid;grid-template-columns:90px 1fr;gap:8px;font-size:14px;margin-top:18px}.facts b{color:#4d5e6d}.win{display:flex;gap:16px;flex-wrap:wrap;color:#24654e;font-size:13px;margin-top:16px}.adr{font-size:13px;padding:12px 15px;background:#fff5df;border-left:3px solid #c89a3a;margin-top:16px}details{margin-top:18px;font-size:12px;color:#566271}summary{cursor:pointer;color:#526274}code{font-family:ui-monospace,Consolas,monospace;font-size:.9em;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}.recommendation{background:#172e27;color:#f5f8f5;padding:30px;border-radius:10px;margin:30px 0}.recommendation a{color:#b2e4c6}.evidence{border-top:1px solid #ccd5cc;padding-top:22px;font-size:13px}.label{font-size:11px;display:inline-block;margin-top:3px;padding:0 6px;background:#eceff2;color:#4b5b6c;border-radius:3px}@media(max-width:720px){main{padding:28px 16px}article{padding:20px}.comparison{grid-template-columns:1fr}h1{font-size:26px}.facts{grid-template-columns:1fr;gap:2px}}
+</style>
+<style>/* Static archive fallback; original report CSS is retained. */
+body{margin:0;background:#f4f5f7;color:#17212b;font:16px/1.65 system-ui,sans-serif}main{max-width:1200px;margin:auto;padding:24px}header,section,article{margin:18px 0}article{background:white;padding:22px;border:1px solid #dbe0e6;border-radius:12px}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:16px;background:#f1f4f8;color:#182230;border-radius:8px}code{overflow-wrap:anywhere}a{color:#175bb6}details{padding:12px;border:1px solid #dbe0e6;margin:12px 0}.archive-notice{padding:16px;background:#fff8d8;border-bottom:2px solid #b48a00;color:#342a08}.archive-notice a{color:#163f86}.grid{display:grid;gap:16px}.flex{display:flex;gap:12px;flex-wrap:wrap}.gap-4{gap:16px}@media(min-width:800px){.md\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.md\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}}
+</style></head>
+<body><aside class="archive-notice"><strong>历史分析报告 · 安全静态副本</strong><br>归集日期：2026-11-04。保留原分析正文和图示源文本；已移除脚本／CDN加载并替换本机绝对路径。报告中的建议、检查数量和状态只适用于原记录日期，不是当前任务指令或新的验收结论。Mermaid 图以原文展示。<br><a href="../research/candidate-editing-20261103.md">后续候选编辑与验收接线记录</a> · <a href="sources.json">原文哈希和处理说明</a></aside><main>
+<header>
+<div class="eyebrow">RepoForge · 2026-11-03 · Architecture review</div>
+<h1>把已有能力接成可验证的交付链</h1>
+<p class="muted">基线 f57089b；相关发现已在 S1 提交 823b544 后复核。此次为审查，不含新模型实验或源码改造。</p>
+<p class="muted">实线框：module（职责模块） · 虚线：seam（交接处） · 红色：缺口 · 深色框：吸收复杂性的 deep module</p>
+<div class="summary"><strong>72 项检查通过，1 条受控反例失败。</strong><br>历史云端正例仍可验证；昨晚本地 4B 六次曝光尝试正确交付为 0。候选接口 S1 已由另一聊天完成，真实效果尚待验收。</div>
+</header>
+<section class="cards">
+<article id="outcome">
+<div class="badges"><span class="badge strong">Strong</span><span class="badge">两个真实 adapter</span><span class="badge">P1 · 正常入口接线</span></div>
+<h2>1 · 让运行结果 module 吸收验收与交付的验证复杂性</h2>
+<div class="comparison">
+<div class="diagram"><h3>现在 · 调用者需要自行连接</h3>
+<div class="node">正常 pilot adapter<small>运行 → prepare / apply / build</small></div>
+<div class="arrow">↓</div><div class="node">原生交付回执</div>
+<div class="seam"><span>结果 seam</span></div>
+<div class="row"><div class="node missing">独立验收未调度</div><div class="node missing">reader 缺验收验证</div></div>
+<div class="arrow red">↓ 未形成完整证明</div><div class="node">correct_delivery = unknown / 未确认</div>
+</div>
+<div class="diagram"><h3>方向 · 复用现有 owner</h3>
+<div class="row"><div class="node">pilot adapter</div><div class="node">试验 adapter</div></div>
+<div class="arrow">↓ 同一结果 seam ↓</div>
+<div class="node deep">运行结果 module<small>已有 TaskRun interface 与结果收尾</small><small>原生交付验证 ＋ 合格独立验收</small><small>同一运行 / 源码 / judge / 实际产物</small></div>
+<div class="arrow">↓</div><div class="node">可验证的唯一运行结果</div>
+</div></div>
+<div class="facts"><b>问题</b><span>验收实现存在，正常入口和证据归一化未接好；只测投影函数会绕开这一缺口。</span><b>方向</b><span>保持现有 interface，将验证留在已有 module 的 implementation 内增加 depth；不提出新的编排 interface。</span><b>Deletion test</b><span>删除 Trace 或交付验证只会把复杂性推给调用者；删除重复结果解释才可能减少 shallow 逻辑。</span><b>验证</b><span>正常入口复现历史云端正例，并拒绝错源码、错 judge、无产物及未执行验收的负例。</span></div>
+<div class="win"><span>locality：缺陷集中在事实接入</span><span>leverage：两个 adapter 共享验证</span></div>
+<div class="adr">遵守 ADR-0002/0003：保留两个 adapter；只补当前正常链，不重新开启全产品历史格式迁移。</div>
+<details><summary>涉及文件</summary><pre>scripts/run_repository_product_pilot.py:1010
+src/mod_agent/evaluation/product_trial_batch.py:228
+src/observability/dashboard/services/run_evidence.py:349
+src/mod_agent/evaluation/benchmark_outcome_ledger.py:1236</pre></details>
+</article>
+<article id="actions">
+<div class="badges"><span class="badge strong">Strong</span><span class="badge">in-process</span><span class="badge">P1 · 真实受控反例</span></div>
+<h2>2 · 当前有效动作由同一 module 决定</h2>
+<div class="comparison">
+<div class="diagram"><h3>现在 · 三处含义分裂</h3>
+<div class="half">DecisionContext：只展示阶段允许动作</div>
+<div class="half">输出纠错：列出完整注册表</div>
+<div class="half">执行准入：接纳完整注册表中的动作</div>
+<div class="seam"><span>模型请求 / 执行 seam</span></div>
+<div class="node missing">plan_update 被隐藏，仍 completed</div>
+</div>
+<div class="diagram"><h3>方向 · 一份动作事实</h3>
+<div class="node deep">阶段动作 module<small>现有策略 + 当前运行事实</small><small>implementation 内形成有效动作集合</small></div>
+<div class="seam"><span>共同消费的 interface</span></div>
+<div class="row"><div class="node">请求 adapter<br>菜单 / 纠错</div><div class="node">执行 adapter<br>动作准入</div></div>
+<div class="node">路径、源码与效果 owner 继续校验</div>
+</div></div>
+<div class="facts"><b>问题</b><span>阶段菜单与 loop implementation 的注册表跨 seam 分裂；现有 interface 无法保证所宣称的动作约束。</span><b>方向</b><span>集中动作策略的所有权来增加 module depth，替换重复决定，而非叠加新的提示 adapter。</span><b>Deletion test</b><span>删除重复动作范围判断能集中复杂性；只删除菜单会丢失面向模型的有用引导。</span><b>验证</b><span>保留当前红例；同时检查允许动作正常执行、恢复后策略一致和合法 blocker 表达。</span></div>
+<div class="win"><span>locality：策略在一处决定</span><span>leverage：菜单与执行一致</span></div>
+<div class="adr">这是进展策略一致性问题；没有证据说明文件权限逃逸。先明确阶段是建议还是强制约束，再实施对应准入。</div>
+<details><summary>涉及文件与失败证据</summary><pre>src/mod_agent/task_agent_v2_decision_context.py:160
+src/mod_agent/task_agent_loop.py:631
+src/mod_agent/task_agent_loop.py:659
+local-source:phase-action-policy-code-eval.xml</pre></details>
+</article>
+<article id="costs">
+<div class="badges"><span class="badge explore">Worth exploring</span><span class="badge">复用现有 ledger</span><span class="badge">P2 · 成本语义</span></div>
+<h2>3 · 复用已有成本分区，减少摘要的解释负担</h2>
+<div class="comparison">
+<div class="diagram"><h3>现在 · 摘要各自决定完整性</h3>
+<div class="node">任务计量 module<small>选中执行 / 模型用量</small></div>
+<div class="node">试验 adapter<small>full_delivery_cost ← 无额外模型调用</small></div>
+<div class="node">ledger module<small>任务 / 独立评测 / 平台开发</small></div>
+<div class="node missing">调用者自行区分“模型覆盖完整”与“全部成本”</div>
+</div>
+<div class="diagram"><h3>方向 · 已有分区作为解释依据</h3>
+<div class="node deep">成本投影 module<small>现有 ledger implementation</small><small>请求去重 / 已知量 / 未知量 / 成本范围</small></div>
+<div class="seam"><span>覆盖范围明确的 interface</span></div>
+<div class="half wide">任务：token / 字节 / 时间 / 金额各自保留</div>
+<div class="half wide">独立评测与平台开发：分别记账</div>
+</div></div>
+<div class="facts"><b>问题</b><span>当前字段名易被误读成所有成本完整，实际主要说明模型调用覆盖；观测数据没有因此失效。</span><b>方向</b><span>复用已有 module 分区，收窄 adapter 的摘要解释，让 interface 明确 scope，增加 depth。</span><b>Deletion test</b><span>删除 ledger 会迫使多个调用者重写去重与未知量；删除重复的完整性解释更有价值。</span><b>验证</b><span>失败/恢复不丢失，未知不补零，缓存不重复累计，零成功不产生有限单位成本。</span></div>
+<div class="win"><span>locality：成本解释回到投影</span><span>leverage：报告与试验共享语义</span></div>
+<details><summary>涉及文件</summary><pre>src/mod_agent/evaluation/product_trial_batch.py:308
+src/mod_agent/evaluation/product_trial_batch.py:474
+src/mod_agent/evaluation/benchmark_outcome_ledger.py:1112</pre></details>
+</article>
+</section>
+<section class="recommendation"><div class="eyebrow" style="color:#b7d0bd">Top recommendation</div><h2 style="margin:6px 0">S1 后先回 T2；结果接线以第 1 项为先</h2><p>S1 已完成接口改造，先按已登记条件验收其真实作用。随后补 <a href="#outcome">正常入口的独立验收与结果接线</a>，使正确候选能够形成可验证交付，而不是再加诊断提示。</p><p style="font-size:13px;color:#d4e3d8">为什么要有它：接口测试与结构建议不能替代 4B 任务结果；队列需要明确返回点。</p></section>
+<footer class="evidence"><strong>本报告的解释范围</strong><p>此次没有新增真实 4B 运行。S1 的真实增益未知。昨晚编译反例修复为 0/2；业务反例 K=0，不可计算。现有 Trace、ArtifactStore、资源和交付回执继续作为事实来源。</p><p>详细原件、会话行号、旧晨报更正、六领域 Agent 审查及测试哈希见同目录 <code>agent-review-20261103.md</code> 和 <code>agent-review-evidence-20261103.json</code>。</p></footer>
+</main></body></html>

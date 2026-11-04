@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RepoForge architecture review</title>
+
+
+  <style>
+    body{background:radial-gradient(circle at 8% 2%,rgba(16,185,129,.09),transparent 24rem),radial-gradient(circle at 92% 2%,rgba(79,70,229,.08),transparent 26rem),#f7f5f1}
+    .deep{background:linear-gradient(145deg,#0f172a,#1e293b);box-shadow:0 18px 45px rgba(15,23,42,.2)}
+    .paper{box-shadow:0 12px 35px rgba(51,65,85,.08)}
+    .seam{border-style:dashed}.diagram-title{text-transform:uppercase;letter-spacing:.13em}
+    .interface-mass{background:repeating-linear-gradient(90deg,#e0e7ff 0 10px,#eef2ff 10px 20px)}
+    .leak-line{height:2px;background:linear-gradient(90deg,transparent,#dc2626 18%,#dc2626 82%,transparent)}
+    .arrow{height:2px;background:#94a3b8;position:relative}.arrow:after{content:"";position:absolute;right:-1px;top:-4px;border-left:7px solid #94a3b8;border-top:5px solid transparent;border-bottom:5px solid transparent}
+  </style>
+<style>/* Static archive fallback; original report CSS is retained. */
+body{margin:0;background:#f4f5f7;color:#17212b;font:16px/1.65 system-ui,sans-serif}main{max-width:1200px;margin:auto;padding:24px}header,section,article{margin:18px 0}article{background:white;padding:22px;border:1px solid #dbe0e6;border-radius:12px}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:16px;background:#f1f4f8;color:#182230;border-radius:8px}code{overflow-wrap:anywhere}a{color:#175bb6}details{padding:12px;border:1px solid #dbe0e6;margin:12px 0}.archive-notice{padding:16px;background:#fff8d8;border-bottom:2px solid #b48a00;color:#342a08}.archive-notice a{color:#163f86}.grid{display:grid;gap:16px}.flex{display:flex;gap:12px;flex-wrap:wrap}.gap-4{gap:16px}@media(min-width:800px){.md\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.md\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}}
+</style></head>
+<body class="text-slate-900 antialiased"><aside class="archive-notice"><strong>历史分析报告 · 安全静态副本</strong><br>归集日期：2026-11-04。保留原分析正文和图示源文本；已移除脚本／CDN加载并替换本机绝对路径。报告中的建议、检查数量和状态只适用于原记录日期，不是当前任务指令或新的验收结论。Mermaid 图以原文展示。<br><a href="../research/candidate-editing-20261103.md">后续候选编辑与验收接线记录</a> · <a href="sources.json">原文哈希和处理说明</a></aside>
+<main class="mx-auto max-w-6xl space-y-12 px-5 py-10 md:px-8 md:py-14">
+  <header class="border-b border-slate-300 pb-8">
+    <div class="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+      <div><p class="text-xs font-semibold uppercase tracking-[.22em] text-emerald-700">Architecture review · 2026-11-02</p><h1 class="mt-3 font-serif text-5xl font-semibold">RepoForge</h1></div>
+      <div class="grid grid-cols-2 gap-2 text-xs text-slate-600 md:grid-cols-4">
+        <span>▣ module</span><span>▱ dashed seam</span><span class="text-red-700">━ leakage</span><span class="font-bold text-slate-900">■ deep module</span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="paper rounded-2xl border border-slate-200 bg-white/90 p-5">
+    <p class="text-xs font-semibold uppercase tracking-[.18em] text-slate-500">Candidates</p>
+    <ol class="mt-3 grid gap-2 text-sm md:grid-cols-2">
+      <li><a class="font-medium text-indigo-700 hover:underline" href="#decision-context">1. Finish Decision Context deepening</a></li>
+      <li><a class="font-medium text-indigo-700 hover:underline" href="#run-lifecycle">2. Concentrate Task Agent run lifecycle</a></li>
+      <li><a class="font-medium text-indigo-700 hover:underline" href="#task-run">3. Deepen Task Run configuration</a></li>
+      <li><a class="font-medium text-indigo-700 hover:underline" href="#repository-verification">4. Deepen C# repository verification</a></li>
+      <li><a class="font-medium text-indigo-700 hover:underline" href="#public-episode">5. Separate Public Episode responsibility</a></li>
+    </ol>
+  </nav>
+
+  <section class="space-y-12">
+    <article id="decision-context" class="paper scroll-mt-8 rounded-3xl border border-slate-200 bg-white p-6 md:p-8">
+      <div class="flex flex-wrap justify-between gap-4">
+        <div><p class="text-xs font-semibold uppercase tracking-[.18em] text-slate-500">Candidate 01</p><h2 class="mt-2 font-serif text-3xl font-semibold">Finish Decision Context deepening</h2></div>
+        <div class="flex gap-2"><span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">Strong</span><span class="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">in-process</span></div>
+      </div>
+      <div class="mt-6 rounded-xl bg-slate-950 p-4 text-slate-200"><p class="diagram-title text-[10px] text-slate-400">Files</p><p class="mt-2 overflow-x-auto font-mono text-xs leading-6">task_agent_v2_decision_context.py · task_agent_v2_execution.py · task_agent_v2_context.py · task_agent_v2_working_state.py · task_agent_v2_experience.py · task_agent_v2_recovery.py</p></div>
+      <div class="mt-7 grid gap-5 lg:grid-cols-2">
+        <figure class="rounded-2xl border border-red-200 bg-red-50/60 p-4">
+          <figcaption class="diagram-title text-xs font-bold text-red-700">Before · ownership duplicated</figcaption>
+          <pre class="mermaid mt-3">
+flowchart TD
+  E[TaskAgentExecutionV2] --> W[working state]
+  E --> C[context projection]
+  E --> X[Strategy Experience]
+  E --> H[history projection]
+  E --> F[experiment facts]
+  R[recovery] -. private fields .-> E
+  X -. owner attributes .-> E
+  D[DecisionContext · no production caller]
+  style E fill:#fee2e2,stroke:#dc2626,stroke-width:2px
+  style D fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4
+          </pre>
+        </figure>
+        <figure class="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
+          <figcaption class="diagram-title text-xs font-bold text-emerald-700">After · one deep module</figcaption>
+          <div class="mt-6 flex items-center gap-3">
+            <div class="rounded-lg border-2 border-slate-400 bg-white px-3 py-5 text-center text-xs font-semibold">execution</div><div class="arrow flex-1"></div>
+            <div class="deep flex-[2] rounded-2xl p-5 text-white"><p class="text-xs font-bold uppercase tracking-[.16em] text-emerald-300">Decision Context</p><p class="mt-3 text-sm font-semibold">small interface</p><div class="mt-4 grid grid-cols-2 gap-2 text-[11px] text-slate-300"><span class="rounded bg-white/10 p-2">working state</span><span class="rounded bg-white/10 p-2">history</span><span class="rounded bg-white/10 p-2">experience</span><span class="rounded bg-white/10 p-2">experiment facts</span></div></div>
+            <div class="arrow flex-1"></div><div class="rounded-lg border-2 border-slate-400 bg-white px-3 py-5 text-center text-xs font-semibold">model request</div>
+          </div>
+          <p class="mt-6 text-center text-xs text-slate-600">recovery crosses the same seam</p>
+        </figure>
+      </div>
+      <dl class="mt-7 grid gap-5 md:grid-cols-2">
+        <div><dt class="text-xs font-bold uppercase tracking-wider text-red-700">Problem</dt><dd class="mt-2 text-sm leading-6 text-slate-700">The new module has no production caller; execution duplicates its implementation and recovery reads private state across the seam.</dd></div>
+        <div><dt class="text-xs font-bold uppercase tracking-wider text-emerald-700">Solution</dt><dd class="mt-2 text-sm leading-6 text-slate-700">Let Decision Context own preparation, retained model statements, projection state, and recovery state; remove the parallel path.</dd></div>
+      </dl>
+      <div class="mt-6 flex flex-wrap gap-2 text-xs font-semibold text-slate-700"><span class="rounded-full bg-slate-100 px-3 py-1.5">locality: one decision owner</span><span class="rounded-full bg-slate-100 px-3 py-1.5">leverage: normal + recovery</span><span class="rounded-full bg-slate-100 px-3 py-1.5">tests hit one interface</span><span class="rounded-full bg-slate-100 px-3 py-1.5">deletion removes duplication</span></div>
+    </article>
+
+    <article id="run-lifecycle" class="paper scroll-mt-8 rounded-3xl border border-slate-200 bg-white p-6 md:p-8">
+      <div class="flex flex-wrap justify-between gap-4"><div><p class="text-xs font-semibold uppercase tracking-[.18em] text-slate-500">Candidate 02</p><h2 class="mt-2 font-serif text-3xl font-semibold">Concentrate Task Agent run lifecycle</h2></div><div class="flex gap-2"><span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">Strong</span><span class="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">in-process</span></div></div>
+      <div class="mt-6 rounded-xl bg-slate-950 p-4 text-slate-200"><p class="diagram-title text-[10px] text-slate-400">Files</p><p class="mt-2 overflow-x-auto font-mono text-xs leading-6">task_agent_v2_execution.py · task_agent_v2_recovery.py · task_agent_v2_delivery.py · task_agent_v2_handoff.py · reviewed_patch_continuation.py</p></div>
+      <div class="mt-7 grid gap-5 lg:grid-cols-2">
+        <figure class="rounded-2xl border border-red-200 bg-red-50/60 p-4"><figcaption class="diagram-title text-xs font-bold text-red-700">Before · cyclic knowledge</figcaption><pre class="mermaid mt-3">
+flowchart LR
+  E[execution] --> R[recovery]
+  R --> D[delivery]
+  D --> R
+  D --> E
+  C1[CLI] --> R
+  C2[graph] --> D
+  C3[pilot] --> D
+  C4[continuation] --> D
+  style R fill:#fee2e2,stroke:#dc2626,stroke-width:2px
+  style D fill:#fee2e2,stroke:#dc2626,stroke-width:2px
+        </pre></figure>
+        <figure class="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4"><figcaption class="diagram-title text-xs font-bold text-emerald-700">After · lifecycle depth</figcaption>
+          <div class="deep mt-5 rounded-2xl border-4 border-slate-900 p-5 text-white"><div class="flex justify-between gap-4"><p class="text-xs font-bold uppercase tracking-[.16em] text-emerald-300">Task Agent recovery + delivery</p><span class="rounded-full bg-white/10 px-3 py-1 text-[10px]">one seam</span></div><div class="mt-5 grid grid-cols-5 gap-2 text-center text-[10px] text-slate-300"><span class="rounded bg-white/10 p-2">lock</span><span class="rounded bg-white/10 p-2">checkpoint</span><span class="rounded bg-white/10 p-2">resume</span><span class="rounded bg-white/10 p-2">delivery</span><span class="rounded bg-white/10 p-2">rebase</span></div></div>
+          <div class="mt-5 grid grid-cols-4 gap-2 text-center text-[10px] font-semibold text-slate-700"><span class="seam rounded border-2 border-slate-400 bg-white p-2">CLI</span><span class="seam rounded border-2 border-slate-400 bg-white p-2">graph</span><span class="seam rounded border-2 border-slate-400 bg-white p-2">pilot</span><span class="seam rounded border-2 border-slate-400 bg-white p-2">tests</span></div>
+        </figure>
+      </div>
+      <dl class="mt-7 grid gap-5 md:grid-cols-2"><div><dt class="text-xs font-bold uppercase tracking-wider text-red-700">Problem</dt><dd class="mt-2 text-sm leading-6 text-slate-700">Recovery and delivery import each other; callers must know checkpoint, rebase, operation, and terminal sequencing.</dd></div><div><dt class="text-xs font-bold uppercase tracking-wider text-emerald-700">Solution</dt><dd class="mt-2 text-sm leading-6 text-slate-700">Place lifecycle transitions and idempotency behind one seam while keeping authority checks inside the implementation.</dd></div></dl>
+      <div class="mt-6 flex flex-wrap gap-2 text-xs font-semibold text-slate-700"><span class="rounded-full bg-slate-100 px-3 py-1.5">locality: transitions concentrate</span><span class="rounded-full bg-slate-100 px-3 py-1.5">leverage: one lifecycle path</span><span class="rounded-full bg-slate-100 px-3 py-1.5">tests share the seam</span><span class="rounded-full bg-slate-100 px-3 py-1.5">private imports disappear</span></div>
+      <div class="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">Glossary gap: name the run lifecycle before implementation.</div>
+    </article>
+
+    <article id="task-run" class="paper scroll-mt-8 rounded-3xl border border-slate-200 bg-white p-6 md:p-8">
+      <div class="flex flex-wrap justify-between gap-4"><div><p class="text-xs font-semibold uppercase tracking-[.18em] text-slate-500">Candidate 03</p><h2 class="mt-2 font-serif text-3xl font-semibold">Deepen Task Run configuration</h2></div><div class="flex gap-2"><span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">Strong</span><span class="rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-800">ports &amp; adapters</span></div></div>
+      <div class="mt-6 rounded-xl bg-slate-950 p-4 text-slate-200"><p class="diagram-title text-[10px] text-slate-400">Files</p><p class="mt-2 overflow-x-auto font-mono text-xs leading-6">scripts/dsh_run_request.py · scripts/dsh_request_routing.py · src/mod_agent/cli.py · src/mod_agent/local_entry.py · src/mod_agent/actual_execution.py · scripts/run_repository_product_pilot.py</p></div>
+      <div class="mt-7 grid gap-5 lg:grid-cols-2">
+        <figure class="rounded-2xl border border-red-200 bg-red-50/60 p-5"><figcaption class="diagram-title text-xs font-bold text-red-700">Before · shallow intake</figcaption><div class="mt-5 grid grid-cols-[1.2fr_.8fr] gap-4">
+          <div><p class="text-[10px] font-bold uppercase tracking-wider text-slate-500">interface mass</p><div class="interface-mass mt-2 h-48 rounded-xl border-2 border-indigo-300 p-4 text-sm font-bold text-indigo-900">58 parameters<div class="mt-3 grid grid-cols-2 gap-1 text-[10px] font-medium"><span>identity</span><span>authority</span><span>model</span><span>budget</span><span>repository</span><span>runtime</span><span>delivery</span><span>evidence</span></div></div></div>
+          <div><p class="text-[10px] font-bold uppercase tracking-wider text-slate-500">callers</p><div class="mt-2 space-y-2 text-[10px] font-semibold"><div class="rounded border bg-white p-2">CLI</div><div class="rounded border bg-white p-2">actual execution</div><div class="rounded border bg-white p-2">pilot</div><div class="rounded border bg-white p-2">trial</div><div class="rounded border bg-white p-2">14 test files</div></div></div>
+        </div><div class="leak-line mt-5"></div><p class="mt-2 text-center text-xs font-semibold text-red-700">callers learn invalid combinations</p></figure>
+        <figure class="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5"><figcaption class="diagram-title text-xs font-bold text-emerald-700">After · deep configuration module</figcaption>
+          <div class="mt-5 rounded-2xl border-4 border-slate-900 bg-white"><div class="border-b-4 border-slate-900 bg-indigo-100 px-4 py-2 text-center text-xs font-bold text-indigo-900">small interface</div><div class="deep h-52 p-5 text-white"><p class="text-sm font-bold">Task Run configuration + identity</p><div class="mt-5 grid grid-cols-2 gap-2 text-[10px] text-slate-300"><span class="rounded bg-white/10 p-2">validation</span><span class="rounded bg-white/10 p-2">freeze</span><span class="rounded bg-white/10 p-2">routing</span><span class="rounded bg-white/10 p-2">recovery</span><span class="rounded bg-white/10 p-2">inspection</span><span class="rounded bg-white/10 p-2">argv details</span></div></div></div>
+          <p class="mt-4 text-center text-xs text-slate-600">local CLI + evaluation caller = two real adapters</p>
+        </figure>
+      </div>
+      <dl class="mt-7 grid gap-5 md:grid-cols-2"><div><dt class="text-xs font-bold uppercase tracking-wider text-red-700">Problem</dt><dd class="mt-2 text-sm leading-6 text-slate-700">The interface exposes configuration shape, identity pairing, argv construction, and call order; <span class="font-mono">run_local_request</span> spans 2,034 lines.</dd></div><div><dt class="text-xs font-bold uppercase tracking-wider text-emerald-700">Solution</dt><dd class="mt-2 text-sm leading-6 text-slate-700">Let one deep module absorb configuration validation, frozen identity, routing, and inspection knowledge.</dd></div></dl>
+      <div class="mt-6 flex flex-wrap gap-2 text-xs font-semibold text-slate-700"><span class="rounded-full bg-slate-100 px-3 py-1.5">leverage: N callers</span><span class="rounded-full bg-slate-100 px-3 py-1.5">locality: identity rules</span><span class="rounded-full bg-slate-100 px-3 py-1.5">interface shrinks</span><span class="rounded-full bg-slate-100 px-3 py-1.5">adapters stay independent</span></div>
+      <div class="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">Glossary gap: define Task Run before implementation.</div>
+    </article>
+
+    <article id="repository-verification" class="paper scroll-mt-8 rounded-3xl border border-slate-200 bg-white p-6 md:p-8">
+      <div class="flex flex-wrap justify-between gap-4"><div><p class="text-xs font-semibold uppercase tracking-[.18em] text-slate-500">Candidate 04</p><h2 class="mt-2 font-serif text-3xl font-semibold">Deepen C# repository verification</h2></div><div class="flex gap-2"><span class="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">Worth exploring</span><span class="rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-800">ports &amp; adapters</span></div></div>
+      <div class="mt-6 rounded-xl bg-slate-950 p-4 text-slate-200"><p class="diagram-title text-[10px] text-slate-400">Files</p><p class="mt-2 overflow-x-auto font-mono text-xs leading-6">domain/csharp_repository_backend.py · public_failure_feedback.py · task_agent_v2_experience.py · task_agent_v2_experiments.py · task_agent_v2_delivery.py · evaluation/strategy_repository_evaluator.py</p></div>
+      <div class="mt-7 grid gap-5 lg:grid-cols-2">
+        <figure class="rounded-2xl border border-red-200 bg-red-50/60 p-4"><figcaption class="diagram-title text-xs font-bold text-red-700">Before · report knowledge leaks</figcaption><pre class="mermaid mt-3">
+flowchart LR
+  B[CSharpRepositoryBackend]
+  F[public feedback] --> H[read tests]
+  E[experience] --> H
+  X[experiments] --> H
+  D[delivery] --> S[skip policy]
+  D --> I[diagnostic integrity]
+  R[strategy evaluator] --> V[report revalidation]
+  H -. format knowledge .-> B
+  S -. profile.data .-> B
+  V -. factory strings .-> B
+  style H fill:#fee2e2,stroke:#dc2626
+  style S fill:#fee2e2,stroke:#dc2626
+  style V fill:#fee2e2,stroke:#dc2626
+        </pre></figure>
+        <figure class="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4"><figcaption class="diagram-title text-xs font-bold text-emerald-700">After · verification depth</figcaption>
+          <div class="deep mt-5 rounded-2xl p-5 text-white"><p class="text-xs font-bold uppercase tracking-[.16em] text-emerald-300">C# repository verification</p><div class="mt-4 grid grid-cols-2 gap-2 text-[10px] text-slate-300"><span class="rounded bg-white/10 p-2">fixed inputs</span><span class="rounded bg-white/10 p-2">build + test</span><span class="rounded bg-white/10 p-2">report parsing</span><span class="rounded bg-white/10 p-2">skip policy</span><span class="rounded bg-white/10 p-2">identity</span><span class="rounded bg-white/10 p-2">diagnostics</span></div></div>
+          <div class="mt-4 grid grid-cols-2 gap-3 text-center text-[10px] font-semibold text-slate-700"><div class="seam rounded-xl border-2 border-slate-400 bg-white p-3">normal candidate adapter</div><div class="seam rounded-xl border-2 border-slate-400 bg-white p-3">strategy evaluation adapter</div></div>
+        </figure>
+      </div>
+      <dl class="mt-7 grid gap-5 md:grid-cols-2"><div><dt class="text-xs font-bold uppercase tracking-wider text-red-700">Problem</dt><dd class="mt-2 text-sm leading-6 text-slate-700">Callers understand report shapes, profile data, skip rules, verification identity, and factory strings across the seam.</dd></div><div><dt class="text-xs font-bold uppercase tracking-wider text-emerald-700">Solution</dt><dd class="mt-2 text-sm leading-6 text-slate-700">Move report interpretation and candidate identity checks back into the repository verification implementation.</dd></div></dl>
+      <div class="mt-6 flex flex-wrap gap-2 text-xs font-semibold text-slate-700"><span class="rounded-full bg-slate-100 px-3 py-1.5">locality: one verdict owner</span><span class="rounded-full bg-slate-100 px-3 py-1.5">leverage: six callers</span><span class="rounded-full bg-slate-100 px-3 py-1.5">two real adapters</span><span class="rounded-full bg-slate-100 px-3 py-1.5">tests cross production seam</span></div>
+      <div class="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">Glossary gap: define Repository Verification before implementation.</div>
+    </article>
+
+    <article id="public-episode" class="paper scroll-mt-8 rounded-3xl border border-slate-200 bg-white p-6 md:p-8">
+      <div class="flex flex-wrap justify-between gap-4"><div><p class="text-xs font-semibold uppercase tracking-[.18em] text-slate-500">Candidate 05</p><h2 class="mt-2 font-serif text-3xl font-semibold">Separate Public Episode responsibility</h2></div><div class="flex gap-2"><span class="rounded-full bg-slate-200 px-3 py-1 text-xs font-bold text-slate-700">Speculative</span><span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">hypothetical seam</span></div></div>
+      <div class="mt-6 rounded-xl bg-slate-950 p-4 text-slate-200"><p class="diagram-title text-[10px] text-slate-400">Files</p><p class="mt-2 overflow-x-auto font-mono text-xs leading-6">task_agent_v2_experience.py · task_agent_v2_execution.py · task_agent_v2_recovery.py · run_repository_product_pilot.py</p></div>
+      <div class="mt-7 grid gap-5 lg:grid-cols-2">
+        <figure class="rounded-2xl border border-red-200 bg-red-50/60 p-5"><figcaption class="diagram-title text-xs font-bold text-red-700">Before · one broad module</figcaption><div class="mt-5 rounded-2xl border-2 border-red-400 bg-white"><div class="border-b-2 border-red-400 px-4 py-3 text-center text-sm font-bold text-red-800">TaskAgentV2Experience interface</div><div class="grid grid-cols-2 gap-2 p-4 text-center text-[10px] font-semibold text-slate-700"><span class="rounded bg-red-50 p-3">trial binding</span><span class="rounded bg-red-50 p-3">Decision Context</span><span class="rounded bg-red-50 p-3">episode capture</span><span class="rounded bg-red-50 p-3">learning</span><span class="rounded bg-red-50 p-3">budget</span><span class="rounded bg-red-50 p-3">terminal receipt</span></div></div></figure>
+        <figure class="rounded-2xl border border-slate-300 bg-slate-50 p-5"><figcaption class="diagram-title text-xs font-bold text-slate-700">After · only if a second adapter appears</figcaption><div class="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3"><div class="deep rounded-2xl p-5 text-center text-white"><p class="text-xs font-bold">Public Episode</p><p class="mt-2 text-[10px] text-slate-300">capture · verify · seal</p></div><div class="text-xl text-slate-400">→</div><div class="deep rounded-2xl p-5 text-center text-white"><p class="text-xs font-bold">Strategy Experience</p><p class="mt-2 text-[10px] text-slate-300">select · learn · adopt</p></div></div><div class="mt-5 rounded-xl border-2 border-dashed border-amber-400 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-900">one adapter today → seam still hypothetical</div></figure>
+      </div>
+      <dl class="mt-7 grid gap-5 md:grid-cols-2"><div><dt class="text-xs font-bold uppercase tracking-wider text-red-700">Problem</dt><dd class="mt-2 text-sm leading-6 text-slate-700">Episode capture, selection, learning, cost, and terminal receipt knowledge share one broad interface.</dd></div><div><dt class="text-xs font-bold uppercase tracking-wider text-slate-700">Solution</dt><dd class="mt-2 text-sm leading-6 text-slate-700">Delay a new seam until Public Episode gains a second adapter; keep the responsibility visible meanwhile.</dd></div></dl>
+      <div class="mt-6 flex flex-wrap gap-2 text-xs font-semibold text-slate-700"><span class="rounded-full bg-slate-100 px-3 py-1.5">one adapter: wait</span><span class="rounded-full bg-slate-100 px-3 py-1.5">seam remains hypothetical</span><span class="rounded-full bg-slate-100 px-3 py-1.5">avoid speculative split</span><span class="rounded-full bg-slate-100 px-3 py-1.5">watch future leverage</span></div>
+      <div class="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">Glossary gap: define Public Episode only after the seam becomes real.</div>
+    </article>
+  </section>
+
+  <section class="rounded-3xl border-4 border-emerald-600 bg-slate-950 p-8 text-white">
+    <p class="text-xs font-bold uppercase tracking-[.2em] text-emerald-300">Top recommendation</p>
+    <a href="#decision-context" class="mt-3 block font-serif text-4xl font-semibold hover:text-emerald-300">Finish Decision Context deepening</a>
+    <p class="mt-4 max-w-3xl text-sm leading-7 text-slate-300">The glossary term, module, and focused tests already exist. Removing the duplicate production path gives immediate locality and leverage without reopening repository execution or delivery authority.</p>
+  </section>
+</main>
+</body>
+</html>

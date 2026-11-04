@@ -1,5 +1,9 @@
 # Implementation Queue
 
+> **任务导航与历史队列。** 新任务和 PR 由 [GitHub](https://github.com/yang-hoo-xin/RepoForge/issues)管理；尚未发布的草稿在[统一登记表](document-registry.json)标记为 `pending-publication`。下文保留 `0e688f9` 对应的旧队列与链接，不表示那些工作仍在执行，也不取消其未完成目标。
+>
+> 为什么要有它：任务状态应有明确来源，保留历史路径可避免破坏已有文档和审计入链。
+
 更新于 2026-10-02。这里只维护当前用户选择和紧邻候选；开发约定见 [AGENTS.md](../AGENTS.md)，执行边界见[产品契约](ACTIVE_PRODUCT_CONTRACT.md)。
 
 ## 1. 当前选择

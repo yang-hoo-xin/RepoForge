@@ -51,3 +51,11 @@ they do not freeze an old architecture or override platform permissions.
    experimental protocols and skill schemas only for their selected purpose.
    Every added rule includes its scope and “为什么要有它”.
    为什么要有它：真实开发积累可复查成果，重复报告和补写成功叙述不会补齐待测数据。
+
+9. **Project documents:** start at [docs/README.md](docs/README.md). When drafting,
+   updating, consolidating or retiring a spec, plan, ADR, research or HTML report,
+   follow [document management](docs/document-management.md): repository bodies,
+   GitHub Issues/PRs for task/change state, and the shared registry for links and
+   source revisions. Use `project-docs-maintainer` for consolidation; run the
+   documented draft/promote/retire lifecycle and build/check for affected documents.
+   为什么要有它：新产物需要进入同一可查入口，避免各聊天另建“当前”正文或误用未合入分支。

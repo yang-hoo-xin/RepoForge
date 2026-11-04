@@ -1,0 +1,42 @@
+{
+  "scenario": "controlled draft -> same-ID update -> promote -> check/search",
+  "passed": true,
+  "id_preserved": true,
+  "final_status": "accepted",
+  "formal_body_count": 1,
+  "relative_link_preserved": true,
+  "steps": [
+    {
+      "status": "ok",
+      "action": "draft",
+      "id": "smoke-spec",
+      "path": "docs/drafts/smoke-spec.md",
+      "document_status": "draft",
+      "raw_sha256": "20632b4d5336c5377e83e8d55b4801834559fa5e1a22c787461d98e7148dcdc6",
+      "indexed_documents": 2
+    },
+    {
+      "status": "ok",
+      "action": "draft",
+      "id": "smoke-spec",
+      "path": "docs/drafts/smoke-spec.md",
+      "document_status": "draft",
+      "raw_sha256": "8a20eccfebe4b16c6009b20af524af5de8ca6e1c1323de575f94dedeb364363a",
+      "indexed_documents": 2
+    },
+    {
+      "status": "ok",
+      "action": "promote",
+      "id": "smoke-spec",
+      "path": "docs/specs/smoke.md",
+      "document_status": "accepted",
+      "raw_sha256": "8a20eccfebe4b16c6009b20af524af5de8ca6e1c1323de575f94dedeb364363a",
+      "indexed_documents": 2
+    },
+    {
+      "status": "ok",
+      "documents": 2,
+      "unclassified_warning_count": 1
+    }
+  ]
+}

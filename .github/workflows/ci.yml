@@ -12,6 +12,14 @@ permissions:
   contents: read
 
 jobs:
+  project-documents:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      # 为什么要有它：索引是正文的可重建视图，提交新正文后遗漏生成结果应在合入前被发现。
+      - name: Check document registry and generated views
+        run: python3 -m scripts.project_docs check
+
   quality:
     runs-on: ubuntu-latest
     steps:
@@ -37,6 +45,10 @@ jobs:
 
       - name: Ruff fatal errors
         run: uv run --frozen ruff check --select E9,F63,F7 src tests scripts main.py
+
+      # 为什么要有它：登记、路径边界和HTML搜索行为需要回归，单纯检查生成文件相同不足以证明索引工具正确。
+      - name: Project document catalog tests
+        run: uv run --frozen pytest tests/unit/test_project_docs.py -q -o addopts=
 
       # 为什么要有它：缺项和失败不能变成评测成绩，真实临时文件的治理边界需要在每次变更后回归。
       - name: Offline governance scenario gate

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RepoForge · 候选生成链结构检查</title>
+
+
+  <style>
+    :root{color-scheme:light;--ink:#17242b;--muted:#53646c;--line:#d9e0de;--accent:#096b56;--red:#b13e36;--paper:#f6f7f3}
+    *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.7 'Segoe UI','Microsoft YaHei',sans-serif}main{max-width:1130px;margin:auto;padding:44px 28px 70px}
+    h1,h2,h3,p{margin:0}h1{font-size:38px;line-height:1.25;letter-spacing:-1px}h2{font-size:26px;line-height:1.4}h3{font-size:15px}.eyebrow{font-size:12px;letter-spacing:2px;color:var(--accent);font-weight:700}.muted,small{color:var(--muted)}header{padding-bottom:28px;border-bottom:2px solid var(--ink)}.meta{margin:14px 0 20px}.legend{display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--muted)}.solid{display:inline-block;border:1px solid var(--ink);width:16px;height:12px;margin-right:6px}.dash{display:inline-block;border-top:2px dashed var(--accent);width:22px;vertical-align:middle;margin-right:6px}
+    .factstrip{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin:25px 0 38px}.fact{padding:18px;background:#fff}.fact b{display:block;font-size:22px}.fact span{font-size:13px;color:var(--muted)}article{border:1px solid var(--line);background:white;margin:0 0 30px;padding:30px;border-radius:12px}.title{display:flex;gap:16px;align-items:flex-start;justify-content:space-between}.number{font:30px Georgia,serif;color:var(--accent);margin-right:8px}.badge{display:inline-block;white-space:nowrap;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700}.strong{background:#d9f2e5;color:#155c40}.worth{background:#fff0cd;color:#825400}.tag{font-size:12px;color:var(--muted)}.files{font:12px/1.8 Consolas,monospace;color:#56636a;background:#f4f6f5;padding:12px 15px;margin:18px 0;overflow-wrap:anywhere}.twocol{display:grid;grid-template-columns:1fr 1fr;gap:20px}.panel{border:1px solid var(--line);border-radius:8px;padding:18px;min-height:288px}.panel.after{background:#f0f7f3;border-color:#bdd8cc}.label{font-size:11px;letter-spacing:1.5px;font-weight:bold;color:var(--muted);margin-bottom:14px}.box{border:1px solid #9aa9aa;border-radius:5px;background:#fff;padding:9px 12px;text-align:center;font-size:13px}.arrow{text-align:center;font-size:20px;line-height:1.5;color:var(--muted)}.deep{border:3px solid #174b3d;background:#174b3d;color:white;border-radius:7px;padding:19px;text-align:center;min-height:150px}.inner{color:#cae3d7;font-size:12px;margin-top:16px;padding:9px;border:1px dashed #90b8a4}.red{color:var(--red)}.error{border-color:#e9b7b0;background:#fff4f2}.notes{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px}.notes div{font-size:14px}.notes b{display:block;font-size:12px;color:var(--muted);margin-bottom:3px}.wins{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.wins span{background:#f0f3ef;border-radius:3px;padding:4px 8px;font-size:12px}.evidence{font-size:13px;border-left:3px solid var(--accent);padding-left:12px;margin-top:18px}.limits{font-size:12px;color:var(--muted);margin-top:12px}.schema{border-top:2px dashed var(--accent);padding-top:13px;margin-top:13px;font-size:12px}.duplicate{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin:35px 0 20px}.duplicate .box{padding:10px 4px;font-size:12px}.little{font-size:11px}.copybar{height:55px;background:repeating-linear-gradient(0deg,#d6dfdc,#d6dfdc 3px,transparent 3px,transparent 7px);margin-top:12px}.top{padding:28px;background:#173d32;color:#fff;border-radius:12px;margin-top:35px}.top a{color:#c3ead6}.top p{margin:12px 0}.ledger{margin-top:30px;font-size:13px}.ledger h2{font-size:21px}.ledger ul{padding-left:20px}.code{font-family:Consolas,monospace;font-size:12px;overflow-wrap:anywhere}.mermaid{font-size:12px;white-space:pre-wrap}.choice{font-size:20px;font-weight:700;margin-top:30px}.footer{font-size:12px;margin-top:20px;color:var(--muted)}@media(max-width:760px){main{padding:24px 15px}.twocol,.notes{grid-template-columns:1fr}.factstrip{grid-template-columns:1fr}article{padding:20px}.title{display:block}.badge{margin-top:10px}h1{font-size:29px}}
+  </style>
+<style>/* Static archive fallback; original report CSS is retained. */
+body{margin:0;background:#f4f5f7;color:#17212b;font:16px/1.65 system-ui,sans-serif}main{max-width:1200px;margin:auto;padding:24px}header,section,article{margin:18px 0}article{background:white;padding:22px;border:1px solid #dbe0e6;border-radius:12px}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:16px;background:#f1f4f8;color:#182230;border-radius:8px}code{overflow-wrap:anywhere}a{color:#175bb6}details{padding:12px;border:1px solid #dbe0e6;margin:12px 0}.archive-notice{padding:16px;background:#fff8d8;border-bottom:2px solid #b48a00;color:#342a08}.archive-notice a{color:#163f86}.grid{display:grid;gap:16px}.flex{display:flex;gap:12px;flex-wrap:wrap}.gap-4{gap:16px}@media(min-width:800px){.md\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.md\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}}
+</style></head>
+<body><aside class="archive-notice"><strong>历史分析报告 · 安全静态副本</strong><br>归集日期：2026-11-04。保留原分析正文和图示源文本；已移除脚本／CDN加载并替换本机绝对路径。报告中的建议、检查数量和状态只适用于原记录日期，不是当前任务指令或新的验收结论。Mermaid 图以原文展示。<br><a href="../research/candidate-editing-20261103.md">后续候选编辑与验收接线记录</a> · <a href="sources.json">原文哈希和处理说明</a></aside>
+<main>
+  <header>
+    <div class="eyebrow">REPOFORGE / ARCHITECTURE SURVEY</div>
+    <h1>先让候选形成，再讨论整批交付</h1>
+    <p class="meta muted">2026-11-03 · 检查提交 <code>f57089b</code> · 只读检查；没有修改仓库、启动模型或委派子代理</p>
+    <div class="legend"><span><i class="solid"></i>module</span><span><i class="dash"></i>seam</span><span class="red">红色：信息冲突或重复</span><span>深色：deep module</span></div>
+  </header>
+  <div class="factstrip">
+    <div class="fact"><b>原目标未达成</b><span>截图中的“已完成”只适用于夜间尝试已结束。</span></div>
+    <div class="fact"><b>卡在候选形成</b><span>N9 的修订 3 次失配；N11 第一个候选仍未形成。</span></div>
+    <div class="fact"><b>3 项结构候选</b><span>仅第一项直接接近当前候选阻断；收益尚待验证。</span></div>
+  </div>
+
+  <article id="candidate-1">
+    <div class="title"><h2><span class="number">01</span>收拢候选编辑的校验与失败定位</h2><span class="badge strong">Strong</span></div>
+    <div class="tag">local-substitutable · 已有 TaskRun seam 内部的候选编辑 module</div>
+    <div class="files">src/mod_agent/task_agent_v2_tools.py:100,181,413,520<br>src/mod_agent/task_agent_v2_state.py:520,536</div>
+    <div class="twocol">
+      <div class="panel">
+        <div class="label">BEFORE / 同一编辑解释多次</div>
+        <div class="box">模型抄回旧代码＋新代码＋源码视图</div><div class="arrow">↓</div>
+        <div class="box">tools：引用补全与换行解释</div><div class="arrow">↓</div>
+        <div class="box">state：按顺序校验并替换</div><div class="arrow red">↑ 只返回错误码</div>
+        <div class="box error">tools：再次重放编辑，猜失败位置</div>
+      </div>
+      <div class="panel after">
+        <div class="label">AFTER / 结构方向，尚未设计新 interface</div>
+        <div class="box">沿用 TaskRun 的调用与证据</div><div class="arrow">↓</div>
+        <div class="deep">候选编辑 deep module<div class="inner">当前源码身份 · 原子校验<br>同一遍处理产生精确失败事实</div></div>
+        <div class="schema">tools adapter 只转换反馈表示；不再复制编辑重放。</div>
+      </div>
+    </div>
+    <div class="notes">
+      <div><b>问题</b>校验与诊断缺少 locality。模型还需逐字复写旧代码；N9 三次提交均抄回 1,539 字符的无效旧代码块。</div>
+      <div><b>方向</b>先把同一编辑的解释放回一个 module，精确保留失败位置；选中后再讨论如何减轻 interface 的抄写负担。</div>
+      <div><b>删除检验</b>移除 tools 的诊断重放，重复算法消失；真实校验留在 state。单纯加一个转发 module 只会增加 shallow 结构。</div>
+      <div><b>验证与 adapter</b>现有文件快照与临时文件 adapter 已可替换。测试通过 TaskRun seam 检查可纠正失败、合法候选与拒绝越权。</div>
+    </div>
+    <div class="wins"><span>locality：一次编辑解释</span><span>leverage：首次提交与修订共用</span><span>depth：事实留在 implementation</span></div>
+    <p class="evidence">直接证据：N9 第 17、19、21 回合的响应哈希与登记一致，均因 <code>before_text_not_found</code> 未执行；N11 已收到定位诊断，仍未形成候选。</p>
+    <p class="limits">ADR-0002/0004 保持有效。此方向不能取消精确源码核验，也不能用模糊匹配代修模型代码。结构收益证据较强；改善 4B 正确交付仍是假设。</p>
+  </article>
+
+  <article id="candidate-2">
+    <div class="title"><h2><span class="number">02</span>让当前行动说明只由一处产生</h2><span class="badge strong">Strong</span></div>
+    <div class="tag">in-process · 决策上下文 module 与任务循环 module 之间的 seam</div>
+    <div class="files">src/mod_agent/task_agent_v2_decision_context.py:86,110<br>src/mod_agent/task_agent_loop.py:604–631<br>src/mod_agent/task_agent_v2_tools.py:885</div>
+    <div class="twocol">
+      <div class="panel">
+        <div class="label">BEFORE / 同一请求，两套说明</div>
+        <div class="box">DecisionContext：当前可用 3 个工具</div>
+        <div class="arrow red">与下方说明冲突</div>
+        <div class="box error">循环纠错：available_actions 列出 13 个工具</div>
+        <div class="arrow">↓</div><div class="box">模型需自行辨认哪份说明有效</div>
+      </div>
+      <div class="panel after">
+        <div class="label">AFTER / 一份当前行动事实</div>
+        <div class="deep">决策上下文 deep module<div class="inner">当前阶段 · 当前工具集合<br>纠错文字与工具展示使用同一事实</div></div>
+        <div class="arrow">↓</div><div class="box">任务循环保留执行与资源责任</div>
+        <div class="schema">seam 内传递事实，不向模型增加权限。</div>
+      </div>
+    </div>
+    <div class="notes">
+      <div><b>问题</b>两个 module 各自维护“可以做什么”，interface 发生信息漂移；当前工具缩窄后，历史纠错文字仍列出全部注册动作。</div>
+      <div><b>方向</b>在已有决策上下文 module 内集中当前行动表示；loop adapter 使用它生成一致说明。选择后再设计具体 interface。</div>
+      <div><b>删除检验</b>删除循环中独立拼出的动作清单，重复事实消失；执行和权限核验仍归原所有者。</div>
+      <div><b>验证与 adapter</b>实际 Ollama adapter 和受控 provider adapter 均跨同一 TaskRun seam，检查实际发送请求中的说明是否一致。</div>
+    </div>
+    <div class="wins"><span>locality：一份行动事实</span><span>leverage：展示与纠错共用</span><span>depth：消除 shallow 重复表述</span></div>
+    <p class="evidence">直接证据：N11 第 24、27 回合请求哈希与登记一致。工具集合为 source_read/history_read/candidate_submit；同一请求中的纠错消息却给出 13 个动作。</p>
+    <p class="limits">这证明输入自相矛盾，没有证明权限被绕过，也没有证明它单独导致本次失败。遵守 ADR-0002；不重开 ADR-0003 已延期的全局迁移。</p>
+  </article>
+
+  <article id="candidate-3">
+    <div class="title"><h2><span class="number">03</span>复用实验准备、冻结与清理实现</h2><span class="badge worth">Worth exploring</span></div>
+    <div class="tag">local-substitutable · 实验执行 module；优先级低于候选形成</div>
+    <div class="files">artifacts/eval_driven_20261103/local4b-overnight/n{3,5,7,9,11}_normal_entry.py<br>scripts/run_repository_product_pilot.py<br>artifacts/eval_driven_20261101/normal-entry-regression/run_supervised.py</div>
+    <div class="twocol">
+      <div class="panel">
+        <div class="label">BEFORE / 每个编号复制整份 implementation</div>
+        <div class="duplicate"><div class="box">N3<div class="copybar"></div></div><div class="box">N5<div class="copybar"></div></div><div class="box">N7<div class="copybar"></div></div><div class="box">N9<div class="copybar"></div></div><div class="box">N11<div class="copybar"></div></div></div>
+        <p class="red little">5 × 279 行；统一编号后 SHA-256 完全相同</p>
+      </div>
+      <div class="panel after">
+        <div class="label">AFTER / 新运行只登记不同事实</div>
+        <div class="box">任务记录 · 模型身份 · 资源政策</div><div class="arrow">↓</div>
+        <div class="deep">已有实验执行 deep module<div class="inner">准备 · 冻结 · 派发 · 清理<br>一份经过验证的 implementation</div></div>
+      </div>
+    </div>
+    <div class="notes">
+      <div><b>问题</b>实验 interface 实际包括整份驱动代码；重复的 shallow 入口增加准备成本和版本漂移风险。</div>
+      <div><b>方向</b>未来运行复用现有 module，编号和实验条件保留为记录。历史驱动与证据保持原样。</div>
+      <div><b>删除检验</b>从未来入口移除重复准备逻辑，复杂度集中在共享 module；不再把修复复制到五处。</div>
+      <div><b>验证与 adapter</b>本地进程 adapter 与受控进程 adapter 在内部 seam 可替换；检查零模型冻结、同一身份派发和失败清理。</div>
+    </div>
+    <div class="wins"><span>locality：生命周期修复一处</span><span>leverage：多次实验复用</span><span>depth：条件替代整份驱动</span></div>
+    <p class="evidence">直接证据：仅替换 N3/N5/N7/N9/N11 标识后，五个文件的归一化 SHA-256 均为 <code>448840FD…BBB724</code>。</p>
+    <p class="limits">这能减少准备摩擦，不能证明 4B 解题能力提升；不应以此再推迟候选形成，也不应修改已冻结的历史文件。</p>
+  </article>
+
+  <section class="top" id="top-recommendation">
+    <div class="eyebrow" style="color:#acd9c4">TOP RECOMMENDATION</div>
+    <h2><a href="#candidate-1">先探索 01：候选编辑 module</a></h2>
+    <p>先审查模型如何表达修改、平台如何定位失败。它直接接近本次阻断。02 是已证实的输入一致性问题；03 等候选链可用后再排。</p>
+    <small style="color:#c4d9d0">本报告只完成结构调查。下一阶段才确定 interface、验收与是否实施；本侧聊没有启动新实验。</small>
+  </section>
+  <section class="ledger">
+    <h2>阅读这张失败报告时，需要区分的三件事</h2>
+    <ul>
+      <li><strong>工程检查通过：</strong>平台按测试约定执行。没有证明 4B 能完成业务任务。</li>
+      <li><strong>候选形成：</strong>模型提交的修改被接纳。还需公开检查、独立验收和同版本实际交付。</li>
+      <li><strong>正确交付：</strong>当前抽查 N9/N11 均为 false。原始两仓批次没有因这些尝试而完成。</li>
+    </ul>
+    <p>“诊断已送达”不等于“模型已修对”。这晚反复增加反馈后仍无正确交付，足以要求重审技术方向；不足以承诺重构后 4B 必然成功。</p>
+    <h3 style="margin-top:20px">证据入口与限制</h3>
+    <p>本次对 N9 与 N11 使用已登记执行配置及 Run ID 调用共享只读证据入口；查询返回模型调用、构建、测试、恢复、写入均为 0。证据视图标为 partial；结论仅使用哈希验证过的实际请求、响应和原生运行结果。</p>
+    <p class="code">N9: dsh_a46e5045e90849f194176c0463c7e505<br>N11: dsh_30af56d7876c41acba95f16b5eeaaf8c<br>python -m scripts.dsh_run_request --execution-config &lt;登记的绝对配置&gt; --inspect-run &lt;Run ID&gt; --view evidence --format json</p>
+  </section>
+  <p class="choice">你想先展开哪一项？我建议 01。</p>
+  <p class="footer">术语：module＝含 interface 与 implementation 的模块；depth＝隐藏复杂度带来的调用收益；seam＝可替换行为的接缝；adapter＝接缝上的实现；leverage＝一次实现供多处使用；locality＝问题与验证集中在一处。页面用自带 CSS 保留全部结构图；CDN 仅增强样式，离线也可阅读。没有新增运行规则。</p>
+</main>
+</body>
+</html>

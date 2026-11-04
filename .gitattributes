@@ -1,0 +1,7 @@
+# 为什么要有它：生成视图及带归集哈希的报告跨平台保持可复算字节，避免换行转换破坏索引检查。
+/docs/document-index.json -text
+/docs/index.html -text
+/docs/reports/* -text
+/docs/specs/*.md text eol=lf
+/docs/adr/*.md text eol=lf
+/docs/research/*.md text eol=lf
