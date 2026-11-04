@@ -1,14 +1,16 @@
 {
   "schema_version": "project-documents.v1",
   "repository_url": "https://github.com/yang-hoo-xin/RepoForge",
-  "updated_at": "2026-11-04",
+  "updated_at": "2026-11-04T05:58:01.185147+00:00",
   "integration_base": "0e688f9cdfd25f155bcb74d14da535d4482978c8",
-  "github_snapshot_at": "2026-11-04",
+  "github_snapshot_at": "2026-11-04T05:58:01.185147+00:00",
   "publication": {
-    "issue_creation": "blocked",
-    "error": "GitHub integration 403 Resource not accessible by integration",
-    "browser_fallback": "in-app navigation timed out; native app approval timed out",
-    "new_issue_created": false
+    "issue_creation": "published_and_read_back",
+    "prior_connector_error": "403 Resource not accessible by integration",
+    "method": "existing authorized native GitHub identity",
+    "new_issues": 7,
+    "draft_pr": "https://github.com/yang-hoo-xin/RepoForge/pull/16",
+    "merged": false
   },
   "workstreams": [
     {
@@ -16,7 +18,8 @@
       "title": "开发者试用版 B",
       "branch": "codex/developer-preview-b",
       "spec": "preview-b-spec",
-      "integration_status": "design-imported; implementation-not-merged"
+      "integration_status": "design-imported; implementation-not-merged",
+      "parent": "preview-b-parent"
     },
     {
       "id": "candidate-editing",
@@ -203,81 +206,91 @@
       "id": "preview-b1",
       "title": "B1：在费用上限内执行并恢复任务",
       "kind": "task",
-      "status": "pending-publication",
-      "summary": "",
+      "status": "open",
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
       "workstream": "developer-preview",
-      "path": "docs/drafts/preview-b1.md",
       "related": [
+        "preview-b-parent",
         "preview-b-spec"
       ],
       "source": {
-        "publication_error": "GitHub integration 403",
-        "checked_at": "2026-11-04"
-      }
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "db1f86983ba79035aec6eb37cfb30a2b0c3966c836b8c1ad85deb7c65c314aa4",
+        "published_body_sha256": "34dbd841bae1c4dbc157d03e42154c490afc8d7c97831bad655fabea00d72b7d"
+      },
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/18"
     },
     {
       "id": "preview-b2",
       "title": "B2: 在任务权限内新建源码和开发测试并完成交付",
       "kind": "task",
-      "status": "pending-publication",
-      "summary": "",
+      "status": "open",
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
       "workstream": "developer-preview",
-      "path": "docs/drafts/preview-b2.md",
       "related": [
+        "preview-b-parent",
         "preview-b-spec"
       ],
       "source": {
-        "publication_error": "GitHub integration 403",
-        "checked_at": "2026-11-04"
-      }
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "ceb57d65530e4ef2e130aba40d915c1b5deb1279b233a6ef94bdff544cbcc269",
+        "published_body_sha256": "7a681485aaf50073a8d0e67d8c7d4346421f3396cc084619621a3eef67370553"
+      },
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/19"
     },
     {
       "id": "preview-b3",
       "title": "B3：审阅、应用及撤销交付结果",
       "kind": "task",
-      "status": "pending-publication",
-      "summary": "",
+      "status": "open",
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
       "workstream": "developer-preview",
-      "path": "docs/drafts/preview-b3.md",
       "related": [
+        "preview-b-parent",
         "preview-b-spec"
       ],
       "source": {
-        "publication_error": "GitHub integration 403",
-        "checked_at": "2026-11-04"
-      }
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "0e3173671f6ab996e5899a04640989531e5c3a7930f36831ac001e85295fbbc5",
+        "published_body_sha256": "473adf19c9d26999e701d4e27056c7d94e6bfb433f652ce3138435d793151b21"
+      },
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/20"
     },
     {
       "id": "preview-b4",
       "title": "B4：从安装包完成完整使用流程",
       "kind": "task",
-      "status": "pending-publication",
-      "summary": "",
+      "status": "open",
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
       "workstream": "developer-preview",
-      "path": "docs/drafts/preview-b4.md",
       "related": [
+        "preview-b-parent",
         "preview-b-spec"
       ],
       "source": {
-        "publication_error": "GitHub integration 403",
-        "checked_at": "2026-11-04"
-      }
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "a05a550cc0eb7802686b5b397a38ddf75be2515065f7dbd3515b171405f4499f",
+        "published_body_sha256": "7b8333fc3c3908c51314dd01924880ce07933b252b8617f1b1562399e0b0deb6"
+      },
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/21"
     },
     {
       "id": "preview-b5",
       "title": "B5：完成两位开发者的真实需求试用",
       "kind": "task",
-      "status": "pending-publication",
-      "summary": "",
+      "status": "open",
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
       "workstream": "developer-preview",
-      "path": "docs/drafts/preview-b5.md",
       "related": [
+        "preview-b-parent",
         "preview-b-spec"
       ],
       "source": {
-        "publication_error": "GitHub integration 403",
-        "checked_at": "2026-11-04"
-      }
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "830ad4a8614c672b98c1e97d3b1b59286ddae3903615ca47d517e8260966309b",
+        "published_body_sha256": "718a74ab1fa0af37443ed3f8dd2877fadd46eb5c65f8c08614fefb5376b67a8b"
+      },
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/22"
     },
     {
       "id": "issue-15",
@@ -570,13 +583,91 @@
       "id": "document-hub-task",
       "title": "统一文档入口与维护任务",
       "kind": "task",
-      "status": "pending-publication",
-      "path": "docs/drafts/document-hub-task.md",
+      "status": "open",
       "workstream": "publication",
       "related": [
         "document-policy"
       ],
-      "summary": "已准备任务正文；GitHub集成403，尚无远端Issue编号。"
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/23",
+      "source": {
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "9ff2029655f0f5e84c4642f907c3b44a3e30250aa33c5a2127740e454ccff436",
+        "published_body_sha256": "ec380558bfdd4b631ff96354a7b17abebaa217117791f6999b9bf3fa9b38d3ef"
+      }
+    },
+    {
+      "id": "preview-b-parent",
+      "title": "交付 RepoForge 开发者试用版 B",
+      "kind": "issue",
+      "status": "open",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/17",
+      "workstream": "developer-preview",
+      "related": [
+        "preview-b-spec",
+        "preview-b1",
+        "preview-b2",
+        "preview-b3",
+        "preview-b4",
+        "preview-b5"
+      ],
+      "source": {
+        "checked_at": "2026-11-04T05:58:01.185147+00:00"
+      }
+    },
+    {
+      "id": "docs-hub-pr",
+      "title": "统一文档入口与草稿生命周期 PR #16",
+      "kind": "pr",
+      "status": "draft",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/pull/16",
+      "workstream": "publication",
+      "related": [
+        "document-hub-task",
+        "document-policy"
+      ],
+      "source": {
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "merged": false
+      }
+    }
+  ],
+  "redirects": [
+    {
+      "path": "docs/drafts/preview-b1.md",
+      "document_id": "preview-b1",
+      "sha256": "f47d4aa6f38cbac24fecf5ce72b5a6d0f7fe24cf2f0d81b60bf6ebd2df150ebe",
+      "hash_basis": "utf8-text-lf-v1"
+    },
+    {
+      "path": "docs/drafts/preview-b2.md",
+      "document_id": "preview-b2",
+      "sha256": "fa11bb8e3ed24bb7392c16d3249f7ef00db4c52689c6ada3031403fe9c088897",
+      "hash_basis": "utf8-text-lf-v1"
+    },
+    {
+      "path": "docs/drafts/preview-b3.md",
+      "document_id": "preview-b3",
+      "sha256": "5b677dcd34ee2136c6a79e5f97ecdbc919053cb1b4c40b9e534bd4e29dc67381",
+      "hash_basis": "utf8-text-lf-v1"
+    },
+    {
+      "path": "docs/drafts/preview-b4.md",
+      "document_id": "preview-b4",
+      "sha256": "2ea1e6e2cc5d8c142554a3110025bd52f3dc83168635f6d2b639abbb1ae08ac1",
+      "hash_basis": "utf8-text-lf-v1"
+    },
+    {
+      "path": "docs/drafts/preview-b5.md",
+      "document_id": "preview-b5",
+      "sha256": "98219834f882ef980e61e651678a9a2f52c27537154fc8231b2414f3e8703978",
+      "hash_basis": "utf8-text-lf-v1"
+    },
+    {
+      "path": "docs/drafts/document-hub-task.md",
+      "document_id": "document-hub-task",
+      "sha256": "fdd81f10faa1f59aea36d891ae1a4bcf630b487a28c20098d7d3daa7fafc4738",
+      "hash_basis": "utf8-text-lf-v1"
     }
   ]
 }

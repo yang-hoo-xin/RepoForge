@@ -19,14 +19,16 @@ a{color:#075e87;text-decoration:none}a:hover{text-decoration:underline}h2{font-s
 <script id="catalog" type="application/json">{
   "schema_version": "project-documents.v1",
   "repository_url": "https://github.com/yang-hoo-xin/RepoForge",
-  "updated_at": "2026-11-04",
+  "updated_at": "2026-11-04T05:58:01.185147+00:00",
   "integration_base": "0e688f9cdfd25f155bcb74d14da535d4482978c8",
-  "github_snapshot_at": "2026-11-04",
+  "github_snapshot_at": "2026-11-04T05:58:01.185147+00:00",
   "publication": {
-    "issue_creation": "blocked",
-    "error": "GitHub integration 403 Resource not accessible by integration",
-    "browser_fallback": "in-app navigation timed out; native app approval timed out",
-    "new_issue_created": false
+    "issue_creation": "published_and_read_back",
+    "prior_connector_error": "403 Resource not accessible by integration",
+    "method": "existing authorized native GitHub identity",
+    "new_issues": 7,
+    "draft_pr": "https://github.com/yang-hoo-xin/RepoForge/pull/16",
+    "merged": false
   },
   "workstreams": [
     {
@@ -34,7 +36,8 @@ a{color:#075e87;text-decoration:none}a:hover{text-decoration:underline}h2{font-s
       "title": "开发者试用版 B",
       "branch": "codex/developer-preview-b",
       "spec": "preview-b-spec",
-      "integration_status": "design-imported; implementation-not-merged"
+      "integration_status": "design-imported; implementation-not-merged",
+      "parent": "preview-b-parent"
     },
     {
       "id": "candidate-editing",
@@ -762,26 +765,47 @@ a{color:#075e87;text-decoration:none}a:hover{text-decoration:underline}h2{font-s
       "summary": "",
       "workstream": "",
       "path": "docs/README.md",
-      "text": "# RepoForge 文档 RepoForge 将自然语言需求推进到有证据、可验收、可授权应用的代码变更。这是项目文档的统一入口：正文保存在仓库，任务和 PR 在 GitHub 管理，索引关联来源版本及验证结果。 **查找资料：** [可搜索总览](index.html) · [索引数据](document-index.json) · [GitHub 任务](https://github.com/yang-hoo-xin/RepoForge/issues) · [Pull requests](https://github.com/yang-hoo-xin/RepoForge/pulls)。在 GitHub 阅读源码时，可在本地打开 `docs/index.html` 使用搜索，或直接阅读下列 Markdown 入口。 **维护资料：** [存放与清理约定](document-management.md) · [登记表](document-registry.json)。索引中的 GitHub 状态带读取时间；分支文档迁入不代表相应功能代码已经合入。 ## 当前工作线 | 工作线 | 正文与记录 | 状态边界 | | --- | --- | --- | | 竞争性评测 T1—T11 | [原冻结规格](specs/competitive-delivery-evaluation.md) · [父 Issue #3](https://github.com/yang-hoo-xin/RepoForge/issues/3) | 原协议与后续开发试验分别记录，不以准备或单题结果替代批次完成 | | 开发者试用版 B | [产品规格](specs/developer-preview-b.md) | B1—B5 任务按 GitHub 记录；B4 是安装后完整流程，B5 才是外部采用 | | 本地模型候选编辑与验收接线 | [接口与验证记录](research/candidate-editing-20261103.md) | 关联 S1/S2/S3 及原分支；工程检查与模型结果分别记录 | | B1 费用恢复修复 | [独立审查](research/b1-spending-review-20261103.md) | 来源 `21cb246`，实现保留在独立分支 | | 编辑权限 | [ADR-0005](adr/0005-task-permission-scope-and-file-creation.md) | 设计接受不等于权限已实施或自动授予 | | HTML 分析 | [报告来源](reports/sources.json) | 历史分析材料，按来源与版本查阅 | 原工作区中的状态、计划及分析副本用于追溯；新的正式资料按[维护约定](document-management.md)登记。为什么要有它：一个入口应说明各项工作的实际归属，而不要求读者从聊天标题或相同目录名猜测。 ## 了解项目与实测结果 | 阅读目标 | 入口 | 内容 | | --- | --- | --- | | 快速了解产品 | [项目首页](../README.md) | 目标、核心能力、工作流与快速开始 | | 查看已完成验证 | [实测报告](PUBLIC_RESULTS.md) | 服务化、真实 Agent 入口、模块 EDD、受控代码交付与绑定版本的 CI 结果 | | 核对服务测量数字 | [负载数值摘录](evidence/service-load-20261009.json) | 五组条件、完整分母、结果与原摘要 SHA-256 | | 理解交付目标 | [产品契约](ACTIVE_PRODUCT_CONTRACT.md) | 新建、修改、继续修复，以及验收与执行边界 | ## 运行与接入 | 阅读目标 | 入口 | 内容 | | --- | --- | --- | | 启动服务演示 | [服务部署与 HTTP 接口](../deployment/service/README.md) | Compose、认证、异步作业、Agent profile 与停止方式 | | 理解 HTTP 到业务的调用 | [服务业务接线](../src/service_layer/backends.py) | 查询服务复用、登记 profile 和自然语言 Agent 入口 | | 使用命令行入口 | [CLI 实现](../src/mod_agent/cli.py)、[自然语言路由](../scripts/dsh_request_routing.py) | 命令参数与新建、修改、续接、澄清的路由 | | 配置补丁续接 | [Patch 上游续接](PATCH_UPSTREAM_CONTINUATION.md) | Evidence / Planning 配置和原 worker 的接入方式 | | 查看模型选择机制 | [模型资格路由](MODEL_QUALIFIED_ROUTING.md) | 可选角色选择、身份绑定与显式配置关系 | ## 理解架构与评测 | 阅读目标 | 入口 | 内容 | | --- | --- | --- | | 了解工作流与职责 | [架构说明](ARCHITECTURE_OVERVIEW.md)、[LangGraph 图](../src/mod_agent/workflow/graph.py) | 控制流、领域边界与具体实现；架构文档中的里程碑保留其原始阶段语境 | | 查看产物持久化 | [ArtifactStore](../src/mod_agent/artifacts/store.py) | 业务产物、身份与谱系的保存入口 | | 理解成功与成本计数 | [评测驱动开发](EVALUATION_DRIVEN_DEVELOPMENT.md) | 补丁可用、任务交付、自主程度，以及实验分母与预算 | | 运行模块评测 | [模块 runner](../scripts/run_module_evaluation.py)、[场景清单](../tests/fixtures/evaluation/module_coverage_v1.json) | 模块、场景、工程用例与执行尝试的组织 | | 理解负载测量 | [压测说明](../scripts/service_load/README.md)、[汇总器](../scripts/service_load/summarize.py) | 任务吞吐、终态延迟、幂等、限流和资源采样口径 | | 查看持续集成 | [CI 工作流](../.github/workflows/ci.yml) | 依赖环境、检查选集与运行步骤；最近已记录结果见实测报告 | ## 研究与项目沿革 [检索架构决策](RETRIEVAL_ARCHITECTURE_DECISIONS.md)和[检索验证计划](RETRIEVAL_VALIDATION_PLAN.md)记录设计选择、待验证假设与实验方案。[成果清单](PROJECT_OUTCOMES.md)、[项目状态](PROJECT_STATE.md)及[实施队列](IMPLEMENTATION_QUEUE.md)保留按日期推进的研发记录，历史段落描述当时的条件与结论。 更早的快照包括[状态归档](PROJECT_STATE.history-20260926.md)、[产品合同归档](ACTIVE_PRODUCT_CONTRACT.history-20260926.md)和[评测周期归档](EVALUATION_FIRST_CYCLE.history-20260927.md)。这些材料用于追溯演进；当前对外结果集中在[实测报告](PUBLIC_RESULTS.md)，可执行接口由相应代码和配置定义。",
-      "sha256": "0e849beca57248ef5a33da62a73e5059df7af15a0d9970901bc151d206f670d4",
+      "text": "# RepoForge 文档 RepoForge 将自然语言需求推进到有证据、可验收、可授权应用的代码变更。这是项目文档的统一入口：正文保存在仓库，任务和 PR 在 GitHub 管理，索引关联来源版本及验证结果。 **查找资料：** [可搜索总览](index.html) · [索引数据](document-index.json) · [GitHub 任务](https://github.com/yang-hoo-xin/RepoForge/issues) · [Pull requests](https://github.com/yang-hoo-xin/RepoForge/pulls)。在 GitHub 阅读源码时，可在本地打开 `docs/index.html` 使用搜索，或直接阅读下列 Markdown 入口。 **维护资料：** [存放与清理约定](document-management.md) · [登记表](document-registry.json)。索引中的 GitHub 状态带读取时间；分支文档迁入不代表相应功能代码已经合入。 ## 当前工作线 | 工作线 | 正文与记录 | 状态边界 | | --- | --- | --- | | 竞争性评测 T1—T11 | [原冻结规格](specs/competitive-delivery-evaluation.md) · [父 Issue #3](https://github.com/yang-hoo-xin/RepoForge/issues/3) | 原协议与后续开发试验分别记录，不以准备或单题结果替代批次完成 | | 开发者试用版 B | [产品规格](specs/developer-preview-b.md) · [父任务 #17](https://github.com/yang-hoo-xin/RepoForge/issues/17) | B1—B5 任务按 GitHub 记录；[B4 #21](https://github.com/yang-hoo-xin/RepoForge/issues/21) 是安装后完整流程，B5 才是外部采用 | | 本地模型候选编辑与验收接线 | [接口与验证记录](research/candidate-editing-20261103.md) | 关联 S1/S2/S3 及原分支；工程检查与模型结果分别记录 | | B1 费用恢复修复 | [独立审查](research/b1-spending-review-20261103.md) | 来源 `21cb246`，实现保留在独立分支 | | 编辑权限 | [ADR-0005](adr/0005-task-permission-scope-and-file-creation.md) | 设计接受不等于权限已实施或自动授予 | | HTML 分析 | [报告来源](reports/sources.json) | 历史分析材料，按来源与版本查阅 | | 文档管理与草稿生命周期 | [任务 #23](https://github.com/yang-hoo-xin/RepoForge/issues/23) · [草稿 PR #16](https://github.com/yang-hoo-xin/RepoForge/pull/16) | 独立分支已公开，主线合入由审阅决定 | 原工作区中的状态、计划及分析副本用于追溯；新的正式资料按[维护约定](document-management.md)登记。为什么要有它：一个入口应说明各项工作的实际归属，而不要求读者从聊天标题或相同目录名猜测。 ## 了解项目与实测结果 | 阅读目标 | 入口 | 内容 | | --- | --- | --- | | 快速了解产品 | [项目首页](../README.md) | 目标、核心能力、工作流与快速开始 | | 查看已完成验证 | [实测报告](PUBLIC_RESULTS.md) | 服务化、真实 Agent 入口、模块 EDD、受控代码交付与绑定版本的 CI 结果 | | 核对服务测量数字 | [负载数值摘录](evidence/service-load-20261009.json) | 五组条件、完整分母、结果与原摘要 SHA-256 | | 理解交付目标 | [产品契约](ACTIVE_PRODUCT_CONTRACT.md) | 新建、修改、继续修复，以及验收与执行边界 | ## 运行与接入 | 阅读目标 | 入口 | 内容 | | --- | --- | --- | | 启动服务演示 | [服务部署与 HTTP 接口](../deployment/service/README.md) | Compose、认证、异步作业、Agent profile 与停止方式 | | 理解 HTTP 到业务的调用 | [服务业务接线](../src/service_layer/backends.py) | 查询服务复用、登记 profile 和自然语言 Agent 入口 | | 使用命令行入口 | [CLI 实现](../src/mod_agent/cli.py)、[自然语言路由](../scripts/dsh_request_routing.py) | 命令参数与新建、修改、续接、澄清的路由 | | 配置补丁续接 | [Patch 上游续接](PATCH_UPSTREAM_CONTINUATION.md) | Evidence / Planning 配置和原 worker 的接入方式 | | 查看模型选择机制 | [模型资格路由](MODEL_QUALIFIED_ROUTING.md) | 可选角色选择、身份绑定与显式配置关系 | ## 理解架构与评测 | 阅读目标 | 入口 | 内容 | | --- | --- | --- | | 了解工作流与职责 | [架构说明](ARCHITECTURE_OVERVIEW.md)、[LangGraph 图](../src/mod_agent/workflow/graph.py) | 控制流、领域边界与具体实现；架构文档中的里程碑保留其原始阶段语境 | | 查看产物持久化 | [ArtifactStore](../src/mod_agent/artifacts/store.py) | 业务产物、身份与谱系的保存入口 | | 理解成功与成本计数 | [评测驱动开发](EVALUATION_DRIVEN_DEVELOPMENT.md) | 补丁可用、任务交付、自主程度，以及实验分母与预算 | | 运行模块评测 | [模块 runner](../scripts/run_module_evaluation.py)、[场景清单](../tests/fixtures/evaluation/module_coverage_v1.json) | 模块、场景、工程用例与执行尝试的组织 | | 理解负载测量 | [压测说明](../scripts/service_load/README.md)、[汇总器](../scripts/service_load/summarize.py) | 任务吞吐、终态延迟、幂等、限流和资源采样口径 | | 查看持续集成 | [CI 工作流](../.github/workflows/ci.yml) | 依赖环境、检查选集与运行步骤；最近已记录结果见实测报告 | ## 研究与项目沿革 [检索架构决策](RETRIEVAL_ARCHITECTURE_DECISIONS.md)和[检索验证计划](RETRIEVAL_VALIDATION_PLAN.md)记录设计选择、待验证假设与实验方案。[成果清单](PROJECT_OUTCOMES.md)、[项目状态](PROJECT_STATE.md)及[实施队列](IMPLEMENTATION_QUEUE.md)保留按日期推进的研发记录，历史段落描述当时的条件与结论。 更早的快照包括[状态归档](PROJECT_STATE.history-20260926.md)、[产品合同归档](ACTIVE_PRODUCT_CONTRACT.history-20260926.md)和[评测周期归档](EVALUATION_FIRST_CYCLE.history-20260927.md)。这些材料用于追溯演进；当前对外结果集中在[实测报告](PUBLIC_RESULTS.md)，可执行接口由相应代码和配置定义。",
+      "sha256": "f07cf999ab8f71fb830d41a3c3dfdbcaa56d089bad82ec0b7854fe5f661a4cbd",
       "hash_basis": "utf8-text-lf-v1",
       "href": "README.md"
+    },
+    {
+      "id": "docs-hub-pr",
+      "title": "统一文档入口与草稿生命周期 PR #16",
+      "kind": "pr",
+      "status": "draft",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/pull/16",
+      "workstream": "publication",
+      "related": [
+        "document-hub-task",
+        "document-policy"
+      ],
+      "source": {
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "merged": false
+      },
+      "text": "",
+      "href": "https://github.com/yang-hoo-xin/RepoForge/pull/16"
     },
     {
       "id": "document-hub-task",
       "title": "统一文档入口与维护任务",
       "kind": "task",
-      "status": "pending-publication",
-      "path": "docs/drafts/document-hub-task.md",
+      "status": "open",
       "workstream": "publication",
       "related": [
         "document-policy"
       ],
-      "summary": "已准备任务正文；GitHub集成403，尚无远端Issue编号。",
-      "text": "# 统一项目文档入口、GitHub 任务关系和持续维护 \u003e 待发布：GitHub 集成创建 Issue 返回 403；浏览器入口和原生应用授权均超时，尚未创建远端工单。 ## 目标 采用已确认的“仓库保存正文、GitHub 管理任务与 PR、统一索引关联两者”。收拢当前 PRD、Spec、ADR、实施记录和 HTML 分析报告，保留源版本与未合入状态。 ## 验收 - [ ] docs/README.md 作为统一入口，登记表区分文档正文、任务状态与源码集成阶段。 - [ ] 本地可生成、搜索并检查索引，未分类历史文档保持显式状态，检查拒绝越界路径和失效登记。 - [ ] 开发者试用版 B、竞争性评测、候选接口与验收接线、B1 审查及四份 HTML 报告可定位。 - [ ] 项目维护技能和短 AGENTS 入口落地；CI 检查索引过期与断链。 - [ ] 迁移／归档／删除有具体依据，保留活动工作及原始运行证据。 ## 实施 独立分支：`codex/project-docs-hub`；起点：`0e688f9cdfd25f155bcb74d14da535d4482978c8`。本项只整合文档和索引工具，不合入 B1 或候选接口的产品实现。合入由用户在验证后决定。 为什么要有它：统一入口必须关联到实际版本和执行者，避免各聊天继续维护相互脱节的“当前”资料。",
-      "sha256": "9ff2029655f0f5e84c4642f907c3b44a3e30250aa33c5a2127740e454ccff436",
-      "hash_basis": "utf8-text-lf-v1",
-      "href": "drafts/document-hub-task.md"
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/23",
+      "source": {
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "9ff2029655f0f5e84c4642f907c3b44a3e30250aa33c5a2127740e454ccff436",
+        "published_body_sha256": "ec380558bfdd4b631ff96354a7b17abebaa217117791f6999b9bf3fa9b38d3ef"
+      },
+      "text": "",
+      "href": "https://github.com/yang-hoo-xin/RepoForge/issues/23"
     },
     {
       "id": "document-policy",
@@ -1037,6 +1061,27 @@ a{color:#075e87;text-decoration:none}a:hover{text-decoration:underline}h2{font-s
       "href": "https://github.com/yang-hoo-xin/RepoForge/pull/2"
     },
     {
+      "id": "preview-b-parent",
+      "title": "交付 RepoForge 开发者试用版 B",
+      "kind": "issue",
+      "status": "open",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/17",
+      "workstream": "developer-preview",
+      "related": [
+        "preview-b-spec",
+        "preview-b1",
+        "preview-b2",
+        "preview-b3",
+        "preview-b4",
+        "preview-b5"
+      ],
+      "source": {
+        "checked_at": "2026-11-04T05:58:01.185147+00:00"
+      },
+      "text": "",
+      "href": "https://github.com/yang-hoo-xin/RepoForge/issues/17"
+    },
+    {
       "id": "preview-b-spec",
       "title": "开发者试用版 B 规格：B1—B5",
       "kind": "spec",
@@ -1057,101 +1102,101 @@ a{color:#075e87;text-decoration:none}a:hover{text-decoration:underline}h2{font-s
       "id": "preview-b1",
       "title": "B1：在费用上限内执行并恢复任务",
       "kind": "task",
-      "status": "pending-publication",
-      "summary": "",
+      "status": "open",
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
       "workstream": "developer-preview",
-      "path": "docs/drafts/preview-b1.md",
       "related": [
+        "preview-b-parent",
         "preview-b-spec"
       ],
       "source": {
-        "publication_error": "GitHub integration 403",
-        "checked_at": "2026-11-04"
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "db1f86983ba79035aec6eb37cfb30a2b0c3966c836b8c1ad85deb7c65c314aa4",
+        "published_body_sha256": "34dbd841bae1c4dbc157d03e42154c490afc8d7c97831bad655fabea00d72b7d"
       },
-      "text": "# B1：在费用上限内执行并恢复任务 \u003e 待发布到 GitHub：连接器创建 Issue 返回 403。此处是保留的任务草稿，不是远端工单；原文来源提交 `3c17e14`。对应规格：[开发者试用版 B](../specs/developer-preview-b.md)。 \u003e 后续 B1 独立修复提交 `21cb246` 已验证但未合入，见[审查记录](../research/b1-spending-review-20261103.md)。 **Parent:** RepoForge 开发者试用版 B（本地规格已确认，远程发布待登记） **Status:** implemented; focused verification and independent review gate tracked in implementation record **Blocked by:** None ## What to build 用户通过正常 CLI / Task Run 明确任务最高费用及绑定费率。系统在实际付费调用前预留最大可能成本，允许范围内的运行并在不足时保存进度、明确停止。恢复、重试和未知在途用量保留累计消耗，不自动增加额度或换模型。 为什么要有它：用户需要可执行的费用边界，而不只是结束后的用量报告。 ## Acceptance criteria - [ ] 配置校验拒绝缺失或非法金额、费率及不支持的模型计费绑定，旧未启用合同保持原解释。 - [ ] 对完整请求和最大输出保守计量；剩余金额不足时 HTTP 不发送，输出预算原因及已有结果。 - [ ] 实际可信用量结算，未知用量保留预留，重复结算不重复收费或释放。 - [ ] 任务恢复沿用绑定费率和累计账本，修改预算不能伪装同一配置的普通恢复。 - [ ] 正常入口受控验证覆盖额度内调用、下一次拒绝、中断恢复、重复回执、未知消耗和价格/模型漂移。 - [ ] 输出区分预算估值、可信用量及实际账单未知，不声称控制了其他客户端或整个账户费用。 为什么要有它：验证应覆盖可观察的停止与恢复行为，避免数学函数通过而实际请求绕开预算。",
-      "sha256": "db1f86983ba79035aec6eb37cfb30a2b0c3966c836b8c1ad85deb7c65c314aa4",
-      "hash_basis": "utf8-text-lf-v1",
-      "href": "drafts/preview-b1.md"
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/18",
+      "text": "",
+      "href": "https://github.com/yang-hoo-xin/RepoForge/issues/18"
     },
     {
       "id": "preview-b2",
       "title": "B2: 在任务权限内新建源码和开发测试并完成交付",
       "kind": "task",
-      "status": "pending-publication",
-      "summary": "",
+      "status": "open",
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
       "workstream": "developer-preview",
-      "path": "docs/drafts/preview-b2.md",
       "related": [
+        "preview-b-parent",
         "preview-b-spec"
       ],
       "source": {
-        "publication_error": "GitHub integration 403",
-        "checked_at": "2026-11-04"
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "ceb57d65530e4ef2e130aba40d915c1b5deb1279b233a6ef94bdff544cbcc269",
+        "published_body_sha256": "7a681485aaf50073a8d0e67d8c7d4346421f3396cc084619621a3eef67370553"
       },
-      "text": "# B2: 在任务权限内新建源码和开发测试并完成交付 \u003e 待发布到 GitHub：连接器创建 Issue 返回 403。此处是保留的任务草稿，不是远端工单；原文来源提交 `3c17e14`。对应规格：[开发者试用版 B](../specs/developer-preview-b.md)。 **Status:** ready-for-agent — B 版整合已确认；复用原工单，不另开重复功能票。 **Planned label:** ready-for-agent **Blocked by:** None（可以直接开始）。 **Design basis:** 用户确认的 ADR-0005 Q1、Q2、Q4、Q5、Q9；设计提交 `a19e52d`，基于 `9619ea1`。当前保存在独立设计分支 `codex/task-permission-design`。正文包含本片所需的完整行为要求。 ## What to build 让用户通过正常任务入口一次授予指定目录范围内的修改与新建权限，Task Agent 随后自行选择具体 UTF-8 C# 源码和获准普通开发测试，提交包含新文件的候选，经过公共检查、中断恢复和同版本源码及产物交付。已有文件清单仍可用于更窄的任务范围。 当前合同只支持已有文件修改，且候选、构建输入和验收来源均假定文件集合固定。本片同时贯通这些使用方，不以 schema 接受新建请求作为完成。 为什么要有它：用户要取得包含新文件的可验证交付，单独放开路径或工具参数仍会在后续检查和交付阶段阻断。 ## Acceptance criteria - [ ] 正常入口从宿主绑定配置派生目录范围和允许操作；有效授权内选择文件无需逐文件重新批准，精确文件清单仍可限定更窄范围。模型陈述、工具 schema、普通调用者提供的引用均不能自行授予权限。 为什么要有它：用户控制权限范围，模型选择范围内的编辑方案，且权限来源保持可信。 - [ ] 新建与修改具有明确且不同的操作前提。新建在候选接纳与实际应用时核验当前目标不存在；已有文件修改保留源码读取和精确前像核验。新建文件可被正常读取、继续修改并参与后续候选修订，混合文件候选保留现有一致性要求。 为什么要有它：新文件没有旧内容，不能伪造前像，也不能成为无法继续编辑的特殊产物或意外覆盖已有文件。 - [ ] 普通开发测试按用途进入明确授权范围，冻结验收输入始终保持只读。新增源码与开发测试纳入候选文件集合、构建来源及适用检查，记录能证明实际编译包含新文件；未包含时给出明确反馈，不悄悄改动项目配置、依赖或验收条件。 为什么要有它：文件存在不等于参与构建，新增测试也不能替代冻结的业务判定。 - [ ] 一条正常入口场景完成已有文件修改、新建源码或获准开发测试、公共反馈、修订、中断恢复以及同版本交付。恢复保留同一任务运行身份、候选、观察和累计资源；交付包含实际新文件及对应产物，继续核验精确差异、当前源码和真实有效的 Apply／Build 授权。 为什么要有它：完整链路才能证明用户能使用新建能力，编辑许可不能隐含额外执行副作用或丢失恢复历史。 - [ ] 反例覆盖目标已存在、接纳后被外部创建、越出授权范围、过期版本、冻结验收写入和新文件未参与编译；区分参数错误、权限不足、尚未支持的操作及版本／路径冲突。旧保存请求保持原解释，不回写旧运行。 为什么要有它：拒绝必须指向真实原因，同时保持历史解释和已有安全约束。 - [ ] 通过正常任务入口和任务交付接口验证外部行为，使用受控模型响应与真实临时仓库，并保留实际编译输入的验证证据。保留首次失败、修复和聚焦复验；权限、效果及结果真实性经独立审阅，受控通过不宣称真实模型能力提升。 为什么要有它：实施需要可重复的行为证据，不能用内部对象存在或测试替身自报成功替代验收。 ## Blocked by None。可以从已确认设计与现有正常入口开始；本片不依赖第二张权限申请工单。 为什么要有它：初始任务权限已经覆盖所需编辑时，不需要等待动态申请机制才能交付。 ## Scope and return point 首批支持 UTF-8 C# 源码和获准普通开发测试的修改、新建。删除、重命名、构建配置、依赖声明及二进制文件不在本片内；权限申请与决定后的续接由第二张工单交付。 为什么要有它：本片闭合一个可独立验收的用户流程，其他操作不从目录授权中被默认为已经实现或获准。 使用独立实现分支并固定实际执行版本；验证后由用户决定合入。真实模型任务按实际模型、资源和披露条件另行登记；不启动、恢复或改写既有真实尝试。 为什么要有它：产品源码开发与真实任务执行各自需要明确版本及授权，不能借工单隐含启动付费或历史运行。 本片完成后返回第二张工单，并重新检查原回归与架构分支的队列；不把未合入的架构重构、正式批次、经验资格或换模型作为默认前置。 为什么要有它：只让直接技术依赖阻挡交付，避免权限改进演变为新的准备链。 ## Related work 另一页的正常入口回归负责 Qwen 接线、LF／CRLF 输入解释、交付源码核验等直接阻断修复。2026-11-01 本次核对时，交付快照排序修复已形成 `29f66fe`，原始坏回复留存与安全格式纠错仍在开发。本片消费这些能力，只补目录权限、新建文件及其后续使用方，不重新实现通用模型接线、格式纠错或同题验收准备。 为什么要有它：这些修复与本片会经过共同执行模块，重复开发会产生两套处理方式并增加集成冲突。 设计提交仅固定已确认语义，不能被当作最新实现基线。实施前核对相关修复的稳定提交，集成时保留其行为并验证组合路径，不以旧文件覆盖另一页的新修复。需要对接的是直接相关补丁的稳定版本，不要求等待另一页整个业务回归成功。 为什么要有它：避免在旧版本上重复定位已修问题，同时不把另一条任务的最终成功设为新的全局前置。 - [#3：竞争性自主交付与策略经验评测](https://github.com/yang-hoo-xin/RepoForge/issues/3)：本片是产品能力开发，权限政策改变形成新评测版本，不改变该工单已经冻结的批次合同。 - [#5：安全输入纠错](https://github.com/yang-hoo-xin/RepoForge/issues/5)：其既有工作不包含新文件操作及目录权限合同，故本片另立工单，不覆盖其历史验收。 这些关联不是阻塞依赖，也不修改或关闭上述工单。 为什么要有它：关联说明目标关系，不能继承不适用于本片的批次门槛或改写旧工作。 ## B 版整合 Parent: RepoForge 开发者试用版 B。保留原 ADR 和验收全文，实际基线使用 B 版实施记录；不使用设计来源提交冒充当前集成版本。B3 负责审阅后向用户原仓库应用及撤销，本片负责获准候选和隔离验证交付。 为什么要有它：已确认设计复用而不重复开发；用户原仓库交接与内部隔离交付职责需要清楚。",
-      "sha256": "ceb57d65530e4ef2e130aba40d915c1b5deb1279b233a6ef94bdff544cbcc269",
-      "hash_basis": "utf8-text-lf-v1",
-      "href": "drafts/preview-b2.md"
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/19",
+      "text": "",
+      "href": "https://github.com/yang-hoo-xin/RepoForge/issues/19"
     },
     {
       "id": "preview-b3",
       "title": "B3：审阅、应用及撤销交付结果",
       "kind": "task",
-      "status": "pending-publication",
-      "summary": "",
+      "status": "open",
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
       "workstream": "developer-preview",
-      "path": "docs/drafts/preview-b3.md",
       "related": [
+        "preview-b-parent",
         "preview-b-spec"
       ],
       "source": {
-        "publication_error": "GitHub integration 403",
-        "checked_at": "2026-11-04"
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "0e3173671f6ab996e5899a04640989531e5c3a7930f36831ac001e85295fbbc5",
+        "published_body_sha256": "473adf19c9d26999e701d4e27056c7d94e6bfb433f652ce3138435d793151b21"
       },
-      "text": "# B3：审阅、应用及撤销交付结果 \u003e 待发布到 GitHub：连接器创建 Issue 返回 403。此处是保留的任务草稿，不是远端工单；原文来源提交 `3c17e14`。对应规格：[开发者试用版 B](../specs/developer-preview-b.md)。 **Parent:** RepoForge 开发者试用版 B **Status:** ready-for-agent **Blocked by:** B2 ## What to build 用户查看独立副本产生的具体差异、检查结果和费用，确认后将该版本应用到原仓库，并能够撤销本次应用而保留无关工作。复用已有隔离交付，不重做候选生成。 为什么要有它：内部产物通过还需要转成用户能安全接收和退出的操作。 ## Acceptance criteria - [ ] 展示准确的新建/修改差异、测试状态和费用；无批准不修改原仓库。 - [ ] 应用绑定精确差异与当前前像；原仓库变化、已有同名新文件及路径越界被拒绝。 - [ ] 撤销检查应用后状态，恢复本次修改及撤去本次新建文件，不覆盖后续或无关编辑。 - [ ] 重复操作及中断恢复不重复副作用，部分失败给出真实已生效范围和恢复方式。 - [ ] 正常 CLI 受控场景验证审阅、拒绝、批准、应用、冲突与撤销。 为什么要有它：用户需要可控的源码交接，而不是一个不检查当前仓库的补丁覆盖命令。",
-      "sha256": "0e3173671f6ab996e5899a04640989531e5c3a7930f36831ac001e85295fbbc5",
-      "hash_basis": "utf8-text-lf-v1",
-      "href": "drafts/preview-b3.md"
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/20",
+      "text": "",
+      "href": "https://github.com/yang-hoo-xin/RepoForge/issues/20"
     },
     {
       "id": "preview-b4",
       "title": "B4：从安装包完成完整使用流程",
       "kind": "task",
-      "status": "pending-publication",
-      "summary": "",
+      "status": "open",
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
       "workstream": "developer-preview",
-      "path": "docs/drafts/preview-b4.md",
       "related": [
+        "preview-b-parent",
         "preview-b-spec"
       ],
       "source": {
-        "publication_error": "GitHub integration 403",
-        "checked_at": "2026-11-04"
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "a05a550cc0eb7802686b5b397a38ddf75be2515065f7dbd3515b171405f4499f",
+        "published_body_sha256": "7b8333fc3c3908c51314dd01924880ce07933b252b8617f1b1562399e0b0deb6"
       },
-      "text": "# B4：从安装包完成完整使用流程 \u003e 待发布到 GitHub：连接器创建 Issue 返回 403。此处是保留的任务草稿，不是远端工单；原文来源提交 `3c17e14`。对应规格：[开发者试用版 B](../specs/developer-preview-b.md)。 **Parent:** RepoForge 开发者试用版 B **Status:** ready-for-agent **Blocked by:** B1、B3 ## What to build 在干净 Windows x64 环境取得固定版本、安装 CLI、配置已有 C# 项目与模型，完成小范围任务及预算停止/恢复、验证、审阅、应用和撤销。缺依赖或配置错误在付费请求前明确提示。 为什么要有它：安装后的真实入口是试用者接触产品的方式，不能依赖维护者临时目录和开发环境。 ## Acceptance criteria - [ ] 支持范围、依赖版本、模型配置、费用边界和外发范围在安装说明中一致。 - [ ] 源码、安装产物、文档和选定 CI 绑定同一候选提交，安装后入口不依赖 editable 或源码目录。 - [ ] 正常用户流程覆盖已有文件和新建开发测试；受控模型验证与真实模型结果分别标注。 - [ ] 提供结果定位、错误诊断、停止、清理和回退说明，密钥不进入日志或发行物。 - [ ] 工程完成单独登记；不将尚未发生的外部试点写成完成。 为什么要有它：工程就绪与真实采用分开记录，既能交付版本，也保留真实验证缺口。",
-      "sha256": "a05a550cc0eb7802686b5b397a38ddf75be2515065f7dbd3515b171405f4499f",
-      "hash_basis": "utf8-text-lf-v1",
-      "href": "drafts/preview-b4.md"
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/21",
+      "text": "",
+      "href": "https://github.com/yang-hoo-xin/RepoForge/issues/21"
     },
     {
       "id": "preview-b5",
       "title": "B5：完成两位开发者的真实需求试用",
       "kind": "task",
-      "status": "pending-publication",
-      "summary": "",
+      "status": "open",
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
       "workstream": "developer-preview",
-      "path": "docs/drafts/preview-b5.md",
       "related": [
+        "preview-b-parent",
         "preview-b-spec"
       ],
       "source": {
-        "publication_error": "GitHub integration 403",
-        "checked_at": "2026-11-04"
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "830ad4a8614c672b98c1e97d3b1b59286ddae3903615ca47d517e8260966309b",
+        "published_body_sha256": "718a74ab1fa0af37443ed3f8dd2877fadd46eb5c65f8c08614fefb5376b67a8b"
       },
-      "text": "# B5：完成两位开发者的真实需求试用 \u003e 待发布到 GitHub：连接器创建 Issue 返回 403。此处是保留的任务草稿，不是远端工单；原文来源提交 `3c17e14`。对应规格：[开发者试用版 B](../specs/developer-preview-b.md)。 **Parent:** RepoForge 开发者试用版 B **Status:** ready-for-human — 招募与需求由真实使用者提供 **Blocked by:** B4 ## What to build 至少两位非项目开发者各带一个自己的 C# 仓库小范围需求试用，保留采用或拒绝原因，至少一项修改实际采用。安装支持、业务提示与手工代改分别记录。 为什么要有它：可安装和真实有用需要分别验证，模拟用户或开发助手自评不能代替外部采用。 ## Acceptance criteria - [ ] 使用者、需求、版本与运行相互对应，按其许可保留必要记录。 - [ ] 记录独立操作步骤、帮助次数/内容、结果、耗时、费用及未知项，不推算未计量人工时间。 - [ ] 两位使用者各完成一次真实试用，至少一项实际采用；有辅助的结果不称独立完成。 - [ ] 失败和拒绝保留，对直接阻断排序，不通过无限换题或重试凑成功。 - [ ] 用户招募或试点未就绪时准确保留未完成状态，不自动联系他人或生成假反馈。 为什么要有它：试点的价值在真实问题和反馈，人数目标不是统计代表性或营销数据。",
-      "sha256": "830ad4a8614c672b98c1e97d3b1b59286ddae3903615ca47d517e8260966309b",
-      "hash_basis": "utf8-text-lf-v1",
-      "href": "drafts/preview-b5.md"
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/22",
+      "text": "",
+      "href": "https://github.com/yang-hoo-xin/RepoForge/issues/22"
     },
     {
       "id": "product-contract",
@@ -1249,7 +1294,45 @@ a{color:#075e87;text-decoration:none}a:hover{text-decoration:underline}h2{font-s
       "href": "TWELVE_TURN_EXECUTION_WORK_PACKAGE_20260905.md"
     }
   ],
-  "registry_sha256": "9f6fbcab28df542ce864cd747352c57e23fcc599f78346a3065b19fc1eb4fd09",
+  "redirects": [
+    {
+      "path": "docs/drafts/preview-b1.md",
+      "document_id": "preview-b1",
+      "sha256": "f47d4aa6f38cbac24fecf5ce72b5a6d0f7fe24cf2f0d81b60bf6ebd2df150ebe",
+      "hash_basis": "utf8-text-lf-v1"
+    },
+    {
+      "path": "docs/drafts/preview-b2.md",
+      "document_id": "preview-b2",
+      "sha256": "fa11bb8e3ed24bb7392c16d3249f7ef00db4c52689c6ada3031403fe9c088897",
+      "hash_basis": "utf8-text-lf-v1"
+    },
+    {
+      "path": "docs/drafts/preview-b3.md",
+      "document_id": "preview-b3",
+      "sha256": "5b677dcd34ee2136c6a79e5f97ecdbc919053cb1b4c40b9e534bd4e29dc67381",
+      "hash_basis": "utf8-text-lf-v1"
+    },
+    {
+      "path": "docs/drafts/preview-b4.md",
+      "document_id": "preview-b4",
+      "sha256": "2ea1e6e2cc5d8c142554a3110025bd52f3dc83168635f6d2b639abbb1ae08ac1",
+      "hash_basis": "utf8-text-lf-v1"
+    },
+    {
+      "path": "docs/drafts/preview-b5.md",
+      "document_id": "preview-b5",
+      "sha256": "98219834f882ef980e61e651678a9a2f52c27537154fc8231b2414f3e8703978",
+      "hash_basis": "utf8-text-lf-v1"
+    },
+    {
+      "path": "docs/drafts/document-hub-task.md",
+      "document_id": "document-hub-task",
+      "sha256": "fdd81f10faa1f59aea36d891ae1a4bcf630b487a28c20098d7d3daa7fafc4738",
+      "hash_basis": "utf8-text-lf-v1"
+    }
+  ],
+  "registry_sha256": "ee9168904267d4aebd910d8a911207122dc58bae299956cc0d4cf7bb9dd8b477",
   "registry_hash_basis": "utf8-text-lf-v1"
 }
 </script>
