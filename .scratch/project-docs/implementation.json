@@ -1,7 +1,7 @@
 {
   "schema": "project-docs-implementation.v1",
   "date": "2026-11-04",
-  "status": "locally_complete_publication_requires_explicit_approval",
+  "status": "public_publication_authorized",
   "branch": "codex/project-docs-hub",
   "base_commit": "0e688f9cdfd25f155bcb74d14da535d4482978c8",
   "user_choice": "Repository bodies, GitHub tasks/PR, unified index",
@@ -26,9 +26,17 @@
     "browser_fallback": "in-app request timed out; native application approval timed out",
     "pending_drafts": 6,
     "draft_pr": "prepared_not_submitted",
-    "push": "blocked_by_automatic_approval_review_before_execution",
-    "push_reason": "Public GitHub repository: explicit approval needed to publish this set of specs, analysis reports, task drafts and run-related documentation.",
-    "remote_branch_pushed": false
+    "push": "authorized_pending_execution",
+    "remote_branch_pushed": false,
+    "prior_push_rejection": {
+      "status": "blocked_by_automatic_approval_review_before_execution",
+      "reason": "Public GitHub repository: explicit approval needed to publish this set of specs, analysis reports, task drafts and run-related documentation."
+    },
+    "public_publication_approval": {
+      "date": "2026-11-04",
+      "user_message": "公开吧",
+      "scope": "Publish this prepared branch of specs, ADRs, analyses, task drafts and catalog tooling to public yang-hoo-xin/RepoForge and create a draft PR; no merge."
+    }
   },
   "verification": {
     "initial_catalog_tests": "22 passed, 1 Windows symlink privilege skip",
