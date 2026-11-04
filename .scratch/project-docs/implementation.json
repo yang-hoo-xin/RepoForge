@@ -1,7 +1,7 @@
 {
   "schema": "project-docs-implementation.v1",
   "date": "2026-11-04",
-  "status": "local_verified_pending_github_publication_and_merge",
+  "status": "locally_complete_publication_requires_explicit_approval",
   "branch": "codex/project-docs-hub",
   "base_commit": "0e688f9cdfd25f155bcb74d14da535d4482978c8",
   "user_choice": "Repository bodies, GitHub tasks/PR, unified index",
@@ -25,7 +25,10 @@
     "issue_write_error": "403 Resource not accessible by integration",
     "browser_fallback": "in-app request timed out; native application approval timed out",
     "pending_drafts": 6,
-    "draft_pr": "body prepared in pr-body.md; not submitted"
+    "draft_pr": "prepared_not_submitted",
+    "push": "blocked_by_automatic_approval_review_before_execution",
+    "push_reason": "Public GitHub repository: explicit approval needed to publish this set of specs, analysis reports, task drafts and run-related documentation.",
+    "remote_branch_pushed": false
   },
   "verification": {
     "initial_catalog_tests": "22 passed, 1 Windows symlink privilege skip",
@@ -46,7 +49,8 @@
     "browser": "generated JavaScript executed by DOM harness; native visual browser inspection unavailable after app approval timeout",
     "environment_note": "pytest exit 0; existing pyreadline3 destructor emitted a post-test Windows invalid-handle warning",
     "draft_lifecycle": "Complete CLI regression plus independent root smoke: same ID update -> promote -> check/search; one canonical body, relative link preserved.",
-    "independent_review": "Passed: data/path/HTML and provenance; lifecycle failed-write/interruption/concurrency/link relocation findings fixed and rechecked"
+    "independent_review": "Passed: data/path/HTML and provenance; lifecycle failed-write/interruption/concurrency/link relocation findings fixed and rechecked",
+    "committed_checkout": "Passed on selected committed archive after adding tracked scripts/__init__.py omitted from first preparation; both results retained."
   },
   "scope_limits": [
     "No product model runs or new API spending",
