@@ -1,6 +1,24 @@
 # RepoForge 文档
 
-RepoForge 将自然语言需求推进到有证据、可验收、可授权应用的代码变更。这份入口按阅读目标组织当前实现、使用说明和实测结果；研究方案与历史实验保留在对应专题中。
+RepoForge 将自然语言需求推进到有证据、可验收、可授权应用的代码变更。这是项目文档的统一入口：正文保存在仓库，任务和 PR 在 GitHub 管理，索引关联来源版本及验证结果。
+
+**查找资料：** [可搜索总览](index.html) · [索引数据](document-index.json) · [GitHub 任务](https://github.com/yang-hoo-xin/RepoForge/issues) · [Pull requests](https://github.com/yang-hoo-xin/RepoForge/pulls)。在 GitHub 阅读源码时，可在本地打开 `docs/index.html` 使用搜索，或直接阅读下列 Markdown 入口。
+
+**维护资料：** [存放与清理约定](document-management.md) · [登记表](document-registry.json)。索引中的 GitHub 状态带读取时间；分支文档迁入不代表相应功能代码已经合入。
+
+## 当前工作线
+
+| 工作线 | 正文与记录 | 状态边界 |
+| --- | --- | --- |
+| 竞争性评测 T1—T11 | [原冻结规格](specs/competitive-delivery-evaluation.md) · [父 Issue #3](https://github.com/yang-hoo-xin/RepoForge/issues/3) | 原协议与后续开发试验分别记录，不以准备或单题结果替代批次完成 |
+| 开发者试用版 B | [产品规格](specs/developer-preview-b.md) · [父任务 #17](https://github.com/yang-hoo-xin/RepoForge/issues/17) | B1—B5 任务按 GitHub 记录；[B4 #21](https://github.com/yang-hoo-xin/RepoForge/issues/21) 是安装后完整流程，B5 才是外部采用 |
+| 本地模型候选编辑与验收接线 | [接口与验证记录](research/candidate-editing-20261103.md) | 关联 S1/S2/S3 及原分支；工程检查与模型结果分别记录 |
+| B1 费用恢复修复 | [独立审查](research/b1-spending-review-20261103.md) | 来源 `21cb246`，实现保留在独立分支 |
+| 编辑权限 | [ADR-0005](adr/0005-task-permission-scope-and-file-creation.md) | 设计接受不等于权限已实施或自动授予 |
+| HTML 分析 | [报告来源](reports/sources.json) | 历史分析材料，按来源与版本查阅 |
+| 文档管理与草稿生命周期 | [任务 #23](https://github.com/yang-hoo-xin/RepoForge/issues/23) · [草稿 PR #16](https://github.com/yang-hoo-xin/RepoForge/pull/16) | 独立分支已公开，主线合入由审阅决定 |
+
+原工作区中的状态、计划及分析副本用于追溯；新的正式资料按[维护约定](document-management.md)登记。为什么要有它：一个入口应说明各项工作的实际归属，而不要求读者从聊天标题或相同目录名猜测。
 
 ## 了解项目与实测结果
 

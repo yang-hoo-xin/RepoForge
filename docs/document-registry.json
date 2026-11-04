@@ -1,0 +1,673 @@
+{
+  "schema_version": "project-documents.v1",
+  "repository_url": "https://github.com/yang-hoo-xin/RepoForge",
+  "updated_at": "2026-11-04T05:58:01.185147+00:00",
+  "integration_base": "0e688f9cdfd25f155bcb74d14da535d4482978c8",
+  "github_snapshot_at": "2026-11-04T05:58:01.185147+00:00",
+  "publication": {
+    "issue_creation": "published_and_read_back",
+    "prior_connector_error": "403 Resource not accessible by integration",
+    "method": "existing authorized native GitHub identity",
+    "new_issues": 7,
+    "draft_pr": "https://github.com/yang-hoo-xin/RepoForge/pull/16",
+    "merged": false
+  },
+  "workstreams": [
+    {
+      "id": "developer-preview",
+      "title": "开发者试用版 B",
+      "branch": "codex/developer-preview-b",
+      "spec": "preview-b-spec",
+      "integration_status": "design-imported; implementation-not-merged",
+      "parent": "preview-b-parent"
+    },
+    {
+      "id": "candidate-editing",
+      "title": "本地 4B 候选编辑与验收接线",
+      "branch": "codex/overnight-4b-takeover",
+      "record": "candidate-editing",
+      "integration_status": "branch-and-uncommitted-source-recorded"
+    },
+    {
+      "id": "competitive-evaluation",
+      "title": "竞争性评测 T1—T11",
+      "parent": "issue-3",
+      "spec": "competitive-spec"
+    },
+    {
+      "id": "task-permissions",
+      "title": "编辑权限设计",
+      "spec": "permissions-adr"
+    },
+    {
+      "id": "architecture",
+      "title": "架构分析历史报告"
+    },
+    {
+      "id": "publication",
+      "title": "发布与文档整合"
+    }
+  ],
+  "documents": [
+    {
+      "id": "docs-home",
+      "title": "项目文档统一入口",
+      "kind": "navigation",
+      "status": "current",
+      "summary": "",
+      "workstream": "",
+      "path": "docs/README.md"
+    },
+    {
+      "id": "document-policy",
+      "title": "文档存放、关联与清理约定",
+      "kind": "policy",
+      "status": "current",
+      "summary": "",
+      "workstream": "",
+      "path": "docs/document-management.md"
+    },
+    {
+      "id": "product-contract",
+      "title": "主线产品合同",
+      "kind": "prd",
+      "status": "current",
+      "summary": "当前整合基线的产品合同；分支设计和模型实验另行标注。",
+      "workstream": "",
+      "path": "docs/ACTIVE_PRODUCT_CONTRACT.md",
+      "source": {
+        "commit": "0e688f9",
+        "scope": "main baseline"
+      }
+    },
+    {
+      "id": "preview-b-spec",
+      "title": "开发者试用版 B 规格：B1—B5",
+      "kind": "spec",
+      "status": "accepted-design",
+      "summary": "",
+      "workstream": "developer-preview",
+      "path": "docs/specs/developer-preview-b.md",
+      "related": [
+        "permissions-adr",
+        "b1-review"
+      ]
+    },
+    {
+      "id": "permissions-adr",
+      "title": "ADR-0005 编辑权限与新建文件",
+      "kind": "adr",
+      "status": "accepted-design",
+      "summary": "",
+      "workstream": "task-permissions",
+      "path": "docs/adr/0005-task-permission-scope-and-file-creation.md"
+    },
+    {
+      "id": "b1-review",
+      "title": "B1 费用恢复独立审查与修复",
+      "kind": "analysis",
+      "status": "pending-integration",
+      "summary": "",
+      "workstream": "developer-preview",
+      "path": "docs/research/b1-spending-review-20261103.md",
+      "source": {
+        "commit": "21cb246",
+        "branch": "codex/addy-b1-review",
+        "code_merged": false
+      }
+    },
+    {
+      "id": "candidate-editing",
+      "title": "候选编辑 S1/S2/S3 与验收接线记录",
+      "kind": "analysis",
+      "status": "recorded-unmerged",
+      "summary": "",
+      "workstream": "candidate-editing",
+      "path": "docs/research/candidate-editing-20261103.md",
+      "related": [
+        "competitive-spec"
+      ]
+    },
+    {
+      "id": "competitive-spec",
+      "title": "竞争性自主交付评测原冻结规格：T1—T11",
+      "kind": "spec",
+      "status": "versioned-protocol",
+      "summary": "",
+      "workstream": "competitive-evaluation",
+      "path": "docs/specs/competitive-delivery-evaluation.md",
+      "related": [
+        "issue-3"
+      ],
+      "source": {
+        "url": "https://github.com/yang-hoo-xin/RepoForge/issues/3",
+        "retrieved_at": "2026-11-04",
+        "model_scope": "original 30B protocol; local4B followups are separate versions"
+      }
+    },
+    {
+      "id": "report-sources",
+      "title": "迁入正文与 HTML 来源清单",
+      "kind": "provenance",
+      "status": "current",
+      "summary": "",
+      "workstream": "",
+      "path": "docs/reports/sources.json"
+    },
+    {
+      "id": "architecture-review-20261101-1438",
+      "title": "架构分析 20261101-1438",
+      "kind": "report",
+      "status": "historical",
+      "summary": "",
+      "workstream": "architecture",
+      "path": "docs/reports/architecture-review-20261101-1438.html",
+      "related": [
+        "report-sources"
+      ]
+    },
+    {
+      "id": "architecture-review-20261102-173834",
+      "title": "架构分析 20261102-173834",
+      "kind": "report",
+      "status": "historical",
+      "summary": "",
+      "workstream": "architecture",
+      "path": "docs/reports/architecture-review-20261102-173834.html",
+      "related": [
+        "report-sources"
+      ]
+    },
+    {
+      "id": "architecture-review-20261103-125657",
+      "title": "架构分析 20261103-125657",
+      "kind": "report",
+      "status": "historical",
+      "summary": "",
+      "workstream": "architecture",
+      "path": "docs/reports/architecture-review-20261103-125657.html",
+      "related": [
+        "report-sources"
+      ]
+    },
+    {
+      "id": "architecture-review-20261103-150000",
+      "title": "架构分析 20261103-150000",
+      "kind": "report",
+      "status": "historical",
+      "summary": "",
+      "workstream": "architecture",
+      "path": "docs/reports/architecture-review-20261103-150000.html",
+      "related": [
+        "report-sources"
+      ]
+    },
+    {
+      "id": "preview-b1",
+      "title": "B1：在费用上限内执行并恢复任务",
+      "kind": "task",
+      "status": "open",
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
+      "workstream": "developer-preview",
+      "related": [
+        "preview-b-parent",
+        "preview-b-spec"
+      ],
+      "source": {
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "db1f86983ba79035aec6eb37cfb30a2b0c3966c836b8c1ad85deb7c65c314aa4",
+        "published_body_sha256": "34dbd841bae1c4dbc157d03e42154c490afc8d7c97831bad655fabea00d72b7d"
+      },
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/18"
+    },
+    {
+      "id": "preview-b2",
+      "title": "B2: 在任务权限内新建源码和开发测试并完成交付",
+      "kind": "task",
+      "status": "open",
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
+      "workstream": "developer-preview",
+      "related": [
+        "preview-b-parent",
+        "preview-b-spec"
+      ],
+      "source": {
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "ceb57d65530e4ef2e130aba40d915c1b5deb1279b233a6ef94bdff544cbcc269",
+        "published_body_sha256": "7a681485aaf50073a8d0e67d8c7d4346421f3396cc084619621a3eef67370553"
+      },
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/19"
+    },
+    {
+      "id": "preview-b3",
+      "title": "B3：审阅、应用及撤销交付结果",
+      "kind": "task",
+      "status": "open",
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
+      "workstream": "developer-preview",
+      "related": [
+        "preview-b-parent",
+        "preview-b-spec"
+      ],
+      "source": {
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "0e3173671f6ab996e5899a04640989531e5c3a7930f36831ac001e85295fbbc5",
+        "published_body_sha256": "473adf19c9d26999e701d4e27056c7d94e6bfb433f652ce3138435d793151b21"
+      },
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/20"
+    },
+    {
+      "id": "preview-b4",
+      "title": "B4：从安装包完成完整使用流程",
+      "kind": "task",
+      "status": "open",
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
+      "workstream": "developer-preview",
+      "related": [
+        "preview-b-parent",
+        "preview-b-spec"
+      ],
+      "source": {
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "a05a550cc0eb7802686b5b397a38ddf75be2515065f7dbd3515b171405f4499f",
+        "published_body_sha256": "7b8333fc3c3908c51314dd01924880ce07933b252b8617f1b1562399e0b0deb6"
+      },
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/21"
+    },
+    {
+      "id": "preview-b5",
+      "title": "B5：完成两位开发者的真实需求试用",
+      "kind": "task",
+      "status": "open",
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
+      "workstream": "developer-preview",
+      "related": [
+        "preview-b-parent",
+        "preview-b-spec"
+      ],
+      "source": {
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "830ad4a8614c672b98c1e97d3b1b59286ddae3903615ca47d517e8260966309b",
+        "published_body_sha256": "718a74ab1fa0af37443ed3f8dd2877fadd46eb5c65f8c08614fefb5376b67a8b"
+      },
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/22"
+    },
+    {
+      "id": "issue-15",
+      "title": "恢复竞争性评测集成分支的绿色 CI 基线",
+      "kind": "issue",
+      "status": "open",
+      "summary": "GitHub 状态读取于 2026-11-04；查看远端确认最新执行状态。",
+      "workstream": "competitive-evaluation",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/15",
+      "source": {
+        "checked_at": "2026-11-04",
+        "updated_at": "2026-10-27T12:40:35Z"
+      }
+    },
+    {
+      "id": "issue-14",
+      "title": "从权威原件生成五类数据和采用决定",
+      "kind": "issue",
+      "status": "open",
+      "summary": "GitHub 状态读取于 2026-11-04；查看远端确认最新执行状态。",
+      "workstream": "competitive-evaluation",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/14",
+      "source": {
+        "checked_at": "2026-11-04",
+        "updated_at": "2026-10-27T12:11:23Z"
+      }
+    },
+    {
+      "id": "issue-13",
+      "title": "在同一停止点完成新仓库六任务先导",
+      "kind": "issue",
+      "status": "open",
+      "summary": "GitHub 状态读取于 2026-11-04；查看远端确认最新执行状态。",
+      "workstream": "competitive-evaluation",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/13",
+      "source": {
+        "checked_at": "2026-11-04",
+        "updated_at": "2026-10-27T12:11:20Z"
+      }
+    },
+    {
+      "id": "issue-12",
+      "title": "完成已接入仓库六任务的 A/B/B+ 运行",
+      "kind": "issue",
+      "status": "open",
+      "summary": "GitHub 状态读取于 2026-11-04；查看远端确认最新执行状态。",
+      "workstream": "competitive-evaluation",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/12",
+      "source": {
+        "checked_at": "2026-11-04",
+        "updated_at": "2026-10-27T12:11:18Z"
+      }
+    },
+    {
+      "id": "issue-11",
+      "title": "以真实输入冻结并验收 36 槽位先导批次",
+      "kind": "issue",
+      "status": "open",
+      "summary": "GitHub 状态读取于 2026-11-04；查看远端确认最新执行状态。",
+      "workstream": "competitive-evaluation",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/11",
+      "source": {
+        "checked_at": "2026-11-04",
+        "updated_at": "2026-10-27T12:11:16Z"
+      }
+    },
+    {
+      "id": "issue-10",
+      "title": "从评测外证据生成并冻结 B+ 策略经验",
+      "kind": "issue",
+      "status": "open",
+      "summary": "GitHub 状态读取于 2026-11-04；查看远端确认最新执行状态。",
+      "workstream": "competitive-evaluation",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/10",
+      "source": {
+        "checked_at": "2026-11-04",
+        "updated_at": "2026-10-27T12:11:14Z"
+      }
+    },
+    {
+      "id": "issue-9",
+      "title": "资格化新仓库的六个先导任务",
+      "kind": "issue",
+      "status": "open",
+      "summary": "GitHub 状态读取于 2026-11-04；查看远端确认最新执行状态。",
+      "workstream": "competitive-evaluation",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/9",
+      "source": {
+        "checked_at": "2026-11-04",
+        "updated_at": "2026-10-27T12:11:11Z"
+      }
+    },
+    {
+      "id": "issue-8",
+      "title": "资格化已接入仓库的六个先导任务",
+      "kind": "issue",
+      "status": "open",
+      "summary": "GitHub 状态读取于 2026-11-04；查看远端确认最新执行状态。",
+      "workstream": "competitive-evaluation",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/8",
+      "source": {
+        "checked_at": "2026-11-04",
+        "updated_at": "2026-10-27T12:20:30Z"
+      }
+    },
+    {
+      "id": "issue-7",
+      "title": "从真实资格原件生成可执行批次和计量账本",
+      "kind": "issue",
+      "status": "open",
+      "summary": "GitHub 状态读取于 2026-11-04；查看远端确认最新执行状态。",
+      "workstream": "competitive-evaluation",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/7",
+      "source": {
+        "checked_at": "2026-11-04",
+        "updated_at": "2026-10-27T12:11:06Z"
+      }
+    },
+    {
+      "id": "issue-6",
+      "title": "给成熟后端形成明确准入结论",
+      "kind": "issue",
+      "status": "open",
+      "summary": "GitHub 状态读取于 2026-11-04；查看远端确认最新执行状态。",
+      "workstream": "competitive-evaluation",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/6",
+      "source": {
+        "checked_at": "2026-11-04",
+        "updated_at": "2026-10-27T12:17:35Z"
+      }
+    },
+    {
+      "id": "issue-5",
+      "title": "让安全输入错误在任务资源内持续纠正",
+      "kind": "issue",
+      "status": "open",
+      "summary": "GitHub 状态读取于 2026-11-04；查看远端确认最新执行状态。",
+      "workstream": "competitive-evaluation",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/5",
+      "source": {
+        "checked_at": "2026-11-04",
+        "updated_at": "2026-10-27T12:17:34Z"
+      }
+    },
+    {
+      "id": "issue-4",
+      "title": "让真实工具使用短执行工作区",
+      "kind": "issue",
+      "status": "open",
+      "summary": "GitHub 状态读取于 2026-11-04；查看远端确认最新执行状态。",
+      "workstream": "competitive-evaluation",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/4",
+      "source": {
+        "checked_at": "2026-11-04",
+        "updated_at": "2026-10-27T12:17:31Z"
+      }
+    },
+    {
+      "id": "issue-3",
+      "title": "建立 RepoForge 竞争性自主交付与策略经验评测",
+      "kind": "issue",
+      "status": "open",
+      "summary": "GitHub 状态读取于 2026-11-04；查看远端确认最新执行状态。",
+      "workstream": "competitive-evaluation",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/3",
+      "source": {
+        "checked_at": "2026-11-04",
+        "updated_at": "2026-10-27T11:57:25Z"
+      }
+    },
+    {
+      "id": "pr-2",
+      "title": "Publish RepoForge identity and complete publication CI fixes",
+      "kind": "pr",
+      "status": "merged",
+      "summary": "GitHub 状态读取于 2026-11-04。",
+      "workstream": "publication",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/pull/2",
+      "source": {
+        "checked_at": "2026-11-04",
+        "head": "1d8264e2161d8ad9ba95df7ca6847a675aedc527",
+        "merged_at": "2026-10-11T08:55:02Z"
+      }
+    },
+    {
+      "id": "pr-1",
+      "title": "ci: run measured RAG retrieval regression checks on PRs",
+      "kind": "pr",
+      "status": "open",
+      "summary": "GitHub 状态读取于 2026-11-04。",
+      "workstream": "publication",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/pull/1",
+      "source": {
+        "checked_at": "2026-11-04",
+        "head": "5ee8ba6d6281aaf0b30afec226dc63558de570d1",
+        "merged_at": null
+      }
+    },
+    {
+      "id": "state-history",
+      "title": "项目状态历史快照",
+      "kind": "plan",
+      "status": "historical",
+      "summary": "保留历史正文和既有入链，不作为当前执行指令。",
+      "workstream": "",
+      "path": "docs/PROJECT_STATE.md"
+    },
+    {
+      "id": "queue-history",
+      "title": "实施队列历史与任务导航",
+      "kind": "plan",
+      "status": "historical",
+      "summary": "保留历史正文和既有入链，不作为当前执行指令。",
+      "workstream": "",
+      "path": "docs/IMPLEMENTATION_QUEUE.md"
+    },
+    {
+      "id": "ten-day-plan",
+      "title": "十日执行计划旧草案",
+      "kind": "plan",
+      "status": "archived-draft",
+      "summary": "保留历史正文和既有入链，不作为当前执行指令。",
+      "workstream": "",
+      "path": "docs/TEN_DAY_EXECUTION_PLAN_DRAFT.md"
+    },
+    {
+      "id": "ten-day-decision",
+      "title": "十日工程成熟度旧草案",
+      "kind": "plan",
+      "status": "archived-draft",
+      "summary": "保留历史正文和既有入链，不作为当前执行指令。",
+      "workstream": "",
+      "path": "docs/TEN_DAY_ENGINEERING_MATURITY_DECISION_RECORD_DRAFT.md"
+    },
+    {
+      "id": "consumed-sprint",
+      "title": "已消费的补丁验收运行卡",
+      "kind": "plan",
+      "status": "historical",
+      "summary": "保留历史正文和既有入链，不作为当前执行指令。",
+      "workstream": "",
+      "path": "docs/PATCH_ACCEPTANCE_SPRINT_CARD_20260905.md"
+    },
+    {
+      "id": "twelve-turn-reference",
+      "title": "十二轮执行历史范围参考",
+      "kind": "plan",
+      "status": "historical",
+      "summary": "保留历史正文和既有入链，不作为当前执行指令。",
+      "workstream": "",
+      "path": "docs/TWELVE_TURN_EXECUTION_WORK_PACKAGE_20260905.md"
+    },
+    {
+      "id": "archive-ACTIVE_PRODUCT_CONTRACT.history-20260926",
+      "title": "ACTIVE_PRODUCT_CONTRACT.history-20260926",
+      "kind": "archive",
+      "status": "historical",
+      "summary": "",
+      "workstream": "",
+      "path": "docs/ACTIVE_PRODUCT_CONTRACT.history-20260926.md"
+    },
+    {
+      "id": "archive-EVALUATION_FIRST_CYCLE.history-20260927",
+      "title": "EVALUATION_FIRST_CYCLE.history-20260927",
+      "kind": "archive",
+      "status": "historical",
+      "summary": "",
+      "workstream": "",
+      "path": "docs/EVALUATION_FIRST_CYCLE.history-20260927.md"
+    },
+    {
+      "id": "archive-IMPLEMENTATION_QUEUE.history-20260926",
+      "title": "IMPLEMENTATION_QUEUE.history-20260926",
+      "kind": "archive",
+      "status": "historical",
+      "summary": "",
+      "workstream": "",
+      "path": "docs/IMPLEMENTATION_QUEUE.history-20260926.md"
+    },
+    {
+      "id": "archive-PROJECT_STATE.history-20260926",
+      "title": "PROJECT_STATE.history-20260926",
+      "kind": "archive",
+      "status": "historical",
+      "summary": "",
+      "workstream": "",
+      "path": "docs/PROJECT_STATE.history-20260926.md"
+    },
+    {
+      "id": "document-hub-task",
+      "title": "统一文档入口与维护任务",
+      "kind": "task",
+      "status": "open",
+      "workstream": "publication",
+      "related": [
+        "document-policy"
+      ],
+      "summary": "已发布并回读核对；任务正文与执行状态由 GitHub Issue 维护。",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/23",
+      "source": {
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "draft_sha256": "9ff2029655f0f5e84c4642f907c3b44a3e30250aa33c5a2127740e454ccff436",
+        "published_body_sha256": "ec380558bfdd4b631ff96354a7b17abebaa217117791f6999b9bf3fa9b38d3ef"
+      }
+    },
+    {
+      "id": "preview-b-parent",
+      "title": "交付 RepoForge 开发者试用版 B",
+      "kind": "issue",
+      "status": "open",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/issues/17",
+      "workstream": "developer-preview",
+      "related": [
+        "preview-b-spec",
+        "preview-b1",
+        "preview-b2",
+        "preview-b3",
+        "preview-b4",
+        "preview-b5"
+      ],
+      "source": {
+        "checked_at": "2026-11-04T05:58:01.185147+00:00"
+      }
+    },
+    {
+      "id": "docs-hub-pr",
+      "title": "统一文档入口与草稿生命周期 PR #16",
+      "kind": "pr",
+      "status": "draft",
+      "url": "https://github.com/yang-hoo-xin/RepoForge/pull/16",
+      "workstream": "publication",
+      "related": [
+        "document-hub-task",
+        "document-policy"
+      ],
+      "source": {
+        "checked_at": "2026-11-04T05:58:01.185147+00:00",
+        "merged": false
+      }
+    }
+  ],
+  "redirects": [
+    {
+      "path": "docs/drafts/preview-b1.md",
+      "document_id": "preview-b1",
+      "sha256": "f47d4aa6f38cbac24fecf5ce72b5a6d0f7fe24cf2f0d81b60bf6ebd2df150ebe",
+      "hash_basis": "utf8-text-lf-v1"
+    },
+    {
+      "path": "docs/drafts/preview-b2.md",
+      "document_id": "preview-b2",
+      "sha256": "fa11bb8e3ed24bb7392c16d3249f7ef00db4c52689c6ada3031403fe9c088897",
+      "hash_basis": "utf8-text-lf-v1"
+    },
+    {
+      "path": "docs/drafts/preview-b3.md",
+      "document_id": "preview-b3",
+      "sha256": "5b677dcd34ee2136c6a79e5f97ecdbc919053cb1b4c40b9e534bd4e29dc67381",
+      "hash_basis": "utf8-text-lf-v1"
+    },
+    {
+      "path": "docs/drafts/preview-b4.md",
+      "document_id": "preview-b4",
+      "sha256": "2ea1e6e2cc5d8c142554a3110025bd52f3dc83168635f6d2b639abbb1ae08ac1",
+      "hash_basis": "utf8-text-lf-v1"
+    },
+    {
+      "path": "docs/drafts/preview-b5.md",
+      "document_id": "preview-b5",
+      "sha256": "98219834f882ef980e61e651678a9a2f52c27537154fc8231b2414f3e8703978",
+      "hash_basis": "utf8-text-lf-v1"
+    },
+    {
+      "path": "docs/drafts/document-hub-task.md",
+      "document_id": "document-hub-task",
+      "sha256": "fdd81f10faa1f59aea36d891ae1a4bcf630b487a28c20098d7d3daa7fafc4738",
+      "hash_basis": "utf8-text-lf-v1"
+    }
+  ]
+}

@@ -1,0 +1,136 @@
+{
+  "schema": "project-document-imports.v1",
+  "imported_at": "2026-11-04",
+  "originals_changed": false,
+  "documents": [
+    {
+      "path": "docs/specs/developer-preview-b.md",
+      "source_file": "docs/specs/developer-preview-b.md",
+      "source_commit": "3c17e14d5f7f22bd83cda27ed777ddbc010c115c",
+      "source_sha256": "f3e233668122091084b8ec5b2cbf76c06581be3463a3e7911c0ae342b8f9285d",
+      "archived_sha256": "638678e0499301cc4535aadfb6cd837a7105059867176b7da495d29b4dc51ebc",
+      "sanitized": true,
+      "transformations": [
+        "Added migration provenance and integration boundary",
+        "Expanded three source-glossary meanings and replaced unavailable domain pointer",
+        "Linked imported ADR-0005 and B1 review"
+      ],
+      "availability": "Source original remains on the registered local worktree; publication of its source commit is not assumed."
+    },
+    {
+      "path": "docs/adr/0005-task-permission-scope-and-file-creation.md",
+      "source_file": "docs/adr/0005-task-permission-scope-and-file-creation.md",
+      "source_commit": "3c17e14d5f7f22bd83cda27ed777ddbc010c115c",
+      "source_sha256": "938185201e6b017c6aae379c19d91b33986ee2328c984e6c171d7ff58cb4ae42",
+      "archived_sha256": "3692597155759c22f6b5e4ddceaeea70cc434b12a37d30916c13293b16af432f",
+      "sanitized": true,
+      "transformations": [
+        "Added migration provenance and integration boundary",
+        "Disclosed source-only related ADRs without changing their recorded meaning"
+      ],
+      "availability": "Source original remains on the registered local worktree; publication of its source commit is not assumed."
+    },
+    {
+      "path": "docs/reports/architecture-review-20261101-1438.html",
+      "source_file": "architecture-review-20261101-1438.html",
+      "source_commit": "6d348a7eb7059b63ef41f2e1af6ac2b8fb76f46d",
+      "source_sha256": "8c7882a62ea985eed2909294b6c0d084ee7fb3d2a86b27692ff07b86b19d64b7",
+      "archived_sha256": "aa9e7e6289ea68e0a411692a3d08317caf371771fd5504fd11d1225fc8d5d6cb",
+      "sanitized": true,
+      "transformations": [
+        "Removed 2 script elements and external script loads",
+        "Retained original body and local CSS; appended offline fallback CSS",
+        "Preserved Mermaid source text without executing diagrams",
+        "Replaced machine-absolute source locations with repository-relative or local-source references",
+        "Added archive boundary and restrictive content security policy"
+      ],
+      "availability": "Source original remains on the registered local worktree; publication of its source commit is not assumed.",
+      "source_commit_scope": "report-declared base; local WIP also existed"
+    },
+    {
+      "path": "docs/reports/architecture-review-20261102-173834.html",
+      "source_file": "architecture-review-20261102-173834.html",
+      "source_commit": null,
+      "source_sha256": "9b256420490dc914ba6ab23a4c62d36f476d725ff281c090a32522360a360fe5",
+      "archived_sha256": "298587c58ff6f2dde30fcca2cad1d0eb5e6f902776d14892770ae71346637fcf",
+      "sanitized": true,
+      "transformations": [
+        "Removed 2 script elements and external script loads",
+        "Retained original body and local CSS; appended offline fallback CSS",
+        "Preserved Mermaid source text without executing diagrams",
+        "Replaced machine-absolute source locations with repository-relative or local-source references",
+        "Added archive boundary and restrictive content security policy",
+        "Normalized line-ending and trailing whitespace in static copy"
+      ],
+      "availability": "Source original remains on the registered local worktree; publication of its source commit is not assumed.",
+      "source_commit_scope": "not specified by source report; date is not used to infer a commit"
+    },
+    {
+      "path": "docs/reports/architecture-review-20261103-125657.html",
+      "source_file": "architecture-review-20261103-125657.html",
+      "source_commit": "f57089be530cf82b43f05d87735d6c1a66fe2190",
+      "source_sha256": "f1948b1df4649eb75c52a74783b19b4e71b596cb7d2f63ffa7b7bc0742ca5403",
+      "archived_sha256": "18cc8e43f3bfba5a8abd111bb8322509bd6f2684169692c8a4433264c5df6c2a",
+      "sanitized": true,
+      "transformations": [
+        "Removed 2 script elements and external script loads",
+        "Retained original body and local CSS; appended offline fallback CSS",
+        "Preserved Mermaid source text without executing diagrams",
+        "Replaced machine-absolute source locations with repository-relative or local-source references",
+        "Added archive boundary and restrictive content security policy",
+        "Normalized line-ending and trailing whitespace in static copy"
+      ],
+      "availability": "Source original remains on the registered local worktree; publication of its source commit is not assumed.",
+      "source_commit_scope": "report-declared base"
+    },
+    {
+      "path": "docs/reports/architecture-review-20261103-150000.html",
+      "source_file": "architecture-review-20261103-150000.html",
+      "source_commit": "f57089be530cf82b43f05d87735d6c1a66fe2190",
+      "source_sha256": "5ccb2d716d27cc8da7fab56cf9928882309d714fba41744548fa3f6e3a610d42",
+      "archived_sha256": "3fd95500469704dfe30e5dce10b9de8ccc379e69814ad3cfbbf123d90332abe4",
+      "sanitized": true,
+      "transformations": [
+        "Removed 1 script elements and external script loads",
+        "Retained original body and local CSS; appended offline fallback CSS",
+        "Preserved Mermaid source text without executing diagrams",
+        "Replaced machine-absolute source locations with repository-relative or local-source references",
+        "Added archive boundary and restrictive content security policy"
+      ],
+      "availability": "Source original remains on the registered local worktree; publication of its source commit is not assumed.",
+      "source_commit_scope": "report-declared base"
+    },
+    {
+      "path": "docs/research/b1-spending-review-20261103.md",
+      "source_file": ".scratch/developer-preview-b/addy-review.md",
+      "source_commit": "21cb24651e2ee57105ff3577d2d309703d4a3ff4",
+      "source_sha256": "42eb2b603f49171416476fb28139e3d32b899ffeaf4b8cbd01d23de7ec22bc67",
+      "source_matches_commit_ignoring_checkout_line_endings": true,
+      "archived_sha256": "ec81315e35a05c27bd7affb4f4851e79d6c13b7f9744dd36e0faa2de7a50fde1",
+      "sanitized": true,
+      "transformations": [
+        "Summarized existing source record with exact integration and verification boundaries",
+        "Preserved source commit and file identity; evidence filenames and run IDs replace non-portable local links",
+        "Did not copy private acceptance, provider payloads or credentials"
+      ],
+      "availability": "Detailed originals remain on the registered source branch or referenced local evidence storage. Remote availability is not assumed."
+    },
+    {
+      "path": "docs/research/candidate-editing-20261103.md",
+      "source_file": "artifacts/eval_driven_20261103/local4b-overnight/state.json",
+      "source_commit": "d5c0901705db9e753fcdfe16de0f378a47a47ded",
+      "source_sha256": "7a51416df64297b021ec32851292fb16bbe94024fef81a504c4c4205f5f99708",
+      "source_matches_commit_ignoring_checkout_line_endings": false,
+      "archived_sha256": "116205b36718aac53f67b809a647b1ba3fae949ddb87780a36ccbacac53df206",
+      "sanitized": true,
+      "transformations": [
+        "Summarized existing source record with exact integration and verification boundaries",
+        "Preserved source commit and file identity; evidence filenames and run IDs replace non-portable local links",
+        "Did not copy private acceptance, provider payloads or credentials"
+      ],
+      "availability": "Detailed originals remain on the registered source branch or referenced local evidence storage. Remote availability is not assumed.",
+      "source_worktree_uncommitted": true,
+      "source_commit_scope": "worktree HEAD only; imported state contains later uncommitted updates and is identified by source_sha256"
+    }
+  ]
+}
